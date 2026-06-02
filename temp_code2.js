@@ -1,0 +1,1 @@
+const fs = require('fs'); const code = fs.readFileSync('index.html', 'utf8'); const idx = code.indexOf('function TreinoModuleLive'); if (idx === -1) { const idx2 = code.indexOf('const TreinoModuleLive'); console.log('const:', code.substring(idx2, idx2 + 2500)); } else { console.log('function:', code.substring(idx, idx + 2500)); }

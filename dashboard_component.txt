@@ -1,0 +1,236 @@
+function DashboardHome({ ud, setPage, hasGold, EXERCISES }) {
+    const [weekProgress, setWeekProgress] = useState([false, false, false, false, false, false, false]);
+    const [daysTrained, setDaysTrained] = useState(0);
+    const [focoSemana, setFocoSemana] = useState('Corpo Inteiro');
+    const [topStreaks, setTopStreaks] = useState([]);
+    
+    const [modalInfo, setModalInfo] = useState(null);
+
+    useEffect(() => {
+        async function fetchDashboardData() {
+            if (!window.supabase || !ud.session) return;
+            
+            // 1. Fetch Top Streaks
+            try {
+                const resStreaks = await window.supabase.from('user_profiles').select('name, streak').order('streak', { ascending: false }).limit(3);
+                if (resStreaks.data) setTopStreaks(resStreaks.data);
+            } catch (e) {}
+
+            // 2. Fetch Workout logs for Week Progress and Foco
+            try {
+                // Determine start of current week (Monday)
+                const now = new Date();
+                const dayOfWeek = now.getDay() || 7; // Sunday=7
+                const monday = new Date(now);
+                monday.setDate(now.getDate() - dayOfWeek + 1);
+                monday.setHours(0,0,0,0);
+
+                const resLogs = await window.supabase.from('workout_logs')
+                    .select('date, exercise_id')
+                    .eq('user_id', ud.userProfile.id);
+
+                if (resLogs.data) {
+                    const progress = [false, false, false, false, false, false, false];
+                    let trainedCount = 0;
+                    
+                    const categoryCounts = {};
+
+                    resLogs.data.forEach(log => {
+                        const logDate = new Date(log.date);
+                        
+                        // Foco da semana counting
+                        const ex = EXERCISES.find(e => e.id === log.exercise_id);
+                        if (ex && ex.category) {
+                            let cat = ex.category;
+                            if (cat.includes('Inferiores')) cat = 'Inferiores';
+                            else if (cat.includes('Superiores')) cat = 'Superiores';
+                            else if (cat.includes('Core')) cat = 'Core';
+                            else if (cat.includes('Cardio')) cat = 'Cardio';
+                            
+                            categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+                        }
+
+                        // Weekly progress (only logs from this week)
+                        if (logDate >= monday) {
+                            let d = logDate.getDay() || 7; // 1=Mon, 7=Sun
+                            if (!progress[d - 1]) {
+                                progress[d - 1] = true;
+                                trainedCount++;
+                            }
+                        }
+                    });
+
+                    setWeekProgress(progress);
+                    setDaysTrained(trainedCount);
+
+                    // Determine max category
+                    let maxCat = 'Corpo Inteiro';
+                    let maxVal = 0;
+                    for (const [cat, val] of Object.entries(categoryCounts)) {
+                        if (val > maxVal) { maxVal = val; maxCat = cat; }
+                    }
+                    if (maxVal > 0) setFocoSemana(maxCat);
+                }
+            } catch(e) {}
+        }
+        fetchDashboardData();
+    }, [ud.session, ud.userProfile?.id]);
+
+    const weekDays = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
+
+    return (
+        <div className="premium-dashboard" style={{ animation: 'fade-in 0.5s ease-out', paddingBottom: '30px' }}>
+            
+            {/* Modal para Notificações & Video Fallback */}
+            {modalInfo && (
+                <div className="modal-overlay" onClick={() => setModalInfo(null)} style={{ background: 'rgba(15,23,42,0.85)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ background: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', padding: '24px', borderRadius: '20px', maxWidth: '300px', textAlign: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
+                        <div style={{ fontSize: '32px', marginBottom: '16px' }}>{modalInfo.icon}</div>
+                        <h3 style={{ color: '#fff', fontSize: '18px', fontWeight: '800', marginBottom: '8px' }}>{modalInfo.title}</h3>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '20px' }}>{modalInfo.desc}</p>
+                        <button style={{ background: 'var(--accent)', color: '#fff', padding: '12px 24px', borderRadius: '12px', fontWeight: 'bold', border: 'none', cursor: 'pointer', width: '100%' }} onClick={() => setModalInfo(null)}>
+                            Fechar
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* 1. Cabeçalho Personalizado */}
+            <div className="dash-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--accent), #ff9a44)', padding: '2px', boxShadow: '0 4px 15px rgba(249,115,22,0.3)' }}>
+                        <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 'bold' }}>
+                            {ud.userProfile?.name?.charAt(0).toUpperCase() || '👤'}
+                        </div>
+                    </div>
+                    <div>
+                        <h1 style={{ fontSize: '22px', fontWeight: '900', margin: 0, color: '#fff' }}>Olá, {ud.userProfile?.name?.split(' ')[0]}!</h1>
+                        <p style={{ color: 'var(--accent)', fontSize: '13px', margin: 0, fontWeight: '700' }}>Pronto para o próximo nível? 🚀</p>
+                    </div>
+                </div>
+                <button 
+                    onClick={() => setModalInfo({ icon: '🔔', title: 'Notificações', desc: 'Nenhuma notificação nova por agora.' })}
+                    style={{ position: 'relative', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.3s', flexShrink: 0 }}>
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: '#fff' }}><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    <span style={{ position: 'absolute', top: '12px', right: '14px', width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%', border: '2px solid #0f172a' }}></span>
+                </button>
+            </div>
+
+            {/* 2. Widget de Progresso Semanal Gamificado */}
+            <div className="dash-progress-widget" style={{ background: 'linear-gradient(145deg, rgba(30,41,59,0.7), rgba(15,23,42,0.8))', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '24px', padding: '24px', marginBottom: '32px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '20px' }}>
+                    <div>
+                        <h3 style={{ fontSize: '13px', fontWeight: '800', letterSpacing: '1px', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '4px' }}>Progresso Semanal</h3>
+                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '24px', fontWeight: '900', color: '#fff' }}>Treinos: {daysTrained}/7</span>
+                            <span style={{ padding: '4px 8px', background: 'rgba(249,115,22,0.15)', color: 'var(--accent)', borderRadius: '6px', fontSize: '12px', fontWeight: '800' }}>🔥 Streak: {ud.userProfile?.streak || 0} dias</span>
+                        </div>
+                    </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}>
+                    {weekDays.map((day, i) => (
+                        <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', flex: 1 }}>
+                            <div style={{ height: '40px', width: '100%', background: weekProgress[i] ? 'var(--accent)' : 'rgba(255,255,255,0.05)', borderRadius: '6px', position: 'relative', overflow: 'hidden', boxShadow: weekProgress[i] ? '0 0 15px rgba(249,115,22,0.3)' : 'none' }}>
+                                {weekProgress[i] && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(to bottom, rgba(255,255,255,0.2), transparent)' }}></div>}
+                            </div>
+                            <span style={{ fontSize: '13px', fontWeight: '700', color: weekProgress[i] ? '#fff' : 'var(--text-muted)' }}>{day}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* 3. Immersive Video Card (Treino de Hoje) */}
+            <div 
+                className="dash-hero-card" 
+                onClick={() => setModalInfo({ icon: '🚧', title: 'Vídeo em Construção', desc: 'A experiência imersiva de vídeo estará disponível muito em breve!' })}
+                style={{ position: 'relative', borderRadius: '32px', overflow: 'hidden', marginBottom: '32px', background: '#0f172a', boxShadow: '0 20px 40px rgba(0,0,0,0.5), 0 0 40px rgba(249, 115, 22, 0.15)', border: '1px solid rgba(255,255,255,0.1)', cursor: 'pointer' }}>
+                
+                {/* Video Background Fallback */}
+                <video autoPlay loop muted playsInline poster="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1000&auto=format&fit=crop" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.5, zIndex: 1 }} onError={(e) => { e.target.style.display = 'none'; }}>
+                    <source src="https://player.vimeo.com/external/405335607.sd.mp4?s=invalid" type="video/mp4" />
+                </video>
+                
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(to top, rgba(15,23,42,1) 0%, rgba(15,23,42,0.4) 50%, rgba(15,23,42,0.1) 100%)', zIndex: 2 }}></div>
+
+                <div style={{ position: 'relative', zIndex: 3, padding: '32px 24px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', minHeight: '340px' }}>
+                    <div style={{ background: 'rgba(249,115,22,0.9)', color: '#fff', fontSize: '11px', fontWeight: '900', padding: '6px 12px', borderRadius: '20px', alignSelf: 'flex-start', marginBottom: '16px', letterSpacing: '1px', textTransform: 'uppercase' }}>O Teu Treino de Hoje</div>
+                    
+                    <h2 style={{ fontSize: '32px', fontWeight: '900', color: '#fff', marginBottom: '8px', lineHeight: '1.2' }}>Membros Superiores:<br/>Peito & Ombros</h2>
+                    
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', color: 'rgba(255,255,255,0.9)', fontSize: '13px', fontWeight: '600', marginBottom: '24px' }}>
+                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>⏱️ Aprox. 45 min</span>
+                         <span style={{ opacity: 0.3 }}>|</span>
+                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>💪 5 Exercícios</span>
+                    </div>
+                    
+                    <button className="btn-start-workout" style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)', color: '#fff', padding: '18px', borderRadius: '16px', fontSize: '18px', fontWeight: '800', border: 'none', cursor: 'pointer', boxShadow: '0 10px 25px rgba(34,197,94,0.4)', transition: 'transform 0.3s', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', width: '100%' }} onClick={(e) => { e.stopPropagation(); setPage('treinos'); }}>
+                        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                        Iniciar Treino
+                    </button>
+                </div>
+            </div>
+
+            {/* 4. Radar de Simetria & Comunidade */}
+            <div style={{ marginBottom: '32px' }}>
+                <div style={{ marginBottom: '16px' }}>
+                    <h3 style={{ fontSize: '16px', fontWeight: '800', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '1px' }}>Radar de Simetria & Top Destaques</h3>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '16px' }}>
+                    
+                    {/* Representação visual (Músculo Alvo) */}
+                    <div style={{ background: 'var(--bg-secondary)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '20px', padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', position: 'relative', overflow: 'hidden', boxShadow: '0 10px 20px rgba(0,0,0,0.2)' }}>
+                        <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '100px', height: '100px', background: 'radial-gradient(circle, rgba(249,115,22,0.15) 0%, transparent 70%)' }}></div>
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--accent)', marginBottom: '12px', filter: 'drop-shadow(0 0 10px rgba(249,115,22,0.4))' }}>
+                            <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>
+                            <line x1="12" y1="22" x2="12" y2="15.5"></line>
+                            <polyline points="22 8.5 12 15.5 2 8.5"></polyline>
+                            <polyline points="2 15.5 12 8.5 22 15.5"></polyline>
+                            <line x1="12" y1="2" x2="12" y2="8.5"></line>
+                        </svg>
+                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>Foco da Semana</span>
+                        <span style={{ fontSize: '16px', color: '#fff', fontWeight: '900' }}>{focoSemana}</span>
+                    </div>
+
+                    {/* Avatares dos destaques */}
+                    <div style={{ display: 'flex', flexDirection: 'column', justifyItems: 'center', justifyContent: 'center', gap: '12px', background: 'var(--bg-secondary)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '20px', padding: '16px', boxShadow: '0 10px 20px rgba(0,0,0,0.2)' }}>
+                        {topStreaks.length > 0 ? topStreaks.map((ts, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: idx===0 ? '#eab308' : (idx===1 ? '#9ca3af' : '#d97706'), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 'bold' }}>
+                                        {ts.name?.charAt(0).toUpperCase() || '👤'}
+                                    </div>
+                                    <span style={{ fontSize: '14px', fontWeight: '700' }}>{idx+1}. {ts.name?.split(' ')[0]}</span>
+                                </div>
+                                <span style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: '900' }}>{ts.streak || 0}🔥</span>
+                            </div>
+                        )) : (
+                            <div style={{ color: 'var(--text-secondary)', fontSize: '13px', textAlign: 'center' }}>Carregando líderes...</div>
+                        )}
+                        
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '8px 12px', borderRadius: '12px', marginTop: '4px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--accent), #ff9a44)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', border: '2px solid #1e293b' }}>{ud.userProfile?.name?.charAt(0).toUpperCase() || 'V'}</div>
+                                <span style={{ fontSize: '13px', fontWeight: '800', color: '#fff' }}>Você</span>
+                            </div>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '800', textTransform: 'uppercase' }}>{ud.userProfile?.streak || 0}🔥</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Conversão / Upsell mantido no final caso não seja VIP */}
+            {!hasGold && (
+                <div className="btn-conversion-banner" onClick={() => setPage('extras')} style={{ marginBottom: '16px' }}>
+                    <div className="btn-conversion-content">
+                        <h3>⚠️ OFERTA EXCLUSIVA LIBERADA</h3>
+                        <p>Desbloqueie agora o Combo de Ouro com 58% de desconto e tenha acesso vitalício a todos os exercícios!</p>
+                    </div>
+                    <div className="btn-conversion-arrow">
+                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+

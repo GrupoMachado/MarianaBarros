@@ -1,0 +1,53 @@
+﻿node : c:\Users\rafae\Des
+ktop\APP\fix_modal_layout
+2.js:6
+At line:1 char:1
++ node c:\Users\rafae\Des
+ktop\APP\fix_modal_layout
+2.js 2> error.txt; ca ...
++ ~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
+    + CategoryInfo       
+       : NotSpecified:   
+  (c:\Users\rafae\...a   
+ l_layout2.js:6:Strin    
+g) [], RemoteExcepti    
+on
+    + FullyQualifiedErro 
+   rId : NativeCommandE  
+  rror
+ 
+const oldDiv = \`<div 
+style={{ display: 
+'flex', gap: '8px' }}>
+               ^
+
+SyntaxError: Invalid or 
+unexpected token
+    at wrapSafe (node:int
+ernal/modules/cjs/loader:
+1743:18)
+    at Module._compile (n
+ode:internal/modules/cjs/
+loader:1786:20)
+    at Object..js (node:i
+nternal/modules/cjs/loade
+r:1943:10)
+    at Module.load (node:
+internal/modules/cjs/load
+er:1533:32)
+    at Module._load (node
+:internal/modules/cjs/loa
+der:1335:12)
+    at wrapModuleLoad (no
+de:internal/modules/cjs/l
+oader:255:19)
+    at Module.executeUser
+EntryPoint [as runMain] (
+node:internal/modules/run
+_main:154:5)
+    at node:internal/main
+/run_main_module:33:47
+
+Node.js v24.14.1
