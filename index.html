@@ -3127,6 +3127,16 @@
             }
         </style>
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <!-- OneSignal Integration -->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+          appId: "e3ceef68-5a4e-4406-85ca-39a5a0404c4a",
+        });
+      });
+    </script>
 </head>
 
 <body>
