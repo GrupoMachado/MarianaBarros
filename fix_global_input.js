@@ -22,7 +22,7 @@ const novaTree = `function ExtrasHub({ userProfile, onUnlock, onUnlockAll, onAcc
                     code: 'VIPGOLD2024',
                     isVip: true,
                     highlight: '69% OFF',
-                    link: 'https://pay.hotmart.com/O104937576P?checkoutMode=10'
+                    link: 'https://pay.hotmart.com/Y105938748R?checkoutMode=10'
                 },
                 {
                     id: 'desafio30',
@@ -31,7 +31,7 @@ const novaTree = `function ExtrasHub({ userProfile, onUnlock, onUnlockAll, onAcc
                     price: '19,90',
                     desc: 'O cronograma definitivo. Saiba exatamente quais exercícios fazer a cada dia para acelerar os seus resultados sem perder tempo.',
                     code: 'DESAFIO30VIP',
-                    link: 'https://pay.hotmart.com/O104969469R?checkoutMode=10'
+                    link: 'https://pay.hotmart.com/S105938555K?checkoutMode=10'
                 },
                 { 
                     id: 'scanner_ia', 
@@ -40,13 +40,13 @@ const novaTree = `function ExtrasHub({ userProfile, onUnlock, onUnlockAll, onAcc
                     price: '16,90', 
                     desc: 'O fim de contar calorias à mão. Tire uma foto ao seu prato e a nossa Inteligência Artificial calcula as suas macros na hora.', 
                     code: 'IA2026', 
-                    link: '#',
+                    link: 'https://pay.hotmart.com/Q105939894U?checkoutMode=10',
                     highlight: 'NOVO'
                 },
-                { id: 'senior', title: 'Atividades para Idosos', icon: '🧘', price: '19,90', desc: '+200 exercícios focados em mobilidade e autonomia.', code: 'SENIOR890', link: 'https://pay.hotmart.com/R104937272J?checkoutMode=10' },
-                { id: 'pilates', title: 'Dinâmicas de Pilates', icon: '⭕', price: '19,90', desc: '+200 exercícios para core e postura.', code: 'PILATES950', link: 'https://pay.hotmart.com/Q104937401F?checkoutMode=10' },
-                { id: 'gymnastics', title: 'Atividades de Ginástica', icon: '🤸', price: '19,90', desc: '+250 exercícios de força funcional e agilidade.', code: 'GYM850', link: 'https://pay.hotmart.com/O104937476X?checkoutMode=10' },
-                { id: 'musculacao', title: 'Guia de Musculação em Casa', icon: '💪', price: '19,90', desc: 'Transforme qualquer espaço num ginásio funcional.', code: 'MUSC500', link: 'https://pay.hotmart.com/L104937229Y?checkoutMode=10' }
+                { id: 'senior', title: 'Atividades para Idosos', icon: '🧘', price: '19,90', desc: '+200 exercícios focados em mobilidade e autonomia.', code: 'SENIOR890', link: 'https://pay.hotmart.com/D105938993C?checkoutMode=10' },
+                { id: 'pilates', title: 'Dinâmicas de Pilates', icon: '⭕', price: '19,90', desc: '+200 exercícios para core e postura.', code: 'PILATES950', link: 'https://pay.hotmart.com/E105938855Y?checkoutMode=10' },
+                { id: 'gymnastics', title: 'Atividades de Ginástica', icon: '🤸', price: '19,90', desc: '+250 exercícios de força funcional e agilidade.', code: 'GYM850', link: 'https://pay.hotmart.com/M105939209K?checkoutMode=10' },
+                { id: 'musculacao', title: 'Guia de Musculação em Casa', icon: '💪', price: '19,90', desc: 'Transforme qualquer espaço num ginásio funcional.', code: 'MUSC500', link: 'https://pay.hotmart.com/N105939399C?checkoutMode=10' }
             ];
 
             const handleGlobalActivation = (e) => {
