@@ -3144,18 +3144,6 @@
     <script src="./exercicios.js"></script>
     <script type="text/babel">
 
-        window.OneSignalDeferred = window.OneSignalDeferred || [];
-        OneSignalDeferred.push(async function (OneSignal) {
-            try {
-                await OneSignal.init({
-                    appId: "e3ceef68-5a4e-4406-85ca-39a5a0404c4a",
-                    allowLocalhostAsSecureContext: true
-                });
-                console.log("OneSignal: Ligação estabelecida com sucesso!");
-            } catch (e) {
-                console.error("Erro na inicialização do OneSignal:", e);
-            }
-        });
 
         const { useState, useEffect, useCallback, useRef } = React;
 
