@@ -3386,13 +3386,8 @@
                         const extraUnlocked = JSON.parse(localStorage.getItem('app_unlocked_modules') || '[]');
                         extraUnlocked.forEach(mod => { if(mod) stored.permissions[mod] = true; });
 
-                        // BYPASS MODO DESENVOLVEDOR (TODO: Remover em produção para ativar bloqueios Hotmart)
-                        stored.has_base_access = true;
-                        if (!stored.premium_features) stored.premium_features = [];
-                        if (!stored.premium_features.includes('arsenal_premium')) {
-                            stored.premium_features.push('arsenal_premium');
-                        }
-                        // Fim do Bypass
+                        // Bypass removed for production
+
 
                         return stored;
                     }
@@ -3452,9 +3447,8 @@
                                 let hasBase = data.has_base_access;
                                 let features = data.premium_features || [];
 
-                                // BYPASS MODO DESENVOLVEDOR (TODO: Remover em produção)
-                                hasBase = true;
-                                if (!features.includes('arsenal_premium')) features.push('arsenal_premium');
+                                // Bypass removed for production
+
 
                                 setP(prev => ({
                                     ...prev,
