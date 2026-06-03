@@ -31,7 +31,7 @@ const novaTree = `function ExtrasHub({ userProfile, onUnlock, onUnlockAll, onAcc
                     price: '19,90',
                     desc: 'O cronograma definitivo. Saiba exatamente quais exercícios fazer a cada dia para acelerar os seus resultados sem perder tempo.',
                     code: 'DESAFIO30VIP',
-                    link: 'https://pay.hotmart.com/S105938555K?checkoutMode=10'
+                    link: 'https://pay.hotmart.com/R106106925S?checkoutMode=10'
                 },
                 { 
                     id: 'scanner_ia', 
