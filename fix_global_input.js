@@ -43,10 +43,10 @@ const novaTree = `function ExtrasHub({ userProfile, onUnlock, onUnlockAll, onAcc
                     link: 'https://pay.hotmart.com/Q105939894U?checkoutMode=10',
                     highlight: 'NOVO'
                 },
-                { id: 'senior', title: 'Atividades para Idosos', icon: '🧘', price: '19,90', desc: '+200 exercícios focados em mobilidade e autonomia.', code: 'SENIOR890', link: 'https://pay.hotmart.com/D105938993C?checkoutMode=10' },
-                { id: 'pilates', title: 'Dinâmicas de Pilates', icon: '⭕', price: '19,90', desc: '+200 exercícios para core e postura.', code: 'PILATES950', link: 'https://pay.hotmart.com/E105938855Y?checkoutMode=10' },
-                { id: 'gymnastics', title: 'Atividades de Ginástica', icon: '🤸', price: '19,90', desc: '+250 exercícios de força funcional e agilidade.', code: 'GYM850', link: 'https://pay.hotmart.com/M105939209K?checkoutMode=10' },
-                { id: 'musculacao', title: 'Guia de Musculação em Casa', icon: '💪', price: '19,90', desc: 'Transforme qualquer espaço num ginásio funcional.', code: 'MUSC500', link: 'https://pay.hotmart.com/N105939399C?checkoutMode=10' }
+                { id: 'senior', title: 'Atividades para Idosos', icon: '🧘', price: '19,90', desc: '+200 exercícios focados em mobilidade e autonomia.', link: 'https://pay.hotmart.com/D105938993C?checkoutMode=10' },
+                { id: 'pilates', title: 'Dinâmicas de Pilates', icon: '⭕', price: '19,90', desc: '+200 exercícios para core e postura.', link: 'https://pay.hotmart.com/E105938855Y?checkoutMode=10' },
+                { id: 'gymnastics', title: 'Atividades de Ginástica', icon: '🤸', price: '19,90', desc: '+250 exercícios de força funcional e agilidade.', link: 'https://pay.hotmart.com/M105939209K?checkoutMode=10' },
+                { id: 'musculacao', title: 'Guia de Musculação em Casa', icon: '💪', price: '19,90', desc: 'Transforme qualquer espaço num ginásio funcional.', link: 'https://pay.hotmart.com/N105939399C?checkoutMode=10' }
             ];
 
             const handleGlobalActivation = (e) => {
@@ -60,11 +60,7 @@ const novaTree = `function ExtrasHub({ userProfile, onUnlock, onUnlockAll, onAcc
                 const modulesData = [
                     { id: "scanner_ia", code: "IA2026" },
                     { id: "vip_gold", code: "VIPGOLD2024" },
-                    { id: "desafio30", code: "DESAFIO30VIP" },
-                    { id: "musculacao", code: "MUSC500" },
-                    { id: "senior", code: "SENIOR890" },
-                    { id: "pilates", code: "PILATES950" },
-                    { id: "gymnastics", code: "GYM850" }
+                    { id: "desafio30", code: "DESAFIO30VIP" }
                 ];
 
                 const matchedModule = modulesData.find(m => m.code === inputCode || (inputCode === 'VIPGOLD2024' && m.id === 'vip_gold'));
