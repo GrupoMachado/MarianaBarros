@@ -40,7 +40,7 @@ const novaTree = `function ExtrasHub({ userProfile, onUnlock, onUnlockAll, onAcc
                     price: '16,90', 
                     desc: 'O fim de contar calorias à mão. Tire uma foto ao seu prato e a nossa Inteligência Artificial calcula as suas macros na hora.', 
                     code: 'IA2026', 
-                    link: 'https://pay.hotmart.com/Q105939894U?checkoutMode=10',
+                    link: 'https://pay.hotmart.com/H106107115U?checkoutMode=10',
                     highlight: 'NOVO'
                 },
                 { id: 'senior', title: 'Atividades para Idosos', icon: '🧘', price: '19,90', desc: '+200 exercícios focados em mobilidade e autonomia.', link: 'https://pay.hotmart.com/D105938993C?checkoutMode=10' },
