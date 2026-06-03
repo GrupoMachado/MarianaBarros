@@ -22,7 +22,7 @@ const novaTree = `function ExtrasHub({ userProfile, onUnlock, onUnlockAll, onAcc
                     code: 'VIPGOLD2024',
                     isVip: true,
                     highlight: '69% OFF',
-                    link: 'https://pay.hotmart.com/Y105938748R?checkoutMode=10'
+                    link: 'https://pay.hotmart.com/O106106388F?checkoutMode=10'
                 },
                 {
                     id: 'desafio30',
