@@ -1939,6 +1939,15 @@ import { createClient } from '@supabase/supabase-js';
                                     onAction={() => hasScannerIA ? onNav('arsenal-vip') : window.open('https://pay.hotmart.com/H106107115U?checkoutMode=10', '_blank')}
                                 />
                                 <ExtraCard 
+                                    title="Musculação em Casa"
+                                    desc="O guia definitivo para treinar em casa com a máxima intensidade e resultados, sem equipamento."
+                                    price="14,90"
+                                    icon="🏠"
+                                    unlocked={hasMusculacao}
+                                    pdfs={[{ title: "Musculação em Casa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" }]}
+                                    onAction={() => hasMusculacao ? window.open('https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf', '_blank') : window.open('#LINK_HOTMART', '_blank')}
+                                />
+                                <ExtraCard 
                                     title="Meu Desafio 30 Dias"
                                     desc="O cronograma oculto dos resultados rápidos. Periodização elite para transformar seu físico."
                                     price="19,90"
