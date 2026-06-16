@@ -1745,8 +1745,8 @@ import { createClient } from '@supabase/supabase-js';
                 }
             };
 
-            const ExtraCard = ({ title, desc, price, oldPrice, badge, ribbon, icon, unlocked, isMonthly, onAction, subPrice, pdfs }) => (
-                <div className="p-6 rounded-[24px] bg-[#1e2330] flex flex-col relative overflow-hidden transition-all duration-300 hover:bg-[#252b3a] border border-white/5">
+            const ExtraCard = ({ title, desc, price, oldPrice, badge, ribbon, icon, unlocked, isMonthly, onAction, subPrice, pdfs, glow }) => (
+                <div className={`p-6 rounded-[24px] bg-[#1e2330] flex flex-col relative overflow-hidden transition-all duration-300 ${glow ? 'shadow-[0_0_40px_-5px_rgba(249,115,22,0.4)] border border-orange-500/50 animate-[pulse_2s_ease-in-out_infinite]' : 'border border-white/5 hover:bg-[#252b3a]'}`}>
                     {ribbon && (
                         <div className="absolute top-0 right-0 w-28 h-28 overflow-hidden pointer-events-none z-20">
                             <div className="absolute top-4 -right-8 w-36 bg-gradient-to-r from-red-600 to-red-500 text-white text-center font-black text-[8px] py-1.5 rotate-45 shadow-2xl uppercase tracking-[0.2em] border-y border-white/10">
@@ -1930,6 +1930,17 @@ import { createClient } from '@supabase/supabase-js';
                         <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                 <ExtraCard 
+                                    title="Musculação em Casa"
+                                    desc="O guia definitivo para construir um físico de elite usando apenas o peso do corpo e o que tens em casa."
+                                    price="19,90"
+                                    icon="💪"
+                                    badge="GUIA VIP"
+                                    glow={true}
+                                    unlocked={hasMusculacao}
+                                    pdfs={[{ title: "Musculação em Casa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" }]}
+                                    onAction={() => hasMusculacao ? window.open('https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf', '_blank') : window.open('https://pay.hotmart.com/N105939399C?checkoutMode=10', '_blank')}
+                                />
+                                <ExtraCard 
                                     title="Nutri-Scan™ IA"
                                     desc="Analise suas refeições com Inteligência Artificial. Macronutrientes e calorias em segundos."
                                     price="9,90"
@@ -1937,15 +1948,6 @@ import { createClient } from '@supabase/supabase-js';
                                     icon="📸"
                                     unlocked={hasScannerIA}
                                     onAction={() => hasScannerIA ? onNav('arsenal-vip') : window.open('https://pay.hotmart.com/H106107115U?checkoutMode=10', '_blank')}
-                                />
-                                <ExtraCard 
-                                    title="Musculação em Casa"
-                                    desc="O guia definitivo para treinar em casa com a máxima intensidade e resultados, sem equipamento."
-                                    price="14,90"
-                                    icon="🏠"
-                                    unlocked={hasMusculacao}
-                                    pdfs={[{ title: "Musculação em Casa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" }]}
-                                    onAction={() => hasMusculacao ? window.open('https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf', '_blank') : window.open('#LINK_HOTMART', '_blank')}
                                 />
                                 <ExtraCard 
                                     title="Meu Desafio 30 Dias"
