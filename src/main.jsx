@@ -1,0 +1,8006 @@
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { createRoot } from 'react-dom/client';
+import { createPortal } from 'react-dom';
+import { createClient } from '@supabase/supabase-js';
+
+
+
+        
+
+        const Clock = ({ size = 16, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+            </svg>
+        );
+        const Flame = ({ size = 16, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+            </svg>
+        );
+        const Dumbbell = ({ size = 16, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <path d="m6.5 6.5-2.5 2.5" /><path d="m15 15 2.5 2.5" /><path d="m21 16-5-5" /><path d="m3 8 5 5" /><path d="m18 8 2 2a2 2 0 0 1 0 2.82l-2 2" /><path d="m6 16-2-2a2 2 0 0 1 0-2.82l2-2" /><path d="m8 13 3-3" /><path d="m14 10 3 3" />
+            </svg>
+        );
+        const Zap = ({ size = 16, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+        );
+
+        const safeFormatDate = (date) => {
+            try {
+                if (!date) return "";
+                const d = new Date(date);
+                if (isNaN(d.getTime())) return "";
+                return new Intl.DateTimeFormat('sv-SE').format(d);
+            } catch (e) {
+                return "";
+            }
+        };
+
+
+        const CATEGORIES = ['Todos', 'Membros Inferiores', 'Membros Superiores', 'Braços', 'Cardio', 'Mobilidade'];
+        const DIFFICULTIES = ['Todos', 'Iniciante', 'Intermediário', 'Avançado'];
+        const NAV = [
+            { id: 'inicio', label: 'Início', d: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4' },
+            { id: 'treinos', label: 'Treinos', d: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z' },
+            { id: 'arsenal-vip', label: 'Arsenal VIP', d: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' },
+            { id: 'evolucao', label: 'Evolução', d: 'M23 6l-9.5 9.5-5-5L1 18' },
+            { id: 'ranking', label: 'Ranking', d: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
+            { id: 'extras', label: 'Extras', d: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z' },
+            { id: 'ajuda', label: 'Ajuda', d: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' }
+        ];
+
+        
+        // EXERCISES array was moved to exercicios.js
+        const EXERCISES = window.EXERCISES;
+
+
+        const CHALLENGE_SCHEDULE = [
+            { day: 1, theme: "Despertar Muscular", focus: "Membros Inferiores", exercises: ['P01', 'P02', 'P04', 'P05', 'P06'] },
+            { day: 2, theme: "Core e Equilíbrio", focus: "Core", exercises: ['C01', 'C02', 'C03', 'C04', 'C05'] },
+            { day: 3, theme: "Cardio de Baixo Impacto", focus: "Cardio", exercises: ['CA01', 'CA02', 'CA03', 'CA05', 'CA10'] },
+            { day: 4, theme: "Fortalecimento Superiores", focus: "Membros Superiores", exercises: ['S01', 'S02', 'S03', 'S04', 'S05'] },
+            { day: 5, theme: "Foco nos Braços", focus: "Braços", exercises: ['B01', 'B02', 'B03', 'B04', 'B05'] },
+            { day: 6, theme: "Descanso Ativo 🧘", focus: "Descanso", exercises: [] },
+            { day: 7, theme: "Avaliação 1 📊", isEvaluation: true, exercises: ['P01', 'S01', 'C01'] },
+            { day: 8, theme: "Potência de Inferiores", focus: "Membros Inferiores", exercises: ['P07', 'P08', 'P10', 'P11', 'P12'] },
+            { day: 9, theme: "Estabilidade de Core", focus: "Core", exercises: ['C06', 'C07', 'C08', 'C09', 'C10'] },
+            { day: 10, theme: "Definição de Superiores", focus: "Membros Superiores", exercises: ['S07', 'S09', 'S10', 'S11', 'S12'] },
+            { day: 11, theme: "Cardio HIIT", focus: "Cardio", exercises: ['CA06', 'CA07', 'CA08', 'CA09', 'CA11'] },
+            { day: 12, theme: "Total Body Foundation", focus: "Total Body", exercises: ['P01', 'S01', 'C01', 'CA01', 'M01'] },
+            { day: 13, theme: "Mobilidade em Fluxo", focus: "Mobilidade", exercises: ['M01', 'M02', 'M03', 'M04', 'M05'] },
+            { day: 14, theme: "Descanso Ativo 🧘", focus: "Descanso", exercises: [] },
+            { day: 15, theme: "Pernas de Aço", focus: "Membros Inferiores", exercises: ['P13', 'P14', 'P15', 'P16', 'P18'] },
+            { day: 16, theme: "Domínio do Core", focus: "Core", exercises: ['C11', 'C12', 'C13', 'C14', 'C15'] },
+            { day: 17, theme: "Peitoral & Costas", focus: "Membros Superiores", exercises: ['S14', 'S15', 'S16', 'S17', 'S18'] },
+            { day: 18, theme: "Cardio Total", focus: "Cardio", exercises: ['CA12', 'CA13', 'CA14', 'CA15', 'CA16'] },
+            { day: 19, theme: "Escultura de Braços", focus: "Braços", exercises: ['B06', 'B07', 'B08', 'B09', 'B10'] },
+            { day: 20, theme: "Complexo Total Body", focus: "Total Body", exercises: ['P02', 'S02', 'C02', 'CA02', 'M02'] },
+            { day: 21, theme: "Avaliação Intermédia 📊", isEvaluation: true, exercises: ['P13', 'S10', 'C12'] },
+            { day: 22, theme: "Inferiores Fire", focus: "Membros Inferiores", exercises: ['P19', 'P20', 'P21', 'P22', 'P23'] },
+            { day: 23, theme: "Abdominais de Aço", focus: "Core", exercises: ['C16', 'C17', 'C18', 'C19', 'C20'] },
+            { day: 24, theme: "Força de Superiores", focus: "Membros Superiores", exercises: ['S19', 'S20', 'S21', 'S22', 'S23'] },
+            { day: 25, theme: "Cardio Endurance", focus: "Cardio", exercises: ['CA17', 'CA18', 'CA19', 'CA20', 'CA21'] },
+            { day: 26, theme: "Braços & Antebraços", focus: "Braços", exercises: ['B11', 'B12', 'B13', 'B14', 'B15'] },
+            { day: 27, theme: "Super Total Body", focus: "Total Body", exercises: ['P31', 'S31', 'C31', 'CA31', 'B31'] },
+            { day: 28, theme: "Descanso Ativo 🧘", focus: "Descanso", exercises: [] },
+            { day: 29, theme: "Preparação Final", focus: "Mobilidade", exercises: ['M06', 'M07', 'M08', 'M09', 'M10'] },
+            { day: 30, theme: "Avaliação Final 🏆", isEvaluation: true, exercises: ['P31', 'S31', 'C31'] }
+        ];
+
+        // Constants consolidated and moved to top for scope stability
+
+        const { SUPABASE_URL, SUPABASE_KEY } = window.APP_CONFIG || {};
+        if (!SUPABASE_URL || !SUPABASE_KEY) {
+            throw new Error('Config Supabase em falta: verifique o arquivo config.js');
+        }
+        const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+        window.supabase = supabase;
+
+        function AuthModal({ onAuth }) {
+            const [authMode, setAuthMode] = useState("register"); // login | register | recovery
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setError('');
+                if (!email || (authMode !== 'recovery' && !password)) return setError('Por favor, preencha todos os campos.');
+                
+                if (authMode !== 'recovery' && password.length < 6) return setError('A senha deve ter pelo menos 6 caracteres.');
+                setLoading(true);
+
+                // Limpeza preventiva de estado antigo em novo cadastro
+                if (authMode === "register") {
+                    localStorage.removeItem('userProfile');
+                    localStorage.removeItem('completedLog');
+                    localStorage.removeItem('favoritedIds');
+                    localStorage.removeItem('challengeLog');
+                    localStorage.removeItem('xpBonus');
+                    localStorage.removeItem('metaProfile');
+                }
+
+                let res;
+                if (authMode === "recovery") {
+                    res = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+                    if (!res.error) {
+                        setError('✅ Verifique sua caixa de entrada!');
+                        setLoading(false);
+                        return;
+                    }
+                } else if (authMode === "login") {
+                    res = await supabase.auth.signInWithPassword({ email, password });
+                } else {
+                    res = await supabase.auth.signUp({ email, password });
+                    
+                    if (!res.error && res.data && res.data.user) {
+                        // Verificação automática de compras pendentes da Hotmart
+                        const { data: pending } = await supabase
+                            .from('compras_pendentes')
+                            .select('*')
+                            .eq('email', email)
+                            .maybeSingle();
+
+                        let hasBaseAccess = false;
+                        let premiumFeatures = [];
+
+                        if (pending) {
+                            hasBaseAccess = pending.has_base_access;
+                            premiumFeatures = pending.premium_features;
+                            
+                            // Apagar da tabela de pendentes após cruzar dados
+                            await supabase.from('compras_pendentes').delete().eq('id', pending.id);
+                        }
+
+                        const { error: profileError } = await supabase.from('user_profiles').insert({
+                            id: res.data.user.id,
+                            has_base_access: hasBaseAccess,
+                            premium_features: premiumFeatures
+                        });
+                        if (profileError) {
+                            console.error('Erro ao criar perfil:', profileError);
+                        }
+                    }
+                }
+
+                if (res.error) {
+                    let msg = res.error.message;
+                    if (msg.includes('Invalid login credentials')) msg = 'Credenciais inválidas. Verifique o email e password.';
+                    if (msg.includes('User already registered')) msg = 'Este email já se encontra registado.';
+                    setError(msg);
+                } else if (authMode === "register" && !res.data.session) {
+                    setError('Cadastro bem-sucedido! Se não entrou, verifique o seu email.');
+                }
+                setLoading(false);
+            };
+
+            return (
+                <div className="auth-overlay">
+                    <div className="auth-card">
+                        <h2>{authMode === 'login' ? 'Iniciar Sessão' : authMode === 'register' ? 'Criar Conta' : 'Recuperar Acesso'}</h2>
+                        <div className="auth-header-desc">
+                            {authMode === "recovery" ? "Insira seu email para receber o link de redefinição." : "Acesse seus desafios, guarde favoritos e acompanhe o seu progresso diariamente."}
+                        </div>
+                        <form onSubmit={handleSubmit}>
+                            <div className="input-group">
+                                <label>Email</label>
+                                <input type="email" className="ob-input" value={email} onChange={e => setEmail(e.target.value)} disabled={loading} placeholder="exemplo@gmail.com" />
+                            </div>
+                            {authMode !== 'recovery' && (
+                            <div className="input-group">
+                                <label>Senha</label>
+                                <input type="password" className="ob-input" value={password} onChange={e => setPassword(e.target.value)} disabled={loading} placeholder="••••••" />
+                            </div>
+                        )}
+                            <div className="auth-error">{error}</div>
+                            <button type="submit" className="ob-submit-btn" disabled={loading}>
+                                {loading ? "Carregando..." : (authMode === "login" ? "Entrar no Portal" : authMode === "register" ? "Concluir Cadastro" : "Enviar Link de Recuperação")}
+                            </button>
+                        </form>
+                        {authMode === 'login' && (
+                            <div style={{ textAlign: 'right', marginTop: '12px' }}>
+                                <a href="#" onClick={(e) => { e.preventDefault(); setAuthMode('recovery'); setError(''); }} style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', textDecoration: 'underline' }}>Esqueci minha senha</a>
+                            </div>
+                        )}
+                        <div className="auth-toggle" onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setError(""); }}>
+                            {authMode === "login" ? <React.Fragment>Novo por aqui? <span>Criar Conta</span></React.Fragment> : <React.Fragment>Já tem uma conta? <span>Iniciar Sessão</span></React.Fragment>}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function useUserData() {
+            const [session, setSession] = useState(null);
+            const [authLoading, setAuthLoading] = useState(true);
+            const [localSynced, setLocalSynced] = useState(false);
+            const [recoveryMode, setRecoveryMode] = useState(false);
+
+            const [completedLog, setC] = useState(() => {
+                try {
+                    const legacy = JSON.parse(localStorage.getItem('completedIds') || 'null');
+                    const stored = JSON.parse(localStorage.getItem('completedLog') || 'null');
+                    if (stored) return stored;
+                    if (legacy && Array.isArray(legacy)) {
+                        // Migrate legacy string array to object array with current timestamp
+                        const now = Date.now();
+                        const migrated = legacy.map(id => ({ id: typeof id === 'string' ? id : id.id, ts: now }));
+                        return migrated;
+                    }
+                    return [];
+                } catch { return []; }
+            });
+            const [favoritedIds, setF] = useState(() => { try { return JSON.parse(localStorage.getItem('favoritedIds') || '[]'); } catch { return []; } });
+            const [userProfile, setP] = useState(() => {
+                try {
+                    const stored = JSON.parse(localStorage.getItem('userProfile'));
+                    if (stored) {
+                        if (!stored.permissions) stored.permissions = { base: true, senior: false, pilates: false, gymnastics: false };
+                        // Sincronização Proativa (Anti-Amnésia)
+                        const extraUnlocked = JSON.parse(localStorage.getItem('app_unlocked_modules') || '[]');
+                        extraUnlocked.forEach(mod => { if(mod) stored.permissions[mod] = true; });
+
+                        // Bypass removed for production
+
+
+                        return stored;
+                    }
+                    return null;
+                } catch { return null; }
+            });
+            const [challengeLog, setChallengeLog] = useState(() => { try { return JSON.parse(localStorage.getItem('challengeLog') || '[]'); } catch { return []; } });
+            const [xpBonus, setXp] = useState(() => { try { return parseInt(localStorage.getItem('xpBonus')) || 0; } catch { return 0; } });
+            const [metaProfile, setMeta] = useState(() => { try { return JSON.parse(localStorage.getItem('metaProfile') || 'null'); } catch { return null; } });
+
+            // Supabase Session Mgt
+            useEffect(() => {
+                supabase.auth.getSession().then(({ data: { session } }) => {
+                    setSession(session);
+                    setAuthLoading(false);
+                });
+
+                const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+                    if (event === 'INITIAL_SESSION') return;
+                    if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+                    setSession(session);
+                    setAuthLoading(false);
+                    
+                    // Reset total de estados ao mudar de conta ou fazer logout
+                    if (event === 'SIGNED_OUT' || (event === 'SIGNED_IN' && !session)) {
+                        setP(null);
+                        setC([]);
+                        setF([]);
+                        setChallengeLog([]);
+                        setXp(0);
+                        setMeta(null);
+                        localStorage.clear();
+                        setLocalSynced(false);
+                    }
+                });
+                return () => subscription.unsubscribe();
+            }, []);
+
+            // Sync from DB when logged in
+            useEffect(() => {
+                if (session && !localSynced) {
+                    const fetchSupa = async () => {
+                        const { data, error } = await supabase.from('user_profiles').select('*').eq('id', session.user.id).maybeSingle();
+                        if (data) {
+                            if (data.completed_log) setC(data.completed_log);
+                            if (data.challenge_log) setChallengeLog(data.challenge_log);
+                            if (data.xp_bonus) setXp(data.xp_bonus);
+                            setP(prev => ({ ...(prev || {}), ...data }));
+                            if (data.idade || data.objetivo_principal || data.peso_objetivo || data.daily_calorie_goal) {
+                                const mp = { idade: data.idade, objetivo_principal: data.objetivo_principal, peso_objetivo: data.peso_objetivo, daily_calorie_goal: data.daily_calorie_goal };
+                                setMeta(mp);
+                                localStorage.setItem('metaProfile', JSON.stringify(mp));
+                            }
+                            
+                            // Carregar permissões da Hotmart
+                            if (data.has_base_access !== undefined || data.premium_features) {
+                                let hasBase = data.has_base_access;
+                                let features = data.premium_features || [];
+
+                                // Bypass removed for production
+
+
+                                setP(prev => ({
+                                    ...prev,
+                                    has_base_access: hasBase,
+                                    premium_features: features
+                                }));
+                            }
+
+                            const favsRes = await supabase.from('treinos_guardados').select('id_do_treino').eq('user_id', session.user.id);
+                            if (favsRes.data) {
+                                setF(favsRes.data.map(row => row.id_do_treino));
+                            }
+
+                            const comprasRes = await supabase.from('compras_utilizadores').select('modulo_comprado').eq('user_id', session.user.id);
+                            if (comprasRes.data && comprasRes.data.length > 0) {
+                                setP(prev => {
+                                    if (!prev) return prev;
+                                    const newPerms = { ...prev.permissions };
+                                    comprasRes.data.forEach(c => { newPerms[c.modulo_comprado] = true; });
+                                    return { ...prev, permissions: newPerms };
+                                });
+                            }
+                            setLocalSynced(true);
+                        } else if (!data || (error && error.code === 'PGRST116')) {
+                            // First time login - seed with local storage data
+                            await supabase.from('user_profiles').update({
+                                completed_log: completedLog,
+                                challenge_log: challengeLog,
+                                xp_bonus: xpBonus
+                            }).eq('id', session.user.id);
+
+                            if (favoritedIds.length > 0) {
+                                const inserts = favoritedIds.map(fid => ({ user_id: session.user.id, id_do_treino: fid }));
+                                await supabase.from('treinos_guardados').insert(inserts);
+                            }
+
+                            setLocalSynced(true);
+                        }
+                    };
+                    fetchSupa();
+                } else if (!session) {
+                    setLocalSynced(false);
+                }
+            }, [session, localSynced]);
+
+            // Unified Supabase Write Wrapper
+            const syncToSupa = useCallback(async (updates) => {
+                if (session) {
+                    await supabase.from('user_profiles').update(updates).eq('id', session.user.id);
+                }
+            }, [session]);
+
+            useEffect(() => {
+                localStorage.setItem('completedLog', JSON.stringify(completedLog));
+                if (localSynced) syncToSupa({ completed_log: completedLog });
+            }, [completedLog, localSynced, syncToSupa]);
+
+            useEffect(() => {
+                localStorage.setItem('favoritedIds', JSON.stringify(favoritedIds));
+            }, [favoritedIds]);
+
+            useEffect(() => {
+                if (userProfile) {
+                    localStorage.setItem('userProfile', JSON.stringify(userProfile));
+                    if (localSynced) {
+                        syncToSupa({ 
+                            name: userProfile.name, 
+                            objetivo_principal: userProfile.goal, 
+                            gender: userProfile.gender,
+                            idade: userProfile.age,
+                            estado: userProfile.estado,
+                            whatsapp: userProfile.whatsapp,
+                            has_base_access: userProfile.has_base_access,
+                            premium_features: userProfile.premium_features
+                        });
+                    }
+                }
+            }, [userProfile, localSynced, syncToSupa]);
+
+            useEffect(() => {
+                localStorage.setItem('challengeLog', JSON.stringify(challengeLog));
+                if (localSynced) syncToSupa({ challenge_log: challengeLog });
+            }, [challengeLog, localSynced, syncToSupa]);
+
+            useEffect(() => {
+                localStorage.setItem('xpBonus', xpBonus.toString());
+                if (localSynced) syncToSupa({ xp_bonus: xpBonus });
+            }, [xpBonus, localSynced, syncToSupa]);
+
+            const logout = useCallback(async () => {
+                await supabase.auth.signOut();
+                // Opcional: limpar local storage em public terminals
+            }, []);
+
+            // Helper to check if an exercise is completed
+            const isCompleted = useCallback(id => completedLog.some(x => x.id === id), [completedLog]);
+
+            const toggleComplete = useCallback(id => {
+                setC(p => {
+                    const exists = p.some(x => x.id === id);
+                    if (exists) return p.filter(x => x.id !== id);
+                    return [...p, { id, ts: Date.now() }];
+                });
+                return !isCompleted(id);
+            }, [isCompleted]);
+
+            const completeWorkout = useCallback((exerciseIds) => {
+                setC(p => {
+                    const newLogs = [...p];
+                    let added = false;
+                    exerciseIds.forEach(id => {
+                        if (!newLogs.some(x => x.id === id)) {
+                            newLogs.push({ id, ts: Date.now() });
+                            added = true;
+                        }
+                    });
+                    return added ? newLogs : p;
+                });
+                setXp(x => x + 500);
+            }, []);
+
+            const completeChallengeDay = useCallback((day) => {
+                setChallengeLog(p => p.includes(day) ? p : [...p, day]);
+                setXp(x => x + 1000);
+            }, []);
+
+            const toggleFavorite = useCallback(async (id) => {
+                const isFav = favoritedIds.includes(id);
+                setF(p => isFav ? p.filter(x => x !== id) : [...p, id]);
+
+                if (session) {
+                    if (isFav) {
+                        await supabase.from('treinos_guardados').delete().match({ user_id: session.user.id, id_do_treino: id });
+                    } else {
+                        await supabase.from('treinos_guardados').insert({ user_id: session.user.id, id_do_treino: id });
+                    }
+                }
+
+                return !isFav;
+            }, [favoritedIds, session]);
+            const saveProfile = useCallback((name, goal, gender, age, estado, whatsapp) => {
+                setP(prev => ({
+                    ...prev,
+                    name,
+                    goal,
+                    gender,
+                    age,
+                    estado,
+                    whatsapp,
+                    has_base_access: prev?.has_base_access ?? true, // Default true for legacy
+                    premium_features: prev?.premium_features ?? [],
+                    permissions: prev?.permissions || { base: true, senior: false, pilates: false, gymnastics: false, desafio30: false }
+                }));
+            }, []);
+
+            const unlockModule = useCallback(async (moduleName) => {
+                setP(prev => {
+                    if (!prev) return prev;
+                    return { ...prev, permissions: { ...prev.permissions, [moduleName]: true } };
+                });
+                if (session) {
+                    // Backup Anti-Amnésia (Redundância de Persistência)
+                    try {
+                        const extra = JSON.parse(localStorage.getItem('app_unlocked_modules') || '[]');
+                        if (!extra.includes(moduleName)) {
+                            localStorage.setItem('app_unlocked_modules', JSON.stringify([...extra, moduleName]));
+                        }
+                    } catch(e) {}
+                    await supabase.from('compras_utilizadores').upsert({ user_id: session.user.id, modulo_comprado: moduleName }, { onConflict: 'user_id,modulo_comprado' });
+                }
+            }, [session]);
+
+            const unlockAll = useCallback(async () => {
+                setP(prev => {
+                    if (!prev) return prev;
+                    return { ...prev, permissions: { ...prev.permissions, senior: true, pilates: true, gymnastics: true, desafio30: true, vip: true, gold: true, vip_gold: true, scanner_ia: true, musculacao: true } };
+                });
+                if (session) {
+                    const mods = ['senior', 'pilates', 'gymnastics', 'desafio30', 'vip', 'gold'];
+                    const inserts = mods.map(m => ({ user_id: session.user.id, modulo_comprado: m }));
+                    await supabase.from('compras_utilizadores').upsert(inserts, { onConflict: 'user_id,modulo_comprado' });
+                }
+            }, [session]);
+
+            const saveMetaProfile = useCallback(async ({ idade, objetivo_principal, peso_objetivo }) => {
+                const mp = { idade, objetivo_principal, peso_objetivo };
+                setMeta(mp);
+                localStorage.setItem('metaProfile', JSON.stringify(mp));
+                if (session) {
+                    await supabase.from('user_profiles').update({ idade, objetivo_principal, peso_objetivo }).eq('id', session.user.id);
+                }
+            }, [session]);
+
+            // --- Audio Logic for Sleep Module ---
+            const [currentAudioId, setCurrentAudioId] = React.useState(null);
+            const [audioTimer, setAudioTimer] = React.useState(null);
+            const audioRef = React.useRef(null);
+
+            const playAudio = React.useCallback((id, file, durationMs = null) => {
+                if (audioRef.current) {
+                    audioRef.current.pause();
+                }
+                if (audioTimer) {
+                    clearTimeout(audioTimer);
+                    setAudioTimer(null);
+                }
+
+                const audio = new Audio(file);
+                audio.loop = true;
+                audio.play().catch(e => console.error("Audio play error:", e));
+                audioRef.current = audio;
+                setCurrentAudioId(id);
+
+                if (durationMs) {
+                    const timer = setTimeout(() => {
+                        if (audioRef.current) {
+                            audioRef.current.pause();
+                            audioRef.current = null;
+                        }
+                        setCurrentAudioId(null);
+                        setAudioTimer(null);
+                    }, durationMs);
+                    setAudioTimer(timer);
+                }
+            }, [audioTimer]);
+
+            const stopAudio = React.useCallback(() => {
+                if (audioRef.current) {
+                    audioRef.current.pause();
+                    audioRef.current = null;
+                }
+                if (audioTimer) {
+                    clearTimeout(audioTimer);
+                    setAudioTimer(null);
+                }
+                setCurrentAudioId(null);
+            }, [audioTimer]);
+
+            return React.useMemo(() => ({
+                recoveryMode, setRecoveryMode,
+                session, authLoading, logout,
+                completedLog, favoritedIds, userProfile, challengeLog, xpBonus,
+                metaProfile, saveMetaProfile,
+                isCompleted, toggleComplete, completeWorkout, completeChallengeDay,
+                toggleFavorite, saveProfile, unlockModule, unlockAll,
+                currentAudioId, playAudio, stopAudio
+            }), [session, authLoading, recoveryMode, completedLog, favoritedIds, userProfile, challengeLog, xpBonus, metaProfile, saveMetaProfile, isCompleted, toggleComplete, completeWorkout, completeChallengeDay, toggleFavorite, saveProfile, unlockModule, unlockAll, currentAudioId, playAudio, stopAudio]);
+        }
+
+
+
+        // ================================================================
+        // RADAR CHART (SVG nativo polar / spider chart hexagonal)
+        // ================================================================
+        function RadarChart({ catStats = [] }) {
+            const size = 260; // Increased to provide room for labels
+            const cx = size / 2;
+            const cy = size / 2;
+            const r = 85; 
+            const n = catStats?.length || 0;
+            
+            if (n === 0) {
+                return (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', color: 'var(--text-muted)', border: '1px dashed rgba(255,255,255,0.05)', borderRadius: '20px' }}>
+                        <span style={{ fontSize: '24px', marginBottom: '8px' }}>🕸️</span>
+                        <p style={{ fontSize: '11px', textAlign: 'center' }}>Faça o seu primeiro treino para ver o seu Radar de Simetria em ação!</p>
+                    </div>
+                );
+            }
+
+            const angleSlice = (Math.PI * 2) / n;
+            const axes = catStats.map((cs, i) => {
+                const angle = angleSlice * i - Math.PI / 2;
+                return { ...cs, angle };
+            });
+
+            const getPolygon = (scale) => axes.map(a => {
+                const x = cx + r * scale * Math.cos(a.angle);
+                const y = cy + r * scale * Math.sin(a.angle);
+                return `${x},${y}`;
+            }).join(' ');
+
+            const dataPolygon = axes.map(a => {
+                const scale = (a.pct / 100) || 0;
+                return `${cx + r * scale * Math.cos(a.angle)},${cy + r * scale * Math.sin(a.angle)}`;
+            }).join(' ');
+
+            const LABELS = {
+                'Membros Inferiores': 'Pernas', 
+                'Membros Superiores': 'Costas',
+                'Braços': 'Braços', 
+                'Core': 'Core', 
+                'Cardio': 'Cardio', 
+                'Mobilidade': 'Mobilidade',
+                'Peito': 'Peito', 
+                'Ombros': 'Ombros', 
+                'Abdominais': 'Abdominais',
+                'Pernas': 'Pernas',
+                'Costas': 'Costas'
+            };
+
+            return (
+                <svg viewBox={`0 0 ${size} ${size}`} className="w-full h-auto" style={{ maxWidth: '280px', display: 'block', margin: '0 auto' }}>
+                    {[0.2, 0.4, 0.6, 0.8, 1.0].map((lv, i) => (
+                        <polygon key={i} points={getPolygon(lv)} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={i === 4 ? 1.5 : 1} />
+                    ))}
+                    {axes.map((a, i) => (
+                        <line key={i} x1={cx} y1={cy} x2={cx + r * Math.cos(a.angle)} y2={cy + r * Math.sin(a.angle)} stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
+                    ))}
+                    <polygon points={dataPolygon} fill="rgba(249,115,22,0.25)" stroke="#f97316" strokeWidth="2" strokeLinejoin="round" />
+                    {axes.map((a, i) => {
+                        const scale = (a.pct / 100) || 0;
+                        return <circle key={i} cx={cx + r * scale * Math.cos(a.angle)} cy={cy + r * scale * Math.sin(a.angle)} r="3.5" fill="#f97316" />;
+                    })}
+                    {axes.map((a, i) => {
+                        const labelR = r + 28; // Slightly more distance for safety
+                        return (
+                            <text key={i} x={cx + labelR * Math.cos(a.angle)} y={cy + labelR * Math.sin(a.angle)}
+                                textAnchor="middle" dominantBaseline="middle" fontSize="10" fill="rgba(255,255,255,0.8)" fontWeight="800">
+                                {(LABELS[a.name] || a.name || '').toUpperCase()}
+                            </text>
+                        );
+                    })}
+                    <circle cx={cx} cy={cy} r="2" fill="rgba(255,255,255,0.3)" />
+                </svg>
+            );
+        }
+
+        // ================================================================
+        // METABOLISM CARD — Combustível de Crescimento (Mifflin-St Jeor)
+        // ================================================================
+        function MetabolismCard({ metaProfile, saveMetaProfile, completedExList }) {
+            const [showForm, setShowForm] = React.useState(!metaProfile?.objetivo_principal);
+            const [saving, setSaving] = React.useState(false);
+            const [form, setForm] = React.useState({
+                objetivo_principal: metaProfile?.objetivo_principal || '',
+                peso_objetivo: metaProfile?.peso_objetivo || '',
+                idade: metaProfile?.idade || ''
+            });
+
+            const evolData = (() => { try { return JSON.parse(localStorage.getItem('lastEvolucao') || 'null'); } catch { return null; } })();
+            const mp = metaProfile;
+            const hasProfile = mp?.objetivo_principal && mp?.idade;
+
+            let totalSets = 0;
+            completedExList.forEach(e => { const v = parseInt(e.sets); if (!isNaN(v)) totalSets += v; });
+            const kcalBurned = Math.round(totalSets * 1.5 * 8);
+
+            let targetKcal = null;
+            if (hasProfile && evolData?.peso && evolData?.altura_cm) {
+                const genero = evolData.genero || 'masculino';
+                const peso = parseFloat(evolData.peso);
+                const altura = parseFloat(evolData.altura_cm);
+                const idade = parseInt(mp.idade);
+                const bmr = genero === 'masculino'
+                    ? (10 * peso) + (6.25 * altura) - (5 * idade) + 5
+                    : (10 * peso) + (6.25 * altura) - (5 * idade) - 161;
+                const tdee = bmr * 1.55;
+                targetKcal = Math.round(tdee + (mp.objetivo_principal === 'Ganhar Massa' ? 500 : mp.objetivo_principal === 'Perder Peso' ? -500 : 0));
+            }
+
+            const goalIcon = { 'Ganhar Massa': '🚀', 'Perder Peso': '🔥', 'Manter': '⚖️' }[mp?.objetivo_principal] || '🎯';
+            const kcalPct = targetKcal ? Math.min(100, Math.round((kcalBurned / targetKcal) * 100)) : 0;
+
+            const handleSave = React.useCallback(async () => {
+                if (!form.objetivo_principal || !form.idade) return;
+                setSaving(true);
+                await saveMetaProfile({ objetivo_principal: form.objetivo_principal, peso_objetivo: parseFloat(form.peso_objetivo) || null, idade: parseInt(form.idade) });
+                setSaving(false);
+                setShowForm(false);
+            }, [form, saveMetaProfile]);
+
+            return (
+                <div className="progress-section-card" style={{ marginBottom: '24px', animation: 'fade-in 0.5s ease-out', border: '1px solid rgba(249,115,22,0.2)', background: 'linear-gradient(135deg, rgba(249,115,22,0.05), rgba(15,23,42,0.8))' }}>
+                    <h3 className="ps-title">{goalIcon} Combustível de Crescimento</h3>
+                    {!hasProfile || showForm ? (
+                        <div>
+                            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Configure o seu perfil metabólico para cálculo personalizado (Mifflin-St Jeor).</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <select value={form.objetivo_principal} onChange={e => setForm(f => ({ ...f, objetivo_principal: e.target.value }))}
+                                    style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', fontSize: '14px' }}>
+                                    <option value="" className="bg-slate-900 text-white">🎯 Qual é o seu objetivo?</option>
+                                    <option value="Ganhar Massa" className="bg-slate-900 text-white">🚀 Ganhar Massa</option>
+                                    <option value="Manter" className="bg-slate-900 text-white">⚖️ Manter</option>
+                                    <option value="Perder Peso" className="bg-slate-900 text-white">🔥 Perder Peso</option>
+                                </select>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <input type="number" placeholder="Idade (anos)" value={form.idade}
+                                        onChange={e => setForm(f => ({ ...f, idade: e.target.value }))}
+                                        style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', fontSize: '14px', boxSizing: 'border-box' }} />
+                                    <input type="number" placeholder="Peso Alvo (kg)" value={form.peso_objetivo}
+                                        onChange={e => setForm(f => ({ ...f, peso_objetivo: e.target.value }))}
+                                        style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', fontSize: '14px', boxSizing: 'border-box' }} />
+                                </div>
+                                <button onClick={handleSave} disabled={saving || !form.objetivo_principal || !form.idade}
+                                    style={{ background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '8px', padding: '12px', fontWeight: '700', fontSize: '14px', cursor: 'pointer', opacity: (!form.objetivo_principal || !form.idade) ? 0.5 : 1 }}>
+                                    {saving ? 'A guardar...' : 'Calcular o Meu Alvo Calórico →'}
+                                </button>
+                                {showForm && hasProfile && <button onClick={() => setShowForm(false)} style={{ background: 'transparent', color: 'var(--text-muted)', border: 'none', cursor: 'pointer', fontSize: '13px' }}>Cancelar</button>}
+                            </div>
+                        </div>
+                    ) : (
+                        <div>
+                            {targetKcal ? (
+                                <div>
+                                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '4px' }}>
+                                        <span style={{ fontSize: '36px', fontWeight: '900', color: 'var(--accent)' }}>{targetKcal.toLocaleString('pt-PT')}</span>
+                                        <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>kcal/dia</span>
+                                    </div>
+                                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                                        Meta para <strong style={{ color: '#fff' }}>{mp.objetivo_principal}</strong>
+                                        {mp.peso_objetivo ? <span> · Alvo: <strong style={{ color: 'var(--accent)' }}>{mp.peso_objetivo} kg</strong></span> : ''}
+                                    </p>
+                                    <div style={{ marginBottom: '12px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                                            <span>Queimaste nos treinos: ~{kcalBurned} kcal</span>
+                                            <span>{kcalPct}%</span>
+                                        </div>
+                                        <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '99px', overflow: 'hidden' }}>
+                                            <div style={{ height: '100%', width: `${kcalPct}%`, background: 'linear-gradient(90deg, #f97316, #fbbf24)', borderRadius: '99px', transition: 'width 0.8s ease' }}></div>
+                                        </div>
+                                    </div>
+                                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                                        Fórmula Mifflin-St Jeor · Factor de actividade ×1.55{mp.objetivo_principal === 'Ganhar Massa' ? ' · +500 kcal superávite limpo' : mp.objetivo_principal === 'Perder Peso' ? ' · -500 kcal défice saudável' : ''}.
+                                    </p>
+                                </div>
+                            ) : (
+                                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
+                                    Adicione um registro em 📈 Evolução (peso + altura) para calcular as suas kcal personalizadas.
+                                </p>
+                            )}
+                            <button onClick={() => setShowForm(true)} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-secondary)', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', cursor: 'pointer', marginTop: '12px' }}>
+                                ✏️ Editar Objetivo
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function DynamicMissions({ catStats, completedLog }) {
+            const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            const weekLogs = completedLog.filter(l => l.ts >= weekAgo);
+            const sorted = [...catStats].sort((a, b) => a.pct - b.pct);
+            const catIcons = { 'Membros Inferiores': '🦵', 'Membros Superiores': '🏋️', 'Braços': '💪', 'Core': '🎯', 'Cardio': '🏃', 'Mobilidade': '🧘' };
+            const catNames = { 'Membros Inferiores': 'Destruidor de Pernas', 'Membros Superiores': 'Costas de Aço', 'Braços': 'Braços de Ferro', 'Core': 'Core Blindado', 'Cardio': 'Motor Cardíaco', 'Mobilidade': 'Corpo Elástico' };
+
+            const missions = sorted.slice(0, 3).map((cat, i) => {
+                const target = 3;
+                const done = Math.min(target, weekLogs.filter(l => { const ex = EXERCISES.find(e => e.id === l.id); return ex && ex.category === cat.name; }).length);
+                return { cat: cat.name, icon: catIcons[cat.name] || '🏋️', name: catNames[cat.name] || cat.name, done, target, xp: [300, 200, 150][i], completed: done >= target };
+            });
+
+            return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {missions.map((m, i) => (
+                        <div key={i} style={{ padding: '14px', background: m.completed ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.03)', border: `1px solid ${m.completed ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.07)'}`, borderRadius: '12px', animation: `fade-in ${0.3 + i * 0.15}s ease-out` }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '20px' }}>{m.completed ? '✅' : m.icon}</span>
+                                    <div>
+                                        <div style={{ fontSize: '13px', fontWeight: '700', color: m.completed ? '#22c55e' : '#fff' }}>{m.name}</div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{m.cat} · Esta semana</div>
+                                    </div>
+                                </div>
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#f97316', flexShrink: 0 }}>+{m.xp} XP</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ flex: 1, height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '99px', overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', width: `${(m.done / m.target) * 100}%`, background: m.completed ? '#22c55e' : 'linear-gradient(90deg, #f97316, #fbbf24)', borderRadius: '99px', transition: 'width 0.8s ease' }}></div>
+                                </div>
+                                <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flexShrink: 0 }}>{m.done}/{m.target}</span>
+                            </div>
+                        </div>
+                    ))}
+                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '4px' }}>Missões baseadas no Radar de Simetria · Reiniciam toda a Segunda-feira</p>
+                </div>
+            );
+        }
+
+        function Sidebar({ page, onNav, userProfile }) {
+            const hasAccess = (mod) => {
+                if (!userProfile?.permissions) return false;
+                if (userProfile.permissions.gold || userProfile.permissions.vip) return true;
+                if (userProfile.permissions.senior && userProfile.permissions.pilates && userProfile.permissions.gymnastics && userProfile.permissions.desafio30) return true;
+                return userProfile.permissions[mod];
+            };
+
+            const hasAnyPremium = hasAccess('senior') || hasAccess('pilates') || hasAccess('gymnastics');
+
+            return (<aside className="sidebar">
+                <div className="sidebar-logo"><span>🏋️</span><span className="accent">+500 Exercícios</span></div>
+                {userProfile && <div className="sidebar-user" style={{ padding: '0 20px 20px', color: 'var(--text-secondary)', fontSize: '14px', borderBottom: '1px solid var(--border)', marginBottom: '20px' }}>
+                    Olá, <strong style={{ color: 'var(--text-primary)' }}>{userProfile.name}</strong>
+                </div>}
+                <nav className="sidebar-nav">
+                    {NAV.map(n => {
+                        if (n.requiresAccess && !hasAccess(n.requiresAccess)) return null;
+                        return (
+                            <button key={n.id} className={`sidebar-link ${page === n.id ? 'active' : ''}`} onClick={() => onNav(n.id)}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d={n.d} strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                {n.label}
+                            </button>
+                        );
+                    })}
+
+                    <button className={`sidebar-link ${page === 'guardados' ? 'active' : ''}`} onClick={() => onNav('guardados')}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        Guardados
+                    </button>
+
+                    {hasAnyPremium && (
+                        <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
+                            <div style={{ padding: '0 20px', fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
+                                Os Meus Módulos
+                            </div>
+                            {hasAccess('senior') && (
+                                <button className={`sidebar-link ${page === 'treinos_senior' ? 'active' : ''}`} onClick={() => onNav('explorar_senior')} style={{ color: 'var(--accent)' }}>
+                                    <span style={{ fontSize: '18px', marginRight: '8px' }}>👵</span> Idosos
+                                </button>
+                            )}
+                            {hasAccess('pilates') && (
+                                <button className={`sidebar-link ${page === 'explorar_pilates' ? 'active' : ''}`} onClick={() => onNav('explorar_pilates')} style={{ color: 'var(--accent)' }}>
+                                    <span style={{ fontSize: '18px', marginRight: '8px' }}>🧘‍♀️</span> Pilates
+                                </button>
+                            )}
+                            {hasAccess('gymnastics') && (
+                                <button className={`sidebar-link ${page === 'explorar_gymnastics' ? 'active' : ''}`} onClick={() => onNav('explorar_gymnastics')} style={{ color: 'var(--accent)' }}>
+                                    <span style={{ fontSize: '18px', marginRight: '8px' }}>🤸‍♂️</span> Ginástica
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    <div style={{ marginTop: 'auto', paddingTop: '24px' }}>
+                        <button className="sidebar-link" onClick={window.supabase.auth.signOut.bind(window.supabase.auth)} style={{ color: 'var(--text-muted)' }}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            Terminar Sessão
+                        </button>
+                    </div>
+                </nav>
+            </aside>);
+        }
+
+        const ALIEN_SPRITES_GLOBAL = "./image_11.png";
+
+        function Header({ search, onSearch, userProfile }) {
+            const renderAvatar = () => {
+                if (!userProfile) return null;
+                const isMale = userProfile?.gender === 'male' || userProfile?.gender === 'Masculino';
+                const isFemale = userProfile?.gender === 'female' || userProfile?.gender === 'Feminino';
+
+                return (
+                    <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-gray-800 shrink-0 border border-white/10 shadow-lg">
+                        {isFemale ? (
+                            <img src={ALIEN_SPRITES_GLOBAL} alt="Avatar" className="w-full h-full object-cover" style={{ objectPosition: '105% 0%', transform: 'scale(2.2)' }} />
+                        ) : isMale ? (
+                            <img src={ALIEN_SPRITES_GLOBAL} alt="Avatar" className="w-full h-full object-cover" style={{ objectPosition: '20% 0%', transform: 'scale(2.2)' }} />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-cyan-500 to-blue-600">
+                                <span className="text-white font-bold text-lg">
+                                    {userProfile?.name?.charAt(0)?.toUpperCase() || 'U'}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            return (<header className="header">
+                {userProfile && <div className="header-user" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    {renderAvatar()}
+                </div>}
+            </header>);
+        }
+
+        function Onboarding({ onComplete }) {
+            const [name, setName] = useState('');
+            const [goal, setGoal] = useState('');
+            const [age, setAge] = useState(20);
+            const [selectedGender, setSelectedGender] = useState('');
+            const [estado, setEstado] = useState('');
+            const [whatsapp, setWhatsapp] = useState('');
+            const ESTADOS_BR = ["Acre", "Alagoas", "Amapá", "Amazonas", "Bahia", "Ceará", "Distrito Federal", "Espírito Santo", "Goiás", "Maranhão", "Mato Grosso", "Mato Grosso do Sul", "Minas Gerais", "Pará", "Paraíba", "Paraná", "Pernambuco", "Piauí", "Rio de Janeiro", "Rio Grande do Norte", "Rio Grande do Sul", "Rondônia", "Roraima", "Santa Catarina", "São Paulo", "Sergipe", "Tocantins"];
+            const isMale = selectedGender === 'male' || selectedGender === 'Masculino';
+            const isFemale = selectedGender === 'female' || selectedGender === 'Feminino';
+            const ALIEN_SPRITESHEET = "./image_11.png";
+            const GOALS = ['Perder Peso', 'Ganhar Massa', 'Tonificar e Definir', 'Saúde e Mobilidade'];
+            const GENDERS = [
+                { id: 'male', label: 'Masculino', emoji: '🦾' },
+                { id: 'female', label: 'Feminino', emoji: '⚡' },
+                { id: 'other', label: 'Outro', emoji: '✨' }
+            ];
+
+            const handlePhoneChange = (e) => {
+                let value = e.target.value.replace(/\D/g, "");
+                if (value.length > 11) value = value.slice(0, 11);
+                
+                // Mascara: (99) 99999-9999
+                if (value.length > 10) {
+                    value = value.replace(/^(\d{2})(\d{5})(\d{4}).*/, "($1) $2-$3");
+                } else if (value.length > 6) {
+                    value = value.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, "($1) $2-$3");
+                } else if (value.length > 2) {
+                    value = value.replace(/^(\d{2})(\d{0,5}).*/, "($1) $2");
+                } else if (value.length > 0) {
+                    value = value.replace(/^(\d{0,2}).*/, "($1");
+                }
+                setWhatsapp(value);
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (name.trim() && goal && selectedGender && estado) {
+                    onComplete(name.trim(), goal, selectedGender, age, estado, whatsapp);
+                }
+            };
+
+            return (
+                <div className="onboarding-overlay" style={{ animation: 'fade-in 0.4s ease-out' }}>
+                    <div className="onboarding-card">
+                        <div className="onboarding-header flex flex-col items-center">
+                            {/* UI do Avatar Central Blindada - Sprite-Sheet image_11.png */}
+                            <h1 style={{ fontSize: '28px', fontWeight: '900', marginBottom: '4px' }}>Junta-te à <span style={{ color: 'var(--accent)' }}>Elite +500</span></h1>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '8px' }}>Configure o seu perfil para forjarmos a sua matriz de treino e nutrição.</p>
+                        </div>
+                        <form onSubmit={handleSubmit} className="onboarding-form">
+                            <div className="input-group">
+                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU NOME DE GUERREIRO</label>
+                                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Rafael" required className="ob-input" style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px', transition: 'all 0.3s' }} />
+                            </div>
+                            <div className="mb-4 mt-4">
+                                <label className="block text-xs font-bold text-gray-400 mb-1 uppercase tracking-wider">
+                                    Sua Idade: <span className="text-orange-500 text-base">{age}</span> ANOS
+                                </label>
+                                <input 
+                                    type="range" 
+                                    min="1" 
+                                    max="99" 
+                                    value={age} 
+                                    onChange={(e) => setAge(e.target.value)} 
+                                    className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                                />
+                            </div>
+                            <div className="input-group" style={{ marginTop: '16px' }}>
+                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU ESTADO (LOCALIZAÇÃO)</label>
+                                <select className="ob-input" value={estado} onChange={e => setEstado(e.target.value)} required style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px' }}>
+                                    <option value="" disabled>Selecione o seu estado...</option>
+                                    {ESTADOS_BR.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                                </select>
+                            </div>
+                            <div className="input-group" style={{ marginTop: '16px' }}>
+                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU WHATSAPP (COM DDD)</label>
+                                <input 
+                                    type="text" 
+                                    value={whatsapp} 
+                                    onChange={handlePhoneChange} 
+                                    placeholder="Ex: (11) 99999-9999" 
+                                    className="ob-input" 
+                                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px' }} 
+                                />
+                            </div>
+                            <div className="input-group" style={{ marginTop: '16px' }}>
+                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>ESCOLHA SUA SKIN (AVATAR)</label>
+                                <div className="gender-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '8px' }}>
+                                    {GENDERS.map(g => (
+                                        <button 
+                                            type="button" 
+                                            key={g.id} 
+                                            className={`goal-btn ${selectedGender === g.id ? 'border-orange-500 border-4 shadow-lg' : ''}`} 
+                                            onClick={() => setSelectedGender(g.id)}
+                                            style={{ 
+                                                padding: '10px 4px', 
+                                                display: 'flex', 
+                                                flexDirection: 'column', 
+                                                gap: '4px', 
+                                                alignItems: 'center',
+                                                borderRadius: '12px',
+                                                borderWidth: selectedGender === g.id ? '3px' : '1.5px',
+                                                borderStyle: 'solid',
+                                                borderColor: selectedGender === g.id ? '#f97316' : 'rgba(255,255,255,0.1)',
+                                                background: selectedGender === g.id ? 'rgba(249,115,22,0.15)' : 'rgba(255,255,255,0.03)',
+                                                color: selectedGender === g.id ? '#fff' : 'var(--text-secondary)',
+                                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                transform: selectedGender === g.id ? 'scale(1.03)' : 'scale(1)'
+                                            }}
+                                        >
+                                            <span style={{ fontSize: '24px', filter: selectedGender === g.id ? 'grayscale(0)' : 'grayscale(1) brightness(0.8)', transition: '0.4s' }}>{g.emoji}</span>
+                                            <span style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', color: selectedGender === g.id ? '#f97316' : 'inherit' }}>{g.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="input-group" style={{ marginTop: '16px' }}>
+                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SUA MISSÃO PRINCIPAL</label>
+                                <div className="goal-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '8px' }}>
+                                    {GOALS.map(g => (
+                                        <button 
+                                            type="button" 
+                                            key={g} 
+                                            className={`goal-btn ${goal === g ? 'selected' : ''}`} 
+                                            onClick={() => setGoal(g)}
+                                            style={{
+                                                padding: '10px',
+                                                borderRadius: '12px',
+                                                border: '1px solid',
+                                                borderColor: goal === g ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
+                                                background: goal === g ? 'rgba(var(--accent-rgb), 0.1)' : 'rgba(255,255,255,0.03)',
+                                                color: goal === g ? '#fff' : 'var(--text-secondary)',
+                                                fontSize: '13px',
+                                                fontWeight: '600'
+                                            }}
+                                        >
+                                            {g}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <button type="submit" className="ob-submit-btn" disabled={!name.trim() || !goal || !selectedGender || !estado} style={{ width: '100%', marginTop: '16px', padding: '14px', background: 'var(--accent)', color: '#000', borderRadius: '14px', fontWeight: '900', border: 'none', cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: (!name.trim() || !goal || !selectedGender || !estado) ? 0.5 : 1 }}>
+                                ENTRAR NA ARENA <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        // MOTOR DE IMAGENS PREMIUM
+        function ExerciseCard({ exercise: ex, isCompleted, isFavorited, onClick, onFav }) {
+            const CATEGORY_IMAGES = {
+                "Membros Inferiores": "https://images.unsplash.com/photo-1434608519344-49d77a699e1d?auto=format&fit=crop&w=600&q=80",
+                "Membros Superiores": "https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?auto=format&fit=crop&w=600&q=80",
+                "Braços": "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?auto=format&fit=crop&w=600&q=80",
+                "Core": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=600&q=80",
+                "Cardio": "https://images.unsplash.com/photo-1518611012118-696072aa579a?auto=format&fit=crop&w=600&q=80",
+                "Mobilidade": "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=600&q=80"
+            };
+            const smartImage = CATEGORY_IMAGES[ex.category] || CATEGORY_IMAGES["Cardio"];
+            const fallbackUrl = 'https://placehold.co/600x400/1e293b/f97316?text=' + ex.category.split(' ').join('+');
+            return (<div className="card" onClick={() => onClick(ex)}>
+                <div className="card-thumb">
+                    <img src={smartImage} alt={ex.title} loading="lazy" onError={(e) => { e.target.onerror = null; e.target.src = fallbackUrl; }} />
+                    <span className={`card-diff-badge ${ex.difficulty}`}>{ex.difficulty}</span>
+                    <button className={`card-fav-btn ${isFavorited ? 'fav' : ''}`} onClick={e => { e.stopPropagation(); onFav(ex.id); }}>
+                        <svg viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
+                    </button>
+                    {isCompleted && <div className="card-complete-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg></div>}
+                </div>
+                <div className="card-body">
+                    <h3 className="card-title">{ex.title}</h3>
+                    <div className="card-meta"><span className="card-category-tag">{ex.category}</span><span>{ex.sets}x {ex.reps}</span></div>
+                </div>
+            </div>);
+        }
+
+        function VideoModal({ exercise: ex, isCompleted, onClose, onToggle }) {
+            if (!ex) return null;
+
+            const videoRef = React.useRef(null);
+            const [isPlaying, setIsPlaying] = React.useState(false);
+            const [videoQuality, setVideoQuality] = React.useState('720p');
+
+            useEffect(() => {
+                setVideoQuality('720p');
+            }, [ex]);
+
+            const togglePlay = () => {
+                if (!videoRef.current) return;
+
+                if (videoRef.current.paused) {
+                    const playPromise = videoRef.current.play();
+                    if (playPromise !== undefined) {
+                        playPromise
+                            .then(() => setIsPlaying(true))
+                            .catch(error => {
+                                console.error("Erro ao carregar vídeo do Bunny:", error);
+                                setIsPlaying(false); // Devolve o botão à tela
+                            });
+                    }
+                } else {
+                    videoRef.current.pause();
+                    setIsPlaying(false);
+                }
+            };
+
+            const defDesc = "1. Mantenha o foco. 2. Siga o movimento demonstrado com técnica. 3. Respire de forma controlada.";
+            const actualDesc = ex.description || defDesc;
+            const isGuide = actualDesc.match(/^\d+\./);
+            const steps = isGuide ? actualDesc.match(/\d+\.\s*(.*?)(?=\d+\.|$)/g)?.map(s => s.replace(/^\d+\.\s*/, '').trim()) : [actualDesc];
+
+            const videoSrc = ex.media || ex.videoUrl || ex.video_url;
+            const guidMatch = videoSrc?.match(/net\/([^\/]+)\/play/);
+
+            useEffect(() => {
+                document.body.style.overflow = 'hidden';
+                const handleCapture = (e) => {
+                    const btn = e.target.closest('.modal-close');
+                    if (btn) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        btn.style.background = '#ff0000'; // Feedback visual imediato "RED"
+                        
+                        // Limpar buffer de vídeo (Garbage Collection)
+                        if (videoRef.current) {
+                            videoRef.current.pause();
+                            videoRef.current.removeAttribute('src');
+                            videoRef.current.load();
+                        }
+                        
+                        onClose();
+                    }
+                };
+                window.addEventListener('mousedown', handleCapture, true);
+                window.addEventListener('touchend', handleCapture, true);
+                window.addEventListener('click', handleCapture, true);
+                return () => {
+                    document.body.style.overflow = 'unset';
+                    window.removeEventListener('mousedown', handleCapture, true);
+                    window.removeEventListener('touchend', handleCapture, true);
+                    window.removeEventListener('click', handleCapture, true);
+                    
+                    // Limpar buffer de vídeo no unmount do modal
+                    if (videoRef.current) {
+                        videoRef.current.pause();
+                        videoRef.current.removeAttribute('src');
+                        videoRef.current.load();
+                    }
+                };
+            }, [onClose]);
+
+            const handleVideoError = () => {
+                if (videoQuality === '720p') setVideoQuality('480p');
+                else if (videoQuality === '480p') setVideoQuality('360p');
+                else if (videoQuality === '360p') setVideoQuality('240p');
+                else console.error("Nenhuma resolução disponível para este vídeo.");
+            };
+
+            return createPortal(
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 pointer-events-auto overscroll-none modal-overlay"
+                    style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: 'rgba(0,0,0,0.8)', pointerEvents: 'auto', overscrollBehavior: 'none' }}
+                    onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+                >
+                    <div
+                        className="relative w-full max-w-md max-h-[90vh] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl pointer-events-auto isolation-auto modal"
+                        style={{ position: 'relative', width: '100%', maxWidth: '28rem', maxHeight: '90vh', background: '#0f172a', borderRadius: '1rem', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', pointerEvents: 'auto', isolation: 'auto' }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Botão Fechar (O "X") */}
+                        <button
+                            className="absolute top-3 right-3 z-[100] p-2 bg-black/50 hover:bg-black/80 rounded-full text-white cursor-pointer pointer-events-auto modal-close"
+                            style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 100, padding: '8px', background: 'rgba(0,0,0,0.5)', borderRadius: '9999px', color: '#fff', cursor: 'pointer', pointerEvents: 'auto', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}
+                            onClick={onClose}
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '24px', height: '24px' }}>
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                        </button>
+
+                        {/* Novo Wrapper de Scroll Único para Vídeo e Texto juntos */}
+                        <div className="w-full h-full max-h-[90vh] overflow-y-auto overscroll-contain pb-10" style={{ width: '100%', height: '100%', maxHeight: '90vh', overflowY: 'auto', overscrollBehavior: 'contain', paddingBottom: '40px' }}>
+
+                            {/* Wrapper do Vídeo (Solução Nativa HTML5 com Custom Play Button) */}
+                            <div
+                                className="relative w-full aspect-video flex-shrink-0 z-[500] pointer-events-auto bg-black"
+                                style={{ position: 'relative', width: '100%', aspectRatio: '16/9', flexShrink: 0, zIndex: 500, pointerEvents: 'auto', background: '#000' }}
+                            >
+                                {videoSrc && guidMatch ? (
+                                    <video
+                                        ref={videoRef}
+                                        key={guidMatch[1] + videoQuality}
+                                        src={`https://vz-f56588b2-589.b-cdn.net/${guidMatch[1]}/play_${videoQuality}.mp4`}
+                                        poster={`https://vz-f56588b2-589.b-cdn.net/${guidMatch[1]}/thumbnail.jpg`}
+                                        className="w-full aspect-video bg-black object-contain cursor-pointer pointer-events-auto relative z-[500]"
+                                        style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'relative', zIndex: 500, pointerEvents: 'auto', cursor: 'pointer' }}
+                                        onClick={togglePlay}
+                                        onPlay={() => setIsPlaying(true)}
+                                        onPause={() => setIsPlaying(false)}
+                                        onError={handleVideoError}
+                                        controls
+                                        playsInline
+                                        webkit-playsinline="true"
+                                        preload="none"
+                                    ></video>
+                                ) : videoSrc ? (
+                                    <video
+                                        ref={videoRef}
+                                        key={videoSrc}
+                                        src={videoSrc}
+                                        poster="https://images.unsplash.com/photo-1594882645126-14020914d58d?auto=format&fit=crop&w=600&q=80"
+                                        className="w-full aspect-video bg-black object-contain cursor-pointer pointer-events-auto relative z-[500]"
+                                        style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'relative', zIndex: 500, pointerEvents: 'auto', cursor: 'pointer' }}
+                                        onClick={togglePlay}
+                                        onPlay={() => setIsPlaying(true)}
+                                        onPause={() => setIsPlaying(false)}
+                                        controls
+                                        playsInline
+                                        webkit-playsinline="true"
+                                        preload="none"
+                                    ></video>
+                                ) : (
+                                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000', position: 'absolute', top: 0, left: 0 }}>
+                                        <span style={{ color: 'var(--text-muted)' }}>Sem Vídeo Associado</span>
+                                    </div>
+                                )}
+
+                                {/* Botão de Play Gigante Overlay */}
+                                {videoSrc && !isPlaying && (
+                                    <div
+                                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                                        style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 510 }}
+                                    >
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                                            className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center text-white shadow-lg outline-none focus:outline-none select-none pointer-events-auto hover:bg-orange-600 transition-transform hover:scale-105"
+                                            style={{ width: '64px', height: '64px', background: '#f97316', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5)', pointerEvents: 'auto', border: 'none', cursor: 'pointer', transition: 'transform 0.2s, background-color 0.2s', WebkitTapHighlightColor: 'transparent' }}
+                                        >
+                                            <svg className="w-8 h-8 ml-1" style={{ width: '32px', height: '32px', marginLeft: '4px' }} fill="currentColor" viewBox="0 0 20 20">
+                                                <path d="M4 4l12 6-12 6z" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Área de Conteúdo ("Guia Técnico") */}
+                            <div
+                                className="p-5 relative z-10 pointer-events-auto bg-slate-900 modal-body"
+                                style={{ padding: '20px', position: 'relative', zIndex: 10, pointerEvents: 'auto', background: '#0f172a', margin: 0, marginTop: 0 }}
+                            >
+                                <h2 className="modal-title" style={{ fontSize: '32px', lineHeight: '1.2' }}>{ex.title}</h2>
+                                <div className="card-meta" style={{ marginBottom: '32px', display: 'flex', gap: '8px' }}>
+                                    <span className="card-category-tag" style={{ margin: 0, fontSize: '14px', padding: '6px 12px' }}>{ex.category}</span>
+                                    <span className={`card-diff-badge ${ex.difficulty}`} style={{ position: 'static', margin: 0, padding: '6px 12px', fontSize: '13px' }}>{ex.difficulty}</span>
+                                </div>
+
+                                <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '32px' }}>
+                                    <h3 style={{ fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--accent)', marginBottom: '16px', fontWeight: '800' }}>Guia Técnico</h3>
+                                    {isGuide && steps && steps.length > 0 ? (
+                                        <div className="guide-steps" style={{ gap: '20px', display: 'flex', flexDirection: 'column' }}>
+                                            {steps.map((step, idx) => {
+                                                const labels = ["Preparação", "Execução", "Dica de Segurança"];
+                                                const icons = ["🎯", "⚡", "🛡️"];
+                                                return (
+                                                    <div key={idx} className="guide-step" style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px', borderLeft: '3px solid var(--accent)' }}>
+                                                        <div className="guide-step-number" style={{ width: '30px', height: '30px', fontSize: '14px' }}>{icons[idx] || (idx + 1)}</div>
+                                                        <div className="guide-step-content" style={{ paddingLeft: '12px' }}>
+                                                            <div className="guide-step-label" style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '8px' }}>Passo {idx + 1}: {labels[idx] || "Instrução"}</div>
+                                                            <div className="guide-step-text" style={{ fontSize: '18px', lineHeight: '1.6', color: 'var(--text-primary)', fontWeight: '500' }}>{step}</div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <div className="modal-desc" style={{ fontSize: '18px', lineHeight: '1.7', color: 'var(--text-primary)', fontWeight: '500', padding: '0', background: 'transparent', border: 'none', margin: '0' }}>{ex.description}</div>
+                                    )}
+                                </div>
+
+                                {!['cardio', 'outros'].includes(ex.category?.toLowerCase() || '') && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', width: '100%', marginTop: '20px', padding: '0 10px' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100px', borderRadius: '16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(74, 222, 128, 0.3)' }}>
+                                            <span style={{ color: '#4ade80', fontSize: '14px', fontWeight: 'bold' }}>Séries</span>
+                                            <span style={{ color: '#ffffff', fontSize: '24px', fontWeight: '800', margin: '4px 0' }}>{ex.sets || '3'}</span>
+                                            <span style={{ color: '#94a3b8', fontSize: '12px' }}>Blocos</span>
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100px', borderRadius: '16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(250, 204, 21, 0.3)' }}>
+                                            <span style={{ color: '#facc15', fontSize: '14px', fontWeight: 'bold' }}>Repetições</span>
+                                            <span style={{ color: '#ffffff', fontSize: '24px', fontWeight: '800', margin: '4px 0' }}>{ex.reps ? ex.reps.replace(/reps|movimentos/gi, '').trim() : '15'}</span>
+                                            <span style={{ color: '#94a3b8', fontSize: '12px' }}>Movimentos</span>
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100px', borderRadius: '16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(248, 113, 113, 0.3)' }}>
+                                            <span style={{ color: '#f87171', fontSize: '14px', fontWeight: 'bold' }}>Descanso</span>
+                                            <span style={{ color: '#ffffff', fontSize: '24px', fontWeight: '800', margin: '4px 0' }}>{ex.rest ? String(ex.rest).replace(/s|seg|segundos/gi, '').trim() : '60'}</span>
+                                            <span style={{ color: '#94a3b8', fontSize: '12px' }}>Segundos</span>
+                                        </div>
+                                    </div>
+                                )}
+                                <button className={`btn-complete ${isCompleted ? 'done' : 'pending'}`} style={{ marginTop: '24px', fontSize: '18px', padding: '20px' }} onClick={() => onToggle(ex.id)}>
+                                    {isCompleted ? '✓ Exercício Concluído' : '✔️ Marcar como Concluído'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.getElementById('modal-root')
+            );
+        }
+
+        function SmartSuggestion({ userProfile, isCompleted, isFavorited, onClick, onFav, onCompleteWorkout }) {
+            const [suggestionKey, setSuggestionKey] = useState(Date.now());
+            const [workout, setWorkout] = useState([]);
+            const [isLoading, setIsLoading] = useState(true);
+
+            const getRandom = useCallback((arr, n) => {
+                const shuffled = [...arr].sort(() => 0.5 - Math.random());
+                return shuffled.slice(0, n);
+            }, []);
+
+            useEffect(() => {
+                if (!userProfile) return;
+                setIsLoading(true);
+
+                // Simulate calculation time for premium feel and to prevent blocking
+                const timer = setTimeout(() => {
+                    const goal = userProfile.goal;
+                    let pick = [];
+
+                    // Only use exercises from unlocked modules
+                    const isVipUser = userProfile?.permissions?.gold || userProfile?.permissions?.vip || (userProfile?.permissions?.senior && userProfile?.permissions?.pilates && userProfile?.permissions?.gymnastics);
+                    const unlockedEx = EXERCISES.filter(e => {
+                        const mod = e.moduleId || 'base';
+                        return isVipUser || userProfile?.permissions?.[mod] === true || mod === 'base';
+                    });
+
+                    const byCat = (c) => unlockedEx.filter(e => e.category === c);
+
+                    if (goal === 'Perder Peso') {
+                        pick = [...getRandom(byCat("Cardio"), 4), ...getRandom(byCat("Membros Inferiores"), 2)];
+                    } else if (goal === 'Ganhar Massa') {
+                        pick = [...getRandom(byCat("Membros Superiores"), 3), ...getRandom(byCat("Membros Inferiores"), 2), ...getRandom(byCat("Braços"), 1)];
+                    } else if (goal === 'Tonificar e Definir') {
+                        pick = [
+                            ...getRandom(byCat("Membros Inferiores"), 2),
+                            ...getRandom(byCat("Membros Superiores"), 1),
+                            ...getRandom(byCat("Braços"), 1),
+                            ...getRandom(byCat("Cardio"), 1),
+                            ...getRandom(byCat("Mobilidade"), 1)
+                        ];
+                    } else { // Saúde e Mobilidade
+                        pick = [...getRandom(byCat("Mobilidade"), 3), ...getRandom(byCat("Cardio"), 1), ...getRandom(byCat("Membros Inferiores"), 2)];
+                    }
+
+                    setWorkout(pick);
+                    setIsLoading(false);
+                }, 600);
+
+                return () => clearTimeout(timer);
+            }, [userProfile, suggestionKey, getRandom]);
+
+            return (
+                <div className="smart-suggestion-wrapper">
+                    <div className="page-header suggestion-header">
+                        <h1>💡 Nossa Sugestão</h1>
+                        <button className="btn-reshuffle" onClick={() => setSuggestionKey(Date.now())} disabled={isLoading}>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
+                            Gerar Novamente
+                        </button>
+                    </div>
+
+                    {isLoading ? (
+                        <div className="empty-state" style={{ minHeight: '300px' }}>
+                            <div style={{ animation: 'pulse-glow 1.5s infinite alternate', fontSize: '32px', marginBottom: '16px' }}>🤖</div>
+                            <h3 style={{ margin: 0 }}>Preparando o seu treino ideal...</h3>
+                            <p style={{ color: 'var(--text-muted)' }}>Analisando exercícios para o objetivo: {userProfile?.goal}</p>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="playlist-container">
+                                {workout.map((ex, index) => (
+                                    <div key={ex.id + index + suggestionKey} className="playlist-item">
+                                        <div className="step-badge">Passo {index + 1}</div>
+                                        <div style={{ flex: 1 }}>
+                                            <ExerciseCard exercise={ex} isCompleted={isCompleted(ex.id)} isFavorited={isFavorited(ex.id)} onClick={onClick} onFav={onFav} />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <button className="btn-massive-success" onClick={() => {
+                                onCompleteWorkout(workout.map(e => e.id));
+                                setSuggestionKey(Date.now());
+                            }}>
+                                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12" /></svg>
+                                Concluir Treino (+500 XP)
+                            </button>
+                        </>
+                    )}
+                </div>
+            );
+        }
+
+        function TeaserScannerPage({ onGoToExtras }) {
+            return (
+                <div className="teaser-container">
+                    <div className="teaser-badge">⚡ OFERTA ESPECIAL</div>
+                    
+                    <div className="teaser-ia-icon-wrapper">
+                        <div className="teaser-ia-icon-bg"></div>
+                        <div className="teaser-ia-icon">🤖📸</div>
+                    </div>
+                    
+                    <h1 className="teaser-title">
+                        O SEU PRATO SOB <span className="highlight">RAIO-X.</span>
+                    </h1>
+                    
+                    <p className="teaser-subtitle">
+                        Não precisas de uma balança quando tens um satélite no bolso. O Nutri-Scan™ usa visão computacional avançada para identificar macros e calorias em segundos.
+                    </p>
+        
+                    <div className="teaser-benefits">
+                        {[
+                            { 
+                                icon: "📸", 
+                                title: "Scan Biométrico Instantâneo:", 
+                                text: "Adeus digitação. O Nutri-Scan™ mapeia visualmente os ingredientes num clique." 
+                            },
+                            { 
+                                icon: "🔍", 
+                                title: "Leitura Ótica Inteligente (OCR):", 
+                                text: "Fotografou rótulos ou menus? A IA extrai os dados nutricionais em tempo real." 
+                            },
+                            { 
+                                icon: "💸", 
+                                title: "Exatidão Científica:", 
+                                text: "O nosso motor de visão computacional é calibrado para identificar gramagens e proporções com precisão de laboratório." 
+                            },
+                            { 
+                                icon: "📈", 
+                                text: "Cada foto gera um log detalhado que sincroniza diretamente com o seu Dashboard e Calendário de Consistência." 
+                            }
+                        ].map((b, i) => (
+                            <div key={i} className="benefit-card" style={{ animationDelay: `${0.1 * i}s` }}>
+                                <span className="benefit-icon">{b.icon}</span>
+                                <div className="benefit-content">
+                                    <div className="benefit-text"><b>{b.title}</b> {b.text}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+        
+                    <div className="fixed-cta-container">
+                        <div style={{ width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '8px', margin: '0 auto' }}>
+                            <a 
+                                href="https://pay.hotmart.com/H106107115U?checkoutMode=10"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full text-center font-bold uppercase px-8 py-4 rounded-full bg-[#f97316] hover:bg-[#ea580c] text-white shadow-lg hover:shadow-xl hover:scale-105 transition-transform duration-300 block no-underline"
+                            >
+                                👉 ATIVAR O NUTRI-SCAN™ (APENAS R$ 0,33 AO DIA)
+                            </a>
+                            <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '700', padding: '0 10px' }}>
+                                🔒 Liberado na hora. Cancele com 1 clique direto na app a qualquer momento.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <p style={{ marginTop: '24px', color: 'rgba(255,255,255,0.3)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: '800' }}>
+                        🔒 TECNOLOGIA DE PRECISÃO MILITAR
+                    </p>
+                </div>
+            );
+        }
+
+        function TeaserArsenalPage({ onGoToExtras }) {
+            return (
+                <div className="teaser-container">
+                    <div className="teaser-badge">🔒 ACESSO RESTRITO</div>
+                    
+                    <div className="teaser-ia-icon-wrapper">
+                        <div className="teaser-ia-icon-bg" style={{ background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' }}></div>
+                        <div className="teaser-ia-icon">⚔️🛡️</div>
+                    </div>
+                    
+                    <h1 className="teaser-title">
+                        O seu Arsenal de Elite <span className="highlight">está à espera.</span>
+                    </h1>
+                    
+                    <p className="teaser-subtitle">
+                        Pare de treinar à deriva. Tenha acesso a mais de 300 exercícios com execução técnica perfeita, vídeos 4K e progressão de carga inteligente. O treino dos Titãs não é para amadores.
+                    </p>
+        
+                    <div className="teaser-benefits">
+                        {[
+                            { 
+                                icon: "💎", 
+                                title: "Biblioteca Premium:", 
+                                text: "Acesso ilimitado ao Arsenal completo de exercícios categorizados por grupo muscular." 
+                            },
+                            { 
+                                icon: "🎥", 
+                                title: "Execução Perfeita:", 
+                                text: "Vídeos explicativos detalhados para evitar lesões e maximizar o recrutamento de fibras." 
+                            },
+                            { 
+                                icon: "📊", 
+                                title: "Foco Titã:", 
+                                text: "Registe cada série, repetição e carga diretamente no módulo de treino inteligente." 
+                            },
+                            { 
+                                icon: "📈", 
+                                text: "Desbloqueie o seu potencial genético com as mesmas ferramentas usadas pelos profissionais." 
+                            }
+                        ].map((b, i) => (
+                            <div key={i} className="benefit-card" style={{ animationDelay: `${0.1 * i}s` }}>
+                                <span className="benefit-icon">{b.icon}</span>
+                                <div className="benefit-content">
+                                    <div className="benefit-text"><b>{b.title}</b> {b.text}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+        
+                    <div className="fixed-cta-container">
+                        <div style={{ width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '8px', margin: '0 auto' }}>
+                            <a 
+                                href="https://pay.hotmart.com/I105940414O?checkoutMode=10"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full text-center font-bold uppercase px-8 py-4 rounded-full bg-orange-600 hover:bg-orange-500 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-transform duration-300 block no-underline"
+                            >
+                                👉 QUERO DESBLOQUEAR O ARSENAL AGORA
+                            </a>
+                            <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '700', padding: '0 10px' }}>
+                                🔒 Acesso Vitalício Libertado Imediatamente após a confirmação.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function TeaserDesafioPage() {
+            return (
+                <div className="teaser-container">
+                    <div className="teaser-badge">🔥 ACESSO RESTRITO</div>
+                    
+                    <div className="teaser-squares">
+                        <div className="teaser-square"></div>
+                        <div className="teaser-square active"></div>
+                        <div className="teaser-square"></div>
+                        <div className="teaser-square"></div>
+                        <div className="teaser-square active"></div>
+                    </div>
+
+                    <h1 className="teaser-title" style={{ marginTop: '-10px' }}>
+                        <span className="block text-orange-500 text-5xl italic font-black mb-4 tracking-tighter">DESAFIO 30 DIAS</span>
+                        O CRONOGRAMA OCULTO DOS <span className="highlight">RESULTADOS RÁPIDOS.</span>
+                    </h1>
+                    
+                    <p className="teaser-subtitle">
+                        A maioria não evolui porque treina sem estratégia. Este sistema desbloqueia a periodização exata de 30 dias. Cada dia é milimetricamente calculado: o estímulo perfeito e a recuperação exata para ganhos acelerados.
+                    </p>
+        
+                    <div className="teaser-benefits">
+                        {[
+                            { 
+                                icon: "📅", 
+                                title: "Periodização Elite:", 
+                                text: "30 dias de treinos estruturados para evitar o plateau e forçar o crescimento constante." 
+                            },
+                            { 
+                                icon: "⚡", 
+                                title: "Estímulo Adaptativo:", 
+                                text: "Variação inteligente de volume e intensidade para recrutar fibras adormecidas." 
+                            },
+                            { 
+                                icon: "🏆", 
+                                title: "Foco em Definição:", 
+                                text: "Protocolo desenhado para queimar gordura enquanto preserva e constrói massa magra." 
+                            }
+                        ].map((b, i) => (
+                            <div key={i} className="benefit-card" style={{ animationDelay: `${0.1 * i}s` }}>
+                                <span className="benefit-icon">{b.icon}</span>
+                                <div className="benefit-content">
+                                    <div className="benefit-text"><b>{b.title}</b> {b.text}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+        
+                    <div className="fixed-cta-container">
+                        <div style={{ width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '8px', margin: '0 auto' }}>
+                            <a 
+                                href="https://pay.hotmart.com/R106106925S?checkoutMode=10"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full text-center font-bold uppercase px-8 py-4 rounded-full bg-orange-600 hover:bg-orange-500 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-transform duration-300 block no-underline"
+                            >
+                                👉 DESBLOQUEAR DESAFIO (R$ 19,90)
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function TeaserSonoPage() {
+            return (
+                <div className="teaser-container">
+                    <div className="teaser-badge">🌙 PERFORMANCE NOTURNA</div>
+                    
+                    <div className="teaser-ia-icon-wrapper">
+                        <div className="teaser-ia-icon-bg" style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)' }}></div>
+                        <div className="teaser-ia-icon">💤</div>
+                    </div>
+                    
+                    <h1 className="teaser-title">
+                        A hipertrofia acontece <span className="highlight">enquanto dormes.</span>
+                    </h1>
+                    
+                    <p className="teaser-subtitle">
+                        Não adianta treinar como um Titã se você recupera como um mortal. Desbloqueie o protocolo de otimização de sono profundo e maximize sua produção hormonal natural.
+                    </p>
+        
+                    <div className="teaser-benefits">
+                        {[
+                            { 
+                                icon: "🌙", 
+                                title: "Higiene Avançada:", 
+                                text: "Protocolos baseados em neurociência para reduzir a latência do sono e eliminar a insónia." 
+                            },
+                            { 
+                                icon: "🧠", 
+                                title: "Recuperação Neural:", 
+                                text: "Otimiza a limpeza de toxinas cerebrais para acordares com foco total e energia explosiva." 
+                            },
+                            { 
+                                icon: "💉", 
+                                title: "Pico Hormonal:", 
+                                text: "Garante que seu corpo atinja o estado REM profundo para maximizar o GH e a Testosterona." 
+                            }
+                        ].map((b, i) => (
+                            <div key={i} className="benefit-card" style={{ animationDelay: `${0.1 * i}s` }}>
+                                <span className="benefit-icon">{b.icon}</span>
+                                <div className="benefit-content">
+                                    <div className="benefit-text"><b>{b.title}</b> {b.text}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+        
+                    <div className="fixed-cta-container">
+                        <div style={{ width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '8px', margin: '0 auto' }}>
+                            <a 
+                                href="https://pay.hotmart.com/Y106107162P?checkoutMode=10"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full text-center font-bold uppercase px-8 py-4 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-transform duration-300 block no-underline"
+                            >
+                                👉 QUERO OTIMIZAR O MEU SONO AGORA
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function ModuleViewer({ title, url, onClose }) {
+            const isGuiaMusculacao = title && (title.toLowerCase().includes('musculação') || title.toLowerCase().includes('musculacao'));
+            const finalUrl = isGuiaMusculacao 
+                ? url + "#toolbar=0" 
+                : `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
+
+            return (
+                <div className="fixed inset-0 z-[100000] bg-black flex flex-col animate-in fade-in duration-500">
+                    <header className="fixed top-0 left-0 right-0 h-20 bg-slate-900 border-b border-white/10 flex items-center justify-between px-6 z-10">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] text-orange-400 font-bold uppercase tracking-widest">A Visualizar Guia</span>
+                            <h2 className="text-white font-black text-sm uppercase truncate max-w-[150px] sm:max-w-none">{title}</h2>
+                        </div>
+                        <div className="flex gap-4 items-center">
+                            <a 
+                                href={url} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 text-[10px] text-white font-black uppercase bg-orange-600 hover:bg-orange-700 transition-all px-4 py-3 rounded-xl shadow-lg shadow-orange-600/20 active:scale-95"
+                            >
+                                <span className="hidden xs:inline">🔗 Não consegue clicar?</span> Abrir no Navegador
+                            </a>
+                            <button onClick={onClose} className="text-white bg-white/10 w-11 h-11 rounded-full flex items-center justify-center hover:bg-red-500 transition-colors shadow-lg active:scale-90">
+                                <span className="text-2xl font-light">&times;</span>
+                            </button>
+                        </div>
+                    </header>
+                    <div className="flex-1 mt-20 bg-slate-950 overflow-hidden">
+                        <iframe 
+                            src={finalUrl} 
+                            className="w-full h-full border-none"
+                            title={title}
+                            allow="fullscreen"
+                            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation allow-top-navigation-by-user-activation"
+                        />
+                    </div>
+                </div>
+            );
+        }
+
+        function ExtrasHub({ ud, onNav }) {
+            const [activeTab, setActiveTab] = React.useState('combos');
+            const [localUnlocked, setLocalUnlocked] = React.useState(() => {
+                try { return JSON.parse(localStorage.getItem('app_unlocked_modules') || '[]'); } catch (e) { return []; }
+            });
+            const [redeemCode, setRedeemCode] = React.useState('');
+            const [showModulesDropdown, setShowModulesDropdown] = React.useState(false);
+            const [viewingPdf, setViewingPdf] = React.useState(null);
+
+            const profile = ud.userProfile;
+            const hasTotalVip = profile?.permissions?.total_vip || localUnlocked.includes('total_vip') || profile?.is_vip;
+            const hasGold = profile?.acesso_combo_ouro || localUnlocked.includes('vip_gold') || hasTotalVip;
+            const hasScannerIA = profile?.assinatura_scanner_ia_ativa || localUnlocked.includes('scanner_ia') || localUnlocked.includes('pacote_elite') || hasTotalVip;
+            const hasDesafio = profile?.permissions?.desafio30 || localUnlocked.includes('desafio30') || hasGold || hasTotalVip;
+            const hasSono = profile?.permissions?.sono || localUnlocked.includes('sono') || hasGold || hasTotalVip;
+            const hasComunidade = profile?.permissions?.comunidade_vip || localUnlocked.includes('comunidade_vip') || localUnlocked.includes('pacote_elite') || hasTotalVip;
+            const hasMusculacao = profile?.permissions?.musculacao || localUnlocked.includes('musculacao') || hasGold || hasTotalVip;
+            const hasSenior = profile?.permissions?.senior || localUnlocked.includes('senior') || hasGold || hasTotalVip;
+            const hasPilates = profile?.permissions?.pilates || localUnlocked.includes('pilates') || hasGold || hasTotalVip;
+            const hasGymnastics = profile?.permissions?.gymnastics || localUnlocked.includes('gymnastics') || hasGold || hasTotalVip;
+
+
+            const handleRedeemCode = () => {
+                const code = redeemCode.trim().toUpperCase();
+                if (!code) return;
+
+                const mapping = {
+                    'VIPGOLD2024': 'vip_gold',
+                    'DESAFIO30VIP': 'desafio30',
+                    'IA2026': 'scanner_ia',
+                    'COMUNIDADEVIPMB': 'comunidade_vip',
+                    'TOTALVIP69': 'total_vip',
+                    'SONOMILITARVIP': 'sono',
+                    'ELITE2026': 'pacote_elite'
+                };
+
+                if (mapping[code]) {
+                    const moduleSlug = mapping[code];
+                    const newUnlocked = Array.from(new Set([...localUnlocked, moduleSlug]));
+                    setLocalUnlocked(newUnlocked);
+                    localStorage.setItem('app_unlocked_modules', JSON.stringify(newUnlocked));
+                    setRedeemCode('');
+                    alert("Acesso libertado com sucesso! ✅");
+                    window.location.reload(); // Re-sync state
+                } else {
+                    alert("Código inválido ou expirado.");
+                }
+            };
+
+            const ExtraCard = ({ title, desc, price, oldPrice, badge, ribbon, icon, unlocked, isMonthly, onAction, subPrice, pdfs }) => (
+                <div className="p-6 rounded-[24px] bg-[#1e2330] flex flex-col relative overflow-hidden transition-all duration-300 hover:bg-[#252b3a] border border-white/5">
+                    {ribbon && (
+                        <div className="absolute top-0 right-0 w-28 h-28 overflow-hidden pointer-events-none z-20">
+                            <div className="absolute top-4 -right-8 w-36 bg-gradient-to-r from-red-600 to-red-500 text-white text-center font-black text-[8px] py-1.5 rotate-45 shadow-2xl uppercase tracking-[0.2em] border-y border-white/10">
+                                {ribbon}
+                            </div>
+                        </div>
+                    )}
+                    {badge && (
+                        <div className="absolute top-5 right-5 bg-orange-600 text-white text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-wider z-10">
+                            {badge}
+                        </div>
+                    )}
+                    
+                    <div className="flex gap-4 mb-6">
+                        <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-3xl">
+                            {icon}
+                        </div>
+                        <div className="flex-1 pt-1">
+                            <h3 className="text-lg font-black text-white leading-none mb-1 uppercase italic tracking-tighter">{title}</h3>
+                            <div className="flex items-center gap-2">
+                                <span className={`w-1.5 h-1.5 rounded-full ${unlocked ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`}></span>
+                                <p className="text-[8px] text-slate-500 font-black uppercase tracking-widest">{unlocked ? 'Acesso Ativo' : 'Pendente'}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p className="text-[11px] text-slate-400 mb-6 leading-relaxed font-bold">{desc}</p>
+
+                    <div className="mt-auto">
+                        {!unlocked ? (
+                            <div className="mb-6">
+                                {oldPrice && <p className="text-[9px] text-slate-600 line-through font-black mb-1 italic">DE: R$ {oldPrice}</p>}
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-xs font-black text-white/40 italic">R$</span>
+                                    <span className="text-3xl font-black text-white tracking-tighter italic">{price}</span>
+                                    <span className="text-[9px] text-slate-500 font-black uppercase ml-1">{isMonthly ? '/ mês' : 'Vitalício'}</span>
+                                </div>
+                                {subPrice && <p className="text-[8px] text-green-500 font-black mt-1 uppercase tracking-tighter italic">⚡ {subPrice}</p>}
+                            </div>
+                        ) : (
+                            <div className="mb-6 py-3 bg-white/5 rounded-xl text-center border border-white/5">
+                                <span className="text-[8px] font-black text-slate-500 tracking-[0.2em] uppercase">Desbloqueado ✅</span>
+                            </div>
+                        )}
+
+                        {unlocked && pdfs && pdfs.length > 0 && (
+                            <div className="grid grid-cols-2 gap-2 mb-6">
+                                {pdfs.map((pdf, idx) => (
+                                    <div 
+                                        key={idx} 
+                                        onClick={(e) => { 
+                                            e.preventDefault();
+                                            if(!pdf.url) { 
+                                                alert("Este PDF está sendo processado e será liberado na sua conta em breve. Verifique novamente em alguns minutos."); 
+                                            } else if (pdf.title.toLowerCase().includes('musculação')) {
+                                                window.open(pdf.url, '_blank');
+                                            } else {
+                                                setViewingPdf(pdf);
+                                            }
+                                        }}
+                                        className="bg-white/5 hover:bg-white/10 border border-white/10 p-3 rounded-xl flex flex-col items-center gap-1.5 transition-all group/pdf active:scale-95 cursor-pointer hover:border-orange-500/30"
+                                    >
+                                        <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500 text-sm group-hover/pdf:bg-red-500/20">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                        </div>
+                                        <span className="text-[7px] font-black uppercase text-slate-400 group-hover/pdf:text-white text-center leading-tight tracking-wider">{pdf.title}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+
+                        <button 
+                            onClick={onAction}
+                            className={`w-full py-4 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 ${unlocked ? 'bg-white/10 text-white' : 'bg-orange-600 text-white hover:bg-orange-700 shadow-lg shadow-orange-600/10'}`}
+                        >
+                            {unlocked ? 'Acessar Agora' : 'Quero Acesso'}
+                        </button>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div id="extras-page" className="extras-hub p-5 pb-32 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-700">
+                    <div className="page-header mb-8">
+                        <h1 className="text-4xl font-black italic tracking-tighter mb-2">💎 Extras & Combos</h1>
+                        <p className="text-slate-500 font-bold uppercase tracking-widest text-[9px] italic">Eleve seu potencial ao nível Elite</p>
+                    </div>
+
+                    <div className="flex gap-2 mb-8 bg-white/5 p-1 rounded-[20px] border border-white/5">
+                        <button 
+                            onClick={() => setActiveTab('combos')}
+                            className={`flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all ${activeTab === 'combos' ? 'bg-orange-600 text-white shadow-xl shadow-orange-600/20' : 'text-slate-500 hover:text-white'}`}
+                        >
+                            Combos
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('separados')}
+                            className={`flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all ${activeTab === 'separados' ? 'bg-orange-600 text-white shadow-xl shadow-orange-600/20' : 'text-slate-500 hover:text-white'}`}
+                        >
+                            Separados
+                        </button>
+                    </div>
+
+                    {activeTab === 'combos' ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <ExtraCard 
+                                title="Combo de Ouro"
+                                desc={
+                                    <>
+                                        A base da performance. Desbloqueia:
+                                        <div className="mt-2 space-y-0.5">
+                                            <div className="font-black text-amber-400">✓ DESAFIO 30 DIAS</div>
+                                            <div className="font-black text-amber-400">✓ SONO PROFUNDO</div>
+                                            <div className="font-black text-amber-400">✓ PILATES DE ELITE</div>
+                                            <div className="font-black text-amber-400">✓ GINÁSTICA PÉLVICA</div>
+                                            <div className="font-black text-amber-400">✓ IDOSOS FIT</div>
+                                            <div className="font-black text-amber-400">✓ MÓDULOS ESPECIAIS VIP</div>
+                                        </div>
+                                    </>
+                                }
+                                price="24,90"
+                                oldPrice="119,40"
+                                icon="🥇"
+                                badge="RECOMENDADO"
+                                unlocked={hasGold}
+                                pdfs={[
+                                    { title: "Musculação em Casa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" },
+                                    { title: "Recuperação Ativa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Protocolo%20de%20Recuperacao%20Ativa.pdf" },
+                                    { title: "Guia Mini-Bands", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Treinamento%20Mini-Faixas%20(Mini-Bands).pdf" },
+                                    { title: "Pilates de Elite", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf" }
+                                ]}
+                                onAction={() => hasGold ? onNav('arsenal-vip') : window.open('https://pay.hotmart.com/O106106388F?checkoutMode=10', '_blank')}
+                            />
+                            <ExtraCard 
+                                title="Pacote de Elite"
+                                desc={
+                                    <>
+                                        O combo de suporte total. Acesso ilimitado a:
+                                        <div className="mt-2 space-y-0.5">
+                                            <div className="font-black text-orange-400">✓ NUTRI-SCAN™ IA</div>
+                                            <div className="font-black text-orange-400">✓ COMUNIDADE VIP</div>
+                                        </div>
+                                    </>
+                                }
+                                price="14,90"
+                                oldPrice="19,90"
+                                icon="⚔️"
+                                isMonthly={true}
+                                ribbon="SUPORTE VIP"
+                                unlocked={hasScannerIA && hasComunidade} 
+                                onAction={() => (hasScannerIA && hasComunidade) ? window.open('https://t.me/+KiOxeuwQ8a40ZWM8', '_blank') : window.open('https://pay.hotmart.com/I105940414O?checkoutMode=10', '_blank')}
+                            />
+                            <ExtraCard 
+                                title="Acesso Total VIP"
+                                desc={
+                                    <>
+                                        A CHAVE MESTRA. Desbloqueia absolutamente TUDO:
+                                        <div className="mt-2 space-y-0.5">
+                                            <div className="font-black text-emerald-400">✓ COMBO DE OURO & ELITE</div>
+                                            <div className="font-black text-emerald-400">✓ TODAS AS FERRAMENTAS IA</div>
+                                            <div className="font-black text-emerald-400">✓ ATUALIZAÇÕES FUTURAS</div>
+                                        </div>
+                                    </>
+                                }
+                                price="69,90"
+                                oldPrice="119,40 + 19,90/mês"
+                                icon="💎"
+                                ribbon="ACESSO TOTAL"
+                                unlocked={hasTotalVip}
+                                pdfs={[
+                                    { title: "Musculação em Casa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" },
+                                    { title: "Recuperação Ativa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Protocolo%20de%20Recuperacao%20Ativa.pdf" },
+                                    { title: "Guia Mini-Bands", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Treinamento%20Mini-Faixas%20(Mini-Bands).pdf" },
+                                    { title: "Pilates de Elite", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf" }
+                                ]}
+                                onAction={() => hasTotalVip ? onNav('home') : window.open('https://pay.hotmart.com/E105939718I?checkoutMode=10', '_blank')}
+                            />
+                        </div>
+                    ) : (
+                        <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                <ExtraCard 
+                                    title="Nutri-Scan™ IA"
+                                    desc="Analise suas refeições com Inteligência Artificial. Macronutrientes e calorias em segundos."
+                                    price="9,90"
+                                    isMonthly={true}
+                                    icon="📸"
+                                    unlocked={hasScannerIA}
+                                    onAction={() => hasScannerIA ? onNav('arsenal-vip') : window.open('https://pay.hotmart.com/H106107115U?checkoutMode=10', '_blank')}
+                                />
+                                <ExtraCard 
+                                    title="Meu Desafio 30 Dias"
+                                    desc="O cronograma oculto dos resultados rápidos. Periodização elite para transformar seu físico."
+                                    price="19,90"
+                                    icon="🔥"
+                                    unlocked={hasDesafio}
+                                    onAction={() => hasDesafio ? onNav('arsenal-vip') : window.open('https://pay.hotmart.com/R106106925S?checkoutMode=10', '_blank')}
+                                />
+                                <ExtraCard 
+                                    title="Comunidade VIP"
+                                    desc="Suporte direto, análise de postura 24h e círculo exclusivo de guerreiros no Telegram."
+                                    price="9,90"
+                                    isMonthly={true}
+                                    icon="💬"
+                                    unlocked={hasComunidade}
+                                    onAction={() => hasComunidade ? window.open('https://t.me/+KiOxeuwQ8a40ZWM8', '_blank') : window.open('https://pay.hotmart.com/B105940293A?checkoutMode=10', '_blank')}
+                                />
+                                <ExtraCard 
+                                    title="Sono Profundo"
+                                    desc="Otimização hormonal através do sono. O segredo da recuperação atlética de elite."
+                                    price="19,90"
+                                    icon="🌙"
+                                    unlocked={hasSono}
+                                    onAction={() => hasSono ? onNav('arsenal-vip') : window.open('https://pay.hotmart.com/Y106107162P?checkoutMode=10', '_blank')}
+                                />
+                            </div>
+
+                            <div className="bg-[#1e2330] rounded-[28px] p-6 border border-white/5 transition-all">
+                                <button 
+                                    onClick={() => setShowModulesDropdown(!showModulesDropdown)}
+                                    className="w-full flex items-center justify-between text-white font-black uppercase tracking-[0.2em] text-xs"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-xl">📖</div>
+                                        <span>Módulos Especiais</span>
+                                    </div>
+                                    <svg className={`w-5 h-5 text-slate-500 transition-transform duration-300 ${showModulesDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" /></svg>
+                                </button>
+                                
+                                {showModulesDropdown && (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 animate-in slide-in-from-top-4 duration-500">
+                                        {[
+                                            { 
+                                                name: 'Musculação em Casa', 
+                                                icon: '💪', 
+                                                desc: 'O guia definitivo para construir um físico de elite usando apenas o peso do corpo e o que tens em casa.',
+                                                link: 'https://pay.hotmart.com/N105939399C?checkoutMode=10',
+                                                unlocked: hasMusculacao,
+                                                pdfTitle: 'Guia Musculação Elite',
+                                                pdfUrl: 'https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf'
+                                            },
+                                            { 
+                                                name: 'Recuperação Ativa', 
+                                                icon: '🧘', 
+                                                desc: 'Protocolos de mobilidade e libertação para acelerar a regeneração muscular e prevenir lesões.',
+                                                link: 'https://pay.hotmart.com/D105938993C?checkoutMode=10',
+                                                unlocked: hasSenior,
+                                                pdfTitle: 'Protocolo Recuperação',
+                                                pdfUrl: 'https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Protocolo%20de%20Recuperacao%20Ativa.pdf'
+                                            },
+                                            { 
+                                                name: 'Protocolo Mini-Bands', 
+                                                icon: '🎗️', 
+                                                desc: 'Maximiza a tensão muscular e a hipertrofia usando elásticos de resistência. Treino portátil e letal.',
+                                                link: 'https://pay.hotmart.com/M105939209K?checkoutMode=10',
+                                                unlocked: hasGymnastics,
+                                                pdfTitle: 'Manual Mini-Bands',
+                                                pdfUrl: 'https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Treinamento%20Mini-Faixas%20(Mini-Bands).pdf'
+                                            },
+                                            { 
+                                                name: 'Pilates de Elite', 
+                                                icon: '🧘‍♀️', 
+                                                desc: 'Domine seu core e a estabilidade profunda com exercícios usados por atletas de alto rendimento.',
+                                                link: 'https://pay.hotmart.com/E105938855Y?checkoutMode=10',
+                                                unlocked: hasPilates,
+                                                pdfTitle: 'Pilates de Elite',
+                                                pdfUrl: 'https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf'
+                                            }
+                                        ].map(mod => (
+                                            <div key={mod.name} className="p-5 bg-white/5 rounded-[28px] border border-white/5 hover:border-orange-500/20 transition-all group relative overflow-hidden flex flex-col h-full">
+                                                <div className="flex items-start justify-between mb-4">
+                                                    <div className="w-12 h-12 rounded-2xl bg-orange-600/10 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                                                        {mod.icon}
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="bg-orange-600/20 text-orange-500 text-[7px] font-black px-2 py-1 rounded-md uppercase tracking-widest mb-2 inline-block">GUIA VIP</div>
+                                                        <div className="flex items-baseline gap-1 justify-end">
+                                                            <span className="text-[10px] font-black text-white/40 italic">R$</span>
+                                                            <span className="text-2xl font-black text-white italic tracking-tighter">19,90</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <h4 className="text-xs font-black text-white uppercase italic tracking-widest mb-2">{mod.name}</h4>
+                                                <p className="text-[10px] text-slate-500 font-bold leading-relaxed mb-6 flex-1">{mod.desc}</p>
+
+                                                {(mod.unlocked || hasGold) && (
+                                                    <div className="mb-6">
+                                                        <div 
+                                                            onClick={(e) => { 
+                                                                e.preventDefault(); 
+                                                                if (mod.name.toLowerCase().includes('musculação')) {
+                                                                    window.open(mod.pdfUrl, '_blank');
+                                                                } else {
+                                                                    setViewingPdf({ title: mod.pdfTitle, url: mod.pdfUrl });
+                                                                }
+                                                            }}
+                                                            className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl hover:bg-red-500/20 transition-all group/p cursor-pointer"
+                                                        >
+                                                            <div className="w-8 h-8 rounded-lg bg-red-500 flex items-center justify-center text-white">
+                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-[8px] font-black text-white uppercase tracking-tighter">Ver Guia</p>
+                                                                <p className="text-[7px] text-red-400 font-bold uppercase tracking-widest">{mod.pdfTitle}</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                
+                                                <button 
+                                                    onClick={() => (mod.unlocked || hasGold) ? alert("Este guia já está desbloqueado. Usa o botão de download acima.") : window.open(mod.link, '_blank')}
+                                                    className={`w-full py-3 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] transition-all active:scale-95 border border-white/5 ${ (mod.unlocked || hasGold) ? 'bg-white/10 text-white border-white/10' : 'bg-white/5 text-white hover:bg-orange-600 hover:border-transparent'}`}
+                                                >
+                                                    {(mod.unlocked || hasGold) ? 'Guia Desbloqueado ✅' : 'Adquirir Guia'}
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="mt-16 p-8 bg-[#1e2330] rounded-[32px] border border-dashed border-white/10 text-center">
+                        <h3 className="text-white font-black uppercase tracking-[0.3em] text-[10px] mb-6">Possuis um Código de Resgate?</h3>
+                        <div className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto">
+                            <input 
+                                type="text" 
+                                value={redeemCode}
+                                onChange={(e) => setRedeemCode(e.target.value)}
+                                placeholder="INTRODUZ O CÓDIGO AQUI"
+                                className="flex-1 bg-black/40 border border-white/5 rounded-2xl px-6 py-4 text-white font-black text-xs focus:border-orange-500 outline-none transition-all placeholder:text-slate-700"
+                            />
+                            <button 
+                                onClick={handleRedeemCode}
+                                className="bg-white text-black px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-600 hover:text-white transition-all active:scale-95 shadow-xl"
+                            >
+                                Validar
+                            </button>
+                        </div>
+                    </div>
+
+                    {viewingPdf && (
+                        <div className="fixed inset-0 z-[20000] bg-slate-950 flex flex-col animate-in fade-in zoom-in-95 duration-300">
+                            <div className="flex items-center justify-between p-4 bg-slate-900 border-b border-white/5">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center text-red-500">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                    </div>
+                                    <h3 className="text-white font-black uppercase tracking-widest text-[11px]">{viewingPdf.title}</h3>
+                                </div>
+                                <button 
+                                    onClick={() => setViewingPdf(null)}
+                                    className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white text-2xl hover:bg-white/10"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                            <div className="flex-1 bg-slate-950 overflow-hidden relative">
+                                <iframe 
+                                    src={`https://docs.google.com/viewer?url=${encodeURIComponent(viewingPdf.url)}&embedded=true`}
+                                    className="w-full h-full border-none"
+                                    style={{ background: '#0f172a' }}
+                                    title={viewingPdf.title}
+                                />
+                                <div className="absolute inset-0 pointer-events-none border-[1px] border-white/5"></div>
+                            </div>
+                            <div className="p-4 bg-slate-900 border-t border-white/5 text-center">
+                                <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest">Visualização Segura - Modo Elite</p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        /* ==========================================================================
+           COMPONENTES DE NUTRIÇÃO (MODULARIZADOS)
+           ========================================================================== */
+
+         function MealDetailsForm({ isOpen, onClose, onConfirm, aiData }) {
+            const [editableData, setEditableData] = React.useState({
+                mealName: '',
+                calories: 0,
+                protein: 0,
+                carbs: 0,
+                fat: 0,
+                description: ''
+            });
+
+            const [selectedExtras, setSelectedExtras] = React.useState({
+                oil: false,
+                vegoil: false,
+                alcohol: false,
+                soda: false
+            });
+
+            // Sincronizar dados da IA com o estado editável
+            React.useEffect(() => {
+                if (aiData) {
+                    setEditableData({
+                        mealName: aiData.mealName || '',
+                        calories: Number(aiData.calories) || 0,
+                        protein: Number(aiData.protein) || 0,
+                        carbs: Number(aiData.carbs) || 0,
+                        fat: Number(aiData.fat) || 0,
+                        description: aiData.description || ''
+                    });
+                }
+            }, [aiData]);
+
+            if (!isOpen || !aiData) return null;
+
+            const EXTRAS_CONFIG = {
+                oil: { label: 'Azeite (+120 kcal)', kcal: 120 },
+                vegoil: { label: 'Óleo Vegetal (+110 kcal)', kcal: 110 },
+                alcohol: { label: 'Bebida Alcoólica (+150 kcal)', kcal: 150 },
+                soda: { label: 'Bebida com Açúcar (+130 kcal)', kcal: 130 }
+            };
+
+            const toggleExtra = (id) => {
+                setSelectedExtras(prev => ({ ...prev, [id]: !prev[id] }));
+            };
+
+            const handleInputChange = (field, value) => {
+                setEditableData(prev => ({ ...prev, [field]: value }));
+            };
+
+            const extraKcal = Object.entries(selectedExtras)
+                .reduce((acc, [id, checked]) => acc + (checked ? EXTRAS_CONFIG[id].kcal : 0), 0);
+
+            const totalKcal = Math.round((editableData.calories || 0) + extraKcal);
+
+            const inputBaseClass = "bg-slate-800/50 hover:bg-slate-700/80 focus:ring-2 focus:ring-orange-500 rounded px-2 py-1 transition-all outline-none border-none text-white";
+
+            return (
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[200000] p-6 animate-in fade-in duration-300">
+                    <div className="bg-slate-900 border border-white/10 rounded-[32px] w-full max-w-md overflow-hidden shadow-2xl relative border-orange-500/20">
+                        <div className="p-8">
+                            <h2 className="text-2xl font-black text-white mb-6 uppercase tracking-tight">🍽️ Detalhes da Refeição</h2>
+                            
+                            <div className="mb-8 p-5 bg-white/5 rounded-2xl border border-white/5">
+                                <div className="flex justify-between items-start mb-3">
+                                    <div>
+                                        <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">O que a IA identificou</p>
+                                        <p className="text-[9px] text-slate-400 italic">(Podes editar os valores manualmente)</p>
+                                    </div>
+                                </div>
+                                
+                                <input 
+                                    type="text"
+                                    value={editableData.mealName}
+                                    onChange={(e) => handleInputChange('mealName', e.target.value)}
+                                    className={`${inputBaseClass} w-full text-xl font-black mb-4 italic placeholder:text-slate-600`}
+                                    placeholder="Nome da refeição..."
+                                />
+                                
+                                <div className="grid grid-cols-4 gap-2 text-center">
+                                    <div className="bg-orange-500/10 p-2 rounded-xl">
+                                        <p className="text-[8px] text-orange-400 font-bold uppercase mb-1">Kcal</p>
+                                        <input 
+                                            type="number"
+                                            value={editableData.calories}
+                                            onChange={(e) => handleInputChange('calories', parseInt(e.target.value) || 0)}
+                                            className={`${inputBaseClass} w-full text-sm font-black text-center p-0`}
+                                        />
+                                    </div>
+                                    <div className="bg-blue-500/10 p-2 rounded-xl">
+                                        <p className="text-[8px] text-blue-400 font-bold uppercase mb-1">Prot(g)</p>
+                                        <input 
+                                            type="number"
+                                            value={editableData.protein}
+                                            onChange={(e) => handleInputChange('protein', parseInt(e.target.value) || 0)}
+                                            className={`${inputBaseClass} w-full text-sm font-black text-center p-0`}
+                                        />
+                                    </div>
+                                    <div className="bg-green-500/10 p-2 rounded-xl">
+                                        <p className="text-[8px] text-green-400 font-bold uppercase mb-1">Carb(g)</p>
+                                        <input 
+                                            type="number"
+                                            value={editableData.carbs}
+                                            onChange={(e) => handleInputChange('carbs', parseInt(e.target.value) || 0)}
+                                            className={`${inputBaseClass} w-full text-sm font-black text-center p-0`}
+                                        />
+                                    </div>
+                                    <div className="bg-yellow-500/10 p-2 rounded-xl">
+                                        <p className="text-[8px] text-yellow-400 font-bold uppercase mb-1">Gord(g)</p>
+                                        <input 
+                                            type="number"
+                                            value={editableData.fat}
+                                            onChange={(e) => handleInputChange('fat', parseInt(e.target.value) || 0)}
+                                            className={`${inputBaseClass} w-full text-sm font-black text-center p-0`}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 mb-10">
+                                <p className="text-[10px] text-orange-500 font-black uppercase tracking-widest mb-2">Adicionar Extras (O que a IA não vê)</p>
+                                
+                                {Object.entries(EXTRAS_CONFIG).map(([id, config]) => (
+                                    <label key={id} className={`flex items-center gap-3 p-4 rounded-2xl border transition-all cursor-pointer ${selectedExtras[id] ? 'bg-orange-500/10 border-orange-500/40 shadow-lg shadow-orange-500/5' : 'bg-white/5 border-white/5'}`}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selectedExtras[id]}
+                                            onChange={() => toggleExtra(id)}
+                                            className="w-5 h-5 rounded-lg border-white/10 bg-slate-800 text-orange-500 focus:ring-orange-500" 
+                                        />
+                                        <span className={`text-sm font-bold ${selectedExtras[id] ? 'text-white' : 'text-slate-400'}`}>{config.label}</span>
+                                    </label>
+                                ))}
+                            </div>
+
+                            <div className="flex gap-4">
+                                <button 
+                                    onClick={onClose}
+                                    className="flex-1 py-4 rounded-2xl bg-slate-800 text-white font-bold uppercase tracking-widest text-xs active:scale-95 transition-transform"
+                                >
+                                    Cancelar
+                                </button>
+                                <button 
+                                    onClick={() => onConfirm(editableData.mealName, editableData.description, totalKcal, editableData.protein, editableData.carbs, editableData.fat)}
+                                    className="flex-1 py-4 rounded-2xl bg-orange-500 text-white font-black uppercase tracking-widest text-xs shadow-lg shadow-orange-500/20 active:scale-95 transition-transform"
+                                >
+                                    Salvar ({totalKcal} kcal)
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function ConsistencyCalendar({ history, metaKcal, metaProtein }) {
+            const daysInMonth = (month, year) => new Date(year, month + 1, 0).getDate();
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = today.getMonth();
+            const totalDays = daysInMonth(month, year);
+            const firstDay = new Date(year, month, 1).getDay(); // 0 (Dom) a 6 (Sab)
+
+            // Ajustar para Segunda-feira ser o primeiro (0)
+            const firstDayAdjusted = firstDay === 0 ? 6 : firstDay - 1;
+
+            const days = [];
+            for (let i = 0; i < firstDayAdjusted; i++) days.push(null);
+            for (let i = 1; i <= totalDays; i++) days.push(i);
+
+            // Mapear logs por dia
+            const logsByDay = history.reduce((acc, log) => {
+                const date = new Date(log.created_at).getDate();
+                const monthLog = new Date(log.created_at).getMonth();
+                if (monthLog === month) {
+                    if (!acc[date]) acc[date] = { kcal: 0, protein: 0 };
+                    acc[date].kcal += log.calories || 0;
+                    acc[date].protein += log.protein || 0;
+                }
+                return acc;
+            }, {});
+
+            // Cálculo Consistência Semanal (Apenas a partir do Dia 1)
+            const firstLog = history.length > 0 ? history.reduce((min, p) => p.created_at < min.created_at ? p : min, history[0]) : null;
+            const firstLogDate = firstLog ? new Date(firstLog.created_at) : null;
+            
+            const last7Days = Array.from({ length: 7 }, (_, i) => {
+                const d = new Date();
+                d.setHours(0,0,0,0);
+                d.setDate(d.getDate() - i);
+                
+                if (firstLogDate && d < new Date(firstLogDate.setHours(0,0,0,0))) return null; // Ignora dias antes do Dia 1
+                
+                const day = d.getDate();
+                const dayLogs = logsByDay[day];
+                if (!dayLogs) return false;
+                return dayLogs.kcal > (metaKcal * 0.8) && dayLogs.kcal < (metaKcal * 1.2);
+            });
+            
+            const trackedDays = last7Days.filter(d => d !== null);
+            const consistencyPct = trackedDays.length === 0 ? 0 : Math.round((trackedDays.filter(Boolean).length / trackedDays.length) * 100);
+
+            return (
+                <div className="bg-slate-800/40 border border-white/5 rounded-[32px] p-6 mb-8">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h3 className="text-white font-black uppercase tracking-tight text-sm">Mapa da Disciplina</h3>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{new Intl.DateTimeFormat('pt-PT', { month: 'long', year: 'numeric' }).format(today)}</p>
+                        </div>
+                        <div className="flex items-center gap-2 bg-orange-500/10 px-3 py-1.5 rounded-full border border-orange-500/20">
+                            <span className="text-sm">🔥</span>
+                            <span className="text-orange-400 font-black text-[10px] uppercase">{consistencyPct}% Consistência</span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-7 gap-2 mb-4">
+                        {['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map((d, i) => (
+                            <div key={i} className="text-center text-[9px] text-slate-600 font-black mb-1">{d}</div>
+                        ))}
+                        {days.map((day, i) => {
+                            if (!day) return <div key={i} className="aspect-square"></div>;
+                            
+                            const dayLogs = logsByDay[day];
+                            const isToday = day === today.getDate();
+                            const dDate = new Date(year, month, day);
+                            dDate.setHours(0,0,0,0);
+                            
+                            // Neutro se antes do primeiro log
+                            const isBeforeStart = firstLogDate && dDate < new Date(new Date(firstLogDate).setHours(0,0,0,0));
+                            
+                            let bgColor = "bg-white/5";
+                            let border = "border-white/5";
+                            let shadow = "";
+                            let textColor = "text-slate-500";
+
+                            if (isBeforeStart) {
+                                bgColor = "bg-transparent";
+                                border = "border-white/5 opacity-20";
+                                textColor = "text-slate-700 opacity-20";
+                            } else if (dayLogs) {
+                                const isHealthy = dayLogs.kcal > (metaKcal * 0.8) && dayLogs.kcal < (metaKcal * 1.2);
+                                if (isHealthy) {
+                                    bgColor = "bg-green-500";
+                                    border = "border-green-400";
+                                    shadow = "shadow-[0_0_10px_rgba(34,197,94,0.3)]";
+                                    textColor = "text-slate-900";
+                                } else {
+                                    bgColor = "bg-amber-500";
+                                    border = "border-amber-400";
+                                    textColor = "text-slate-900";
+                                }
+                            }
+
+                            return (
+                                <div 
+                                    key={i} 
+                                    className={`aspect-square rounded-lg border ${border} ${bgColor} ${shadow} flex items-center justify-center relative transition-all ${isToday ? 'ring-2 ring-white ring-offset-2 ring-offset-slate-900' : ''}`}
+                                >
+                                    <span className={`text-[10px] font-black ${textColor}`}>{day}</span>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div className="flex justify-center gap-4 text-[9px] font-black uppercase tracking-widest text-slate-500">
+                        <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded bg-green-500"></div> Meta Batida</div>
+                        <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded bg-amber-500"></div> Fora da Meta</div>
+                        <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded bg-white/5"></div> Sem Registro</div>
+                    </div>
+                </div>
+            );
+        }
+
+        function NutritionDashboardView({ 
+            nutritionProfile, 
+            metaKcal, 
+            metaProtein,
+            metaCarbs,
+            metaFat,
+            consumedToday, 
+            proteinToday,
+            carbsToday,
+            fatToday,
+            todayLogs,
+            progressPct, 
+            localHistory, 
+            onScanClick,
+            aiTextInput,
+            setAiTextInput,
+            onTextOnlyScan
+        }) {
+            const [selectedMacro, setSelectedMacro] = React.useState(null);
+
+            const macroSources = {
+                'Proteína': 'Frango, Atum, Ovos, Whey Protein, Queijo Fresco Magro, Tofu.',
+                'Hidratos': 'Arroz Branco/Integral, Batata (Doce/Branca), Aveia, Massa, Fruta.',
+                'Gordura': 'Azeite Virgem Extra, Abacate, Nozes, Amêndoas, Salmão.'
+            };
+
+            const MacroCard = ({ label, current, target, unit, barColor }) => (
+                <div 
+                    onClick={() => setSelectedMacro(selectedMacro === label ? null : label)}
+                    className={`bg-slate-800/40 border ${selectedMacro === label ? 'border-orange-500/50 scale-105' : 'border-white/5'} rounded-2xl p-4 flex-1 cursor-pointer transition-all active:scale-95`}
+                >
+                    <div className="flex justify-between items-start mb-1">
+                        <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest">{label}</p>
+                        <span className="text-[10px] text-slate-600">▼</span>
+                    </div>
+                    <div className="flex justify-between items-end mb-2">
+                        <span className="text-lg font-black text-white">{current}<span className="text-[10px] text-slate-500 ml-0.5">{unit}</span></span>
+                        <span className="text-[10px] text-slate-500 font-bold">/ {target}</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                        <div 
+                            className={`h-full ${barColor} rounded-full shadow-sm transition-all duration-1000`} 
+                            style={{ width: `${Math.min(100, (current / target) * 100)}%` }}
+                        ></div>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="p-5 animate-in fade-in duration-500 pb-32">
+                    <div className="page-header mb-6"><h1>🍎 Gestão Nutricional</h1></div>
+
+                    {nutritionProfile?.isProfileIncomplete && (
+                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-6 flex items-center gap-3 animate-in slide-in-from-top duration-700">
+                            <span className="text-xl">⚠️</span>
+                            <p className="text-amber-200 text-[10px] font-bold leading-tight uppercase tracking-wide">
+                                Perfil incompleto. Cálculos baseados em valores genéricos. 
+                                Atualize idade e objetivo na Evolução.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Meta Principal */}
+                    <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-xl rounded-[32px] p-6 border border-white/10 shadow-2xl mb-6">
+                        <div className="flex justify-between items-end mb-6">
+                            <div>
+                                <p className="text-[10px] text-orange-400 font-black uppercase tracking-[0.2em] mb-1">Calorias Diárias</p>
+                                <h3 className="text-4xl font-black text-white">{metaKcal}<span className="text-sm font-bold text-slate-500 ml-1">kcal</span></h3>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mb-1">Registadas</p>
+                                <h3 className="text-2xl font-black text-white">{consumedToday} kcal</h3>
+                            </div>
+                        </div>
+                        <div className="h-4 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 mb-3">
+                            <div className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full shadow-[0_0_15px_rgba(249,115,22,0.4)]" style={{ width: `${progressPct}%` }}></div>
+                        </div>
+                        <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                            <span>Zona Segura: {Math.round(metaKcal * 0.9)} - {Math.round(metaKcal * 1.1)}</span>
+                            <span>{progressPct}%</span>
+                        </div>
+                    </div>
+
+                    {/* Cartões de Macros */}
+                    <div className="flex gap-3 mb-4">
+                        <MacroCard label="Proteína" current={proteinToday} target={metaProtein} unit="g" barColor="bg-blue-500" />
+                        <MacroCard label="Hidratos" current={carbsToday} target={metaCarbs} unit="g" barColor="bg-green-500" />
+                        <MacroCard label="Gordura" current={fatToday} target={metaFat} unit="g" barColor="bg-yellow-500" />
+                    </div>
+
+                    {/* Info Expandível de Fontes */}
+                    {selectedMacro && (
+                        <div className="mb-8 p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl animate-in zoom-in duration-300">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="text-sm">💡</span>
+                                <h4 className="text-[10px] text-orange-400 font-black uppercase tracking-widest">Melhores Fontes de {selectedMacro}</h4>
+                            </div>
+                            <p className="text-xs text-slate-200 font-bold leading-relaxed">{macroSources[selectedMacro]}</p>
+                        </div>
+                    )}
+
+                    {/* Calendário de Consistência */}
+                    <ConsistencyCalendar history={localHistory} metaKcal={metaKcal} metaProtein={metaProtein} />
+
+                    {/* FERRAMENTAS DE REGISTRO (ORDEM AJUSTADA) */}
+                    <div className="space-y-4 mb-8">
+                        <button 
+                            onClick={onScanClick}
+                            className="w-full relative overflow-hidden group bg-orange-500 rounded-[28px] p-6 shadow-2xl shadow-orange-500/30 active:scale-95 transition-transform"
+                        >
+                            <div className="flex items-center justify-center gap-4">
+                                <span className="text-4xl text-white">📸</span>
+                                <div className="text-left">
+                                    <div className="text-white font-black text-xl uppercase tracking-tighter">Scanner Nutricional IA</div>
+                                    <div className="text-white/70 text-[10px] font-bold uppercase tracking-widest">Tira foto e identifica macros</div>
+                                </div>
+                            </div>
+                        </button>
+
+                        <div className="p-5 bg-white/5 border border-white/10 rounded-[32px] backdrop-blur-md">
+                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mb-3 ml-2">Análise por Texto</p>
+                            <textarea 
+                                id="meal-description-input"
+                                value={aiTextInput}
+                                onChange={(e) => setAiTextInput(e.target.value)}
+                                placeholder="Ex: 2 bifes de frango grelhados e 100g de arroz..."
+                                className="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 text-white text-sm focus:ring-2 focus:ring-orange-500/50 outline-none transition-all placeholder:text-slate-600 mb-3"
+                                style={{ minHeight: '80px', resize: 'none' }}
+                            />
+                            {aiTextInput?.trim() && (
+                                <button 
+                                    onClick={onTextOnlyScan}
+                                    className="w-full py-3 bg-white/10 hover:bg-orange-500 rounded-xl text-white text-[11px] font-black uppercase tracking-widest transition-all active:scale-95"
+                                >
+                                    Analisar Texto com IA ➔
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* HISTÓRICO NO FUNDO */}
+                    <div className="mb-10">
+                        <h2 className="text-lg font-black text-white uppercase tracking-tight mb-4 flex items-center gap-2">
+                           🕒 Histórico Hoje
+                        </h2>
+                        <div className="space-y-3">
+                            {todayLogs.length === 0 ? (
+                                <div className="bg-slate-800/20 border border-dashed border-white/10 rounded-2xl p-8 text-center text-slate-500 italic text-sm">
+                                    Nenhuma refeição registada hoje.
+                                </div>
+                            ) : (
+                                todayLogs.map((item, idx) => (
+                                    <div key={idx} className="bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="text-xl">🍽️</div>
+                                            <div>
+                                                <div className="text-sm font-bold text-white">{item.description || item.meal_name || 'Refeição'}</div>
+                                                <div className="text-[10px] text-slate-500 uppercase font-black">{new Date(item.created_at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}</div>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-orange-400 font-black">{item.calories} kcal</div>
+                                            <div className="text-[8px] text-slate-600 font-black uppercase">P: {item.protein}g | H: {item.carbs}g | G: {item.fat}g</div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function NutritionDashboard({ ud, onNav }) {
+            const [localHistory, setLocalHistory] = React.useState([]);
+            const [nutritionProfile, setNutritionProfile] = React.useState(null);
+            const [isLoading, setIsLoading] = React.useState(true);
+            const [showMealDetails, setShowMealDetails] = React.useState(false);
+            const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+            const [aiData, setAiData] = React.useState(null);
+            const [aiTextInput, setAiTextInput] = React.useState('');
+
+            async function handleAIScan(event) {
+                const file = event.target ? event.target.files[0] : event;
+                if (!file) return;
+                executeScan(file);
+            }
+
+            async function executeScan(file) {
+                setIsAnalyzing(true);
+                try {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const img = new Image();
+                        img.onload = async function() {
+                            try {
+                                const canvas = document.createElement('canvas');
+                                const ctx = canvas.getContext('2d');
+                                const MAX_WIDTH = 800;
+                                let width = img.width;
+                                let height = img.height;
+                                if (width > MAX_WIDTH) {
+                                    height = Math.round((height * MAX_WIDTH) / width);
+                                    width = MAX_WIDTH;
+                                }
+                                canvas.width = width;
+                                canvas.height = height;
+                                ctx.drawImage(img, 0, 0, width, height);
+                                
+                                const base64String = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+                                
+                                const { data, error } = await window.supabase.functions.invoke('analyze-meal', {
+                                    body: { 
+                                        image: base64String, 
+                                        mimeType: 'image/jpeg',
+                                        textInput: aiTextInput
+                                    }
+                                });
+
+                                if (error || !data) throw new Error(error?.message || 'Erro IA');
+
+                                setAiData(data);
+                                setAiTextInput('');
+                                setShowMealDetails(true);
+                            } catch (err) {
+                                setAiData({
+                                    mealName: "Refeição não identificada",
+                                    calories: 0, protein: 0, carbs: 0, fat: 0,
+                                    description: "Introduza os valores manualmente."
+                                });
+                                setShowMealDetails(true);
+                            } finally {
+                                setIsAnalyzing(false);
+                            }
+                        };
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                } catch (err) {
+                    setAiData({
+                        mealName: "Refeição não identificada",
+                        calories: 0, protein: 0, carbs: 0, fat: 0,
+                        description: "Introduza os valores manualmente."
+                    });
+                    setShowMealDetails(true);
+                    setIsAnalyzing(false);
+                }
+            }
+
+            async function executeTextOnlyScan() {
+                if (!aiTextInput.trim()) return;
+                setIsAnalyzing(true);
+                try {
+                    const { data, error } = await window.supabase.functions.invoke('analyze-meal', {
+                        body: { 
+                            image: null, 
+                            textInput: aiTextInput 
+                        }
+                    });
+
+                    if (error || !data) throw new Error(error?.message || 'Erro IA');
+
+                    setAiData(data);
+                    setAiTextInput('');
+                    setShowMealDetails(true);
+                } catch (err) {
+                    setAiData({
+                        mealName: "Refeição não identificada",
+                        calories: 0, protein: 0, carbs: 0, fat: 0,
+                        description: "Introduza os valores manualmente."
+                    });
+                    setShowMealDetails(true);
+                } finally {
+                    setIsAnalyzing(false);
+                }
+            }
+
+            const analyzeMealImage = () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'image/*';
+                input.capture = 'environment';
+                input.onchange = (e) => handleAIScan(e);
+                input.click();
+            };
+
+            const handleConfirmMeal = async (mealName, description, totalCalories, protein, carbs, fat) => {
+                if (!window.supabase) return;
+                setIsLoading(true);
+
+                try {
+                    const { data: { user } } = await window.supabase.auth.getUser();
+                    if (!user) throw new Error("Sessão expirada");
+
+                    const { error } = await window.supabase
+                        .from('nutrition_logs')
+                        .insert([{
+                            user_id: user.id,
+                            meal_name: mealName,
+                            description: description,
+                            calories: totalCalories,
+                            protein: protein || 0,
+                            carbs: carbs || 0,
+                            fat: fat || 0,
+                            created_at: new Date().toISOString()
+                        }]);
+
+                    if (error) throw error;
+
+                    setShowMealDetails(false);
+                    window.dispatchEvent(new CustomEvent('nutrition-updated'));
+                    console.log("Refeição registada!");
+
+                } catch (err) {
+                    console.error("Erro ao gravar refeição:", err);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const loadNutritionDashboard = React.useCallback(async () => {
+                if (!window.supabase) return;
+                setIsLoading(true);
+                
+                try {
+                    const { data: { user } } = await window.supabase.auth.getUser();
+                    if (!user) {
+                        setIsLoading(false);
+                        return;
+                    }
+
+                    // 1. DADOS DE PERFIL E EVOLUÇÃO
+                    const { data: evoData } = await window.supabase
+                        .from('evolucao_corporal')
+                        .select('*')
+                        .eq('user_id', user.id)
+                        .order('data', { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
+
+                    const { data: profileData } = await window.supabase
+                        .from('user_profiles')
+                        .select('*')
+                        .eq('id', user.id)
+                        .maybeSingle();
+
+                    if (!evoData || !evoData.peso || !evoData.altura_cm) {
+                        setNutritionProfile(null);
+                    } else {
+                        const userAge = (profileData && profileData.idade) ? profileData.idade : 30;
+                        const userGender = (profileData && (profileData.gender || profileData.genero)) ? (profileData.gender || profileData.genero) : 'masculino';
+                        const userObjective = (profileData && profileData.objetivo_principal) ? profileData.objetivo_principal : 'manter';
+                        const isProfileIncomplete = (!profileData || !profileData.idade || !profileData.objetivo_principal);
+
+                        setNutritionProfile({
+                            peso: parseFloat(evoData.peso),
+                            altura: parseFloat(evoData.altura_cm),
+                            idade: parseInt(userAge),
+                            genero: userGender,
+                            objetivo: userObjective,
+                            isProfileIncomplete: isProfileIncomplete
+                        });
+                    }
+
+                    // 2. BUSCA DE HISTÓRICO ALARGADO (30 DIAS PARA O CALENDÁRIO)
+                    try {
+                        const thirtyDaysAgo = new Date();
+                        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+                        const { data: history } = await window.supabase
+                            .from('nutrition_logs')
+                            .select('*')
+                            .eq('user_id', user.id)
+                            .gte('created_at', thirtyDaysAgo.toISOString())
+                            .order('created_at', { ascending: false });
+                        
+                        if (history) setLocalHistory(history);
+                    } catch (e) {
+                        console.error("Erro histórico:", e);
+                    }
+
+                } catch (err) {
+                    console.error("Erro no carregamento nutricao:", err);
+                } finally {
+                    setIsLoading(false);
+                }
+            }, []);
+
+            React.useEffect(() => {
+                loadNutritionDashboard();
+                const handleUpdate = () => loadNutritionDashboard();
+                window.addEventListener('nutrition-updated', handleUpdate);
+                return () => window.removeEventListener('nutrition-updated', handleUpdate);
+            }, [loadNutritionDashboard]);
+
+            if (isLoading) {
+                return (
+                    <div className="p-10 flex flex-col items-center justify-center min-h-[60vh]">
+                        <div className="w-12 h-12 border-4 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mb-4"></div>
+                        <p className="text-slate-400 font-bold animate-pulse text-sm uppercase tracking-widest">Sincronizando Nutrição...</p>
+                    </div>
+                );
+            }
+
+            const p = nutritionProfile || {};
+            const weight = parseFloat(p.peso) || 70;
+            const height = parseFloat(p.altura) || 170;
+            const age = parseFloat(p.idade || 30);
+            const isMale = (p.genero || '').toLowerCase().includes('masc') || (p.genero || '').toLowerCase() === 'm';
+            const goal = p.objetivo || 'manter';
+
+            const hasData = weight > 20 && height > 50;
+
+            // --- CÁLCULOS DINÂMICOS (FÓRMULAS DE NUTRIÇÃO ESPORTIVA) ---
+            let metaKcal = 2000; // Valor base
+            let metaProtein = Math.round(weight * 2.0); 
+            let metaFat = Math.round(weight * 0.9);
+            let metaCarbs = 250;
+
+            if (hasData) {
+                // 1. Calorias Totais (TDEE Simplificado por Objetivo)
+                let multiplier = 32; // Manter (Default)
+                const lowerGoal = goal.toLowerCase();
+                
+                if (lowerGoal.includes('perder') || lowerGoal.includes('emagrecer') || lowerGoal.includes('seca')) {
+                    multiplier = 24;
+                } else if (lowerGoal.includes('ganhar') || lowerGoal.includes('massa') || lowerGoal.includes('bulking')) {
+                    multiplier = 38;
+                }
+                
+                metaKcal = Math.round(weight * multiplier);
+                
+                // 2. Cálculo dos Macros (Garantes que a soma bate certo)
+                // Proteína: 2.0g por kg
+                // Gordura: 0.9g por kg
+                // Hidratos: O Restante
+                
+                const kcalFromProt = metaProtein * 4;
+                const kcalFromFat = metaFat * 9;
+                
+                metaCarbs = Math.round((metaKcal - kcalFromProt - kcalFromFat) / 4);
+                
+                // Safety check: Mínimo de hidratos
+                if (metaCarbs < 50) metaCarbs = 50;
+            }
+
+            // --- TOTAIS DE HOJE ---
+            const todayLogs = localHistory.filter(h => new Date(h.created_at).toDateString() === new Date().toDateString());
+            const consumedToday = todayLogs.reduce((acc, curr) => acc + (curr.calories || 0), 0);
+            const proteinToday = todayLogs.reduce((acc, curr) => acc + (curr.protein || 0), 0);
+            const carbsToday = todayLogs.reduce((acc, curr) => acc + (curr.carbs || 0), 0);
+            const fatToday = todayLogs.reduce((acc, curr) => acc + (curr.fat || 0), 0);
+            
+            const progressPct = Math.min(100, Math.round((consumedToday / metaKcal) * 100));
+
+            if (!hasData) {
+                return (
+                    <div className="p-5 animate-in fade-in duration-500">
+                        <div className="page-header"><h1>🍎 Dashboard Nutricional</h1></div>
+                        <div className="bg-slate-800/40 backdrop-blur-md rounded-3xl p-8 border border-white/5 text-center shadow-2xl">
+                            <div className="text-6xl mb-6">⚖️</div>
+                            <h2 className="text-2xl font-black text-white mb-4">Falta o seu Perfil!</h2>
+                            <p className="text-slate-400 mb-8 leading-relaxed">
+                                Precisamos saber o seu peso e objetivo para a IA calcular as suas calorias.
+                            </p>
+                            <button 
+                                onClick={() => onNav('evolucao')}
+                                className="w-full py-4 bg-orange-500 rounded-2xl text-white font-black uppercase tracking-widest active:scale-95 transition-transform"
+                            >
+                                Fazer Avaliação Rápida
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <React.Fragment>
+                    <NutritionDashboardView 
+                        nutritionProfile={nutritionProfile}
+                        metaKcal={metaKcal}
+                        metaProtein={metaProtein}
+                        metaCarbs={metaCarbs}
+                        metaFat={metaFat}
+                        consumedToday={consumedToday}
+                        proteinToday={proteinToday}
+                        carbsToday={carbsToday}
+                        fatToday={fatToday}
+                        todayLogs={todayLogs}
+                        progressPct={progressPct}
+                        localHistory={localHistory}
+                        onScanClick={analyzeMealImage}
+                        aiTextInput={aiTextInput}
+                        setAiTextInput={setAiTextInput}
+                        onTextOnlyScan={executeTextOnlyScan}
+                    />
+
+                    {isAnalyzing && (
+                        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-[250000] animate-in fade-in duration-300">
+                            <div className="w-16 h-16 border-4 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mb-6 shadow-[0_0_30px_rgba(249,115,22,0.3)]"></div>
+                            <p className="text-white font-black text-xl uppercase tracking-widest animate-pulse">IA Analisando...</p>
+                            <p className="text-slate-500 text-xs mt-2 uppercase tracking-tight">Estou identificando a sua refeição</p>
+                        </div>
+                    )}
+
+                    <MealDetailsForm 
+                        isOpen={showMealDetails}
+                        onClose={() => setShowMealDetails(false)}
+                        onConfirm={handleConfirmMeal}
+                        aiData={aiData}
+                    />
+
+                </React.Fragment>
+            );
+        }
+        const CHALLENGE_MAP = [
+            ['Peito', 'Ombros', 'Bíceps', 'Tríceps', 'Braços'], // 1
+            ['Quadríceps', 'Glúteos', 'Posteriores', 'Panturrilhas', 'Membros Inferiores', 'Pernas'], // 2
+            ['Costas', 'Lombar', 'Dorsais', 'Trapézio'], // 3
+            ['Abdominais', 'Core', 'Cardio'], // 4
+            ['Peito', 'Ombros', 'Bíceps', 'Tríceps', 'Braços'], // 5
+            ['Quadríceps', 'Glúteos', 'Posteriores', 'Panturrilhas', 'Membros Inferiores', 'Pernas'], // 6
+            'Avaliação/Descanso', // 7
+            ['Costas', 'Lombar', 'Dorsais', 'Trapézio'], // 8
+            ['Abdominais', 'Core', 'Cardio'], // 9
+            ['Peito', 'Ombros', 'Bíceps', 'Tríceps', 'Braços'], // 10
+            ['Quadríceps', 'Glúteos', 'Posteriores', 'Panturrilhas', 'Membros Inferiores', 'Pernas'], // 11
+            ['Costas', 'Lombar', 'Dorsais', 'Trapézio'], // 12
+            ['Abdominais', 'Core', 'Cardio'], // 13
+            'Avaliação/Descanso', // 14
+            ['Peito', 'Ombros', 'Bíceps', 'Tríceps', 'Braços'], // 15
+            ['Quadríceps', 'Glúteos', 'Posteriores', 'Panturrilhas', 'Membros Inferiores', 'Pernas'], // 16
+            ['Costas', 'Lombar', 'Dorsais', 'Trapézio'], // 17
+            ['Abdominais', 'Core', 'Cardio'], // 18
+            ['Peito', 'Ombros', 'Bíceps', 'Tríceps', 'Braços'], // 19
+            ['Quadríceps', 'Glúteos', 'Posteriores', 'Panturrilhas', 'Membros Inferiores', 'Pernas'], // 20
+            'Avaliação/Descanso', // 21
+            ['Costas', 'Lombar', 'Dorsais', 'Trapézio'], // 22
+            ['Abdominais', 'Core', 'Cardio'], // 23
+            ['Peito', 'Ombros', 'Bíceps', 'Tríceps', 'Braços'], // 24
+            ['Quadríceps', 'Glúteos', 'Posteriores', 'Panturrilhas', 'Membros Inferiores', 'Pernas'], // 25
+            ['Costas', 'Lombar', 'Dorsais', 'Trapézio'], // 26
+            ['Abdominais', 'Core', 'Cardio'], // 27
+            ['Peito', 'Ombros', 'Bíceps', 'Tríceps', 'Braços'], // 28
+            ['Quadríceps', 'Glúteos', 'Posteriores', 'Panturrilhas', 'Membros Inferiores', 'Pernas'], // 29
+            'Avaliação/Descanso' // 30
+        ];
+
+        const ChallengeExCard = ({ ex, onClick }) => {
+            const catLower = (ex.category || '').toLowerCase();
+            let img = "muscles.png";
+            if (catLower.includes('perna') || catLower.includes('glúteo') || catLower.includes('quad') || catLower.includes('inferior')) img = './assets/categories/pernas.png';
+            else if (catLower.includes('costa') || catLower.includes('dors')) img = './assets/categories/costas.png';
+            else if (catLower.includes('peito')) img = './assets/categories/peito.png';
+            else if (catLower.includes('ombro')) img = './assets/categories/ombros.png';
+            else if (catLower.includes('braç') || catLower.includes('bicep') || catLower.includes('tricep') || catLower.includes('superior')) img = './assets/categories/bracos.png';
+            else if (catLower.includes('abdom') || catLower.includes('core')) img = './assets/categories/abdominais.png';
+            else if (catLower.includes('cardio')) img = './assets/categories/cardio.png';
+            else img = './assets/categories/outros.png';
+
+            return (
+                <div className="bg-[#1e2330] rounded-[20px] overflow-hidden border border-white/5 flex flex-row items-stretch transition-all active:scale-95 shadow-lg shadow-black/40" onClick={() => onClick({id: ex.id, nome: ex.title, media: ex.video_url})} style={{ cursor: 'pointer' }}>
+                    <div className="w-24 bg-[#0a0a0c] relative flex-shrink-0">
+                        <img src={img} onError={(e) => { e.target.src = "muscles.png" }} className="w-full h-full object-cover opacity-50 mix-blend-screen" />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="w-8 h-8 rounded-full bg-orange-600 shadow-lg shadow-orange-600/30 flex items-center justify-center pl-1 backdrop-blur-sm">
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="white"><path d="M8 5v14l11-7z" /></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-4 flex-1 flex flex-col justify-center gap-1.5">
+                        <h4 className="font-black italic uppercase text-sm leading-tight text-white line-clamp-2">{ex.title}</h4>
+                        <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] text-orange-500 font-black uppercase tracking-widest bg-orange-500/10 border border-orange-500/20 px-2.5 py-0.5 rounded-md">3 SÉRIES</span>
+                            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest px-1">10 - 15 REPS</span>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        function Cronograma({ challengeLog, onCompleteDay, onNav, ud, onSelect }) {
+            const [selectedDay, setSelectedDay] = React.useState(() => {
+                const lastCompleted = Math.max(0, ...challengeLog);
+                return Math.min(30, lastCompleted + 1);
+            });
+            const [evaluationData, setEvaluationData] = React.useState({ weight: '', feel: '' });
+            const [isSaving, setIsSaving] = React.useState(false);
+            const [dbData, setDbData] = React.useState(null);
+            const [initialWeight, setInitialWeight] = React.useState(null);
+
+            // Sincronizar exercícios
+            React.useEffect(() => {
+                let mounted = true;
+                const fetchEx = async () => {
+                    try {
+                        const { data } = await window.supabase.from('exercises').select('*').eq('is_enabled', true);
+                        if (mounted && data) setDbData(data);
+                    } catch (e) {
+                         if (mounted) setDbData(window.EXERCISES || []);
+                    }
+                };
+                if (window.supabase) fetchEx();
+                else setDbData(window.EXERCISES || []);
+                return () => { mounted = false; };
+            }, []);
+
+            // Carregar peso inicial para o Radar de Evolução
+            React.useEffect(() => {
+                const fetchInitialWeight = async () => {
+                    if (!window.supabase || !ud?.session?.user?.id) return;
+                    const { data } = await window.supabase
+                        .from('evolucao_corporal')
+                        .select('peso')
+                        .eq('user_id', ud.session.user.id)
+                        .order('data', { ascending: true })
+                        .limit(1)
+                        .maybeSingle();
+                    if (data) setInitialWeight(parseFloat(data.peso));
+                };
+                fetchInitialWeight();
+            }, [ud?.session?.user?.id]);
+
+            const completedCount = challengeLog.length;
+            const progressPercent = Math.round((completedCount / 30) * 100);
+            
+            // Lógica de Rank
+            let rank = { name: 'RECRUTA', class: 'rank-recruta', icon: '🥉' };
+            if (completedCount >= 24) rank = { name: 'TITÃ', class: 'rank-titã', icon: '🔥' };
+            else if (completedCount >= 16) rank = { name: 'GUERREIRO', class: 'rank-guerreiro', icon: '🥇' };
+            else if (completedCount >= 8) rank = { name: 'ELITE', class: 'rank-elite', icon: '🥈' };
+
+            // Cálculo de Repetições (6 ex x 3 séries x 12 reps)
+            const totalReps = completedCount * 6 * 3 * 12; 
+            const disciplinePct = Math.round((completedCount / (Math.max(1, selectedDay))) * 100);
+
+            const isEvalDay = (day) => [7, 14, 21, 30].includes(day);
+
+            const getDayExercises = React.useMemo(() => {
+                const day = selectedDay;
+                const mapTargets = CHALLENGE_MAP[day - 1] || 'Avaliação/Descanso';
+                
+                if (mapTargets === 'Avaliação/Descanso') {
+                    return [{ type: 'rest', title: 'DIA DE AVALIAÇÃO E DESCANSO ATIVO', message: 'Sugestão: Caminhada leve de 30 a 45 minutos para recuperação.' }];
+                }
+
+                if (!dbData) return [];
+
+                const seededRand = (s) => {
+                    const x = Math.sin(s) * 10000;
+                    return x - Math.floor(x);
+                };
+
+                const pool = dbData.filter(ex => {
+                    if (ex.category === 'Outros') return false;
+                    const exStr = (ex.category + " " + ex.title + " " + (ex.target_muscle||'')).toLowerCase();
+                    return Array.isArray(mapTargets) && mapTargets.some(t => exStr.includes(t.toLowerCase()));
+                });
+
+                const tempPool = [...pool];
+                if (tempPool.length === 0) {
+                    tempPool.push(...dbData.filter(e => e.category !== 'Outros').slice(0, 5));
+                }
+
+                const result = [];
+                const seedBase = day + (ud?.userProfile?.id?.charCodeAt(0) || 0);
+                const numExercises = 6;
+
+                for (let i = 0; i < numExercises && tempPool.length > 0; i++) {
+                    const rndIdx = Math.floor(seededRand(seedBase + i) * tempPool.length);
+                    result.push({ type: 'exercise', ...tempPool.splice(rndIdx, 1)[0] });
+                }
+                return result;
+            }, [selectedDay, ud?.userProfile?.id, dbData]);
+
+            const isRestDay = CHALLENGE_MAP[selectedDay - 1] === 'Avaliação/Descanso';
+            const isBoss = isEvalDay(selectedDay);
+            const isCompleted = challengeLog.includes(selectedDay);
+
+            const handleSaveEvaluation = async () => {
+                if (!evaluationData.weight) return;
+                setIsSaving(true);
+                
+                try {
+                    const p = parseFloat(evaluationData.weight);
+                    if (ud?.session?.user?.id && window.supabase) {
+                        // 1. Record evolution
+                        await window.supabase.from('evolucao_corporal').insert({
+                            user_id: ud.session.user.id,
+                            peso: p,
+                            note: `Desafio 30 Dias - Dia ${selectedDay} (${evaluationData.feel})`
+                        });
+
+                        // 2. Record check-in log
+                        await window.supabase.from('workout_logs').insert({
+                            user_id: ud.session.user.id,
+                            exercise_id: `challenge-checkin-day-${selectedDay}`,
+                            weight: p,
+                            reps: 0,
+                            set_number: 1,
+                            note: evaluationData.feel
+                        });
+                    }
+                    onCompleteDay(selectedDay);
+                    if (selectedDay < 30) setSelectedDay(selectedDay + 1);
+                    setEvaluationData({ weight: '', feel: '' });
+                } catch (err) {
+                    console.error("Erro ao gravar check-in:", err);
+                } finally {
+                    setIsSaving(false);
+                }
+            };
+
+            const lastCompletedDay = Math.max(0, ...challengeLog);
+
+            return (
+                <div className="cronograma-page p-4 sm:p-6 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-40">
+                    
+                    {/* Header Dinâmico Modo Titã */}
+                    <div className="bg-[#1e2330] rounded-[32px] p-8 mb-8 border border-white/5 relative overflow-hidden shadow-2xl">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 rotate-12 scale-150 pointer-events-none text-orange-500">
+                            <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                        </div>
+                        
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-6">
+                            <div>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <span className={`rank-badge ${rank.class}`}>
+                                        {rank.icon} {rank.name}
+                                    </span>
+                                </div>
+                                <h1 className="text-4xl font-black italic tracking-tighter uppercase leading-none">
+                                    Modo Titã: <span className="text-orange-500">{rank.name}</span>
+                                </h1>
+                            </div>
+                            <div className="text-right">
+                                <span className="text-3xl font-black italic text-white">{progressPercent}%</span>
+                                <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mt-1">Conclusão Total</p>
+                            </div>
+                        </div>
+
+                        <div className="h-3 bg-black/40 rounded-full overflow-hidden mb-6 border border-white/5">
+                            <div 
+                                className={`h-full transition-all duration-1000 ${rank.name === 'TITÃ' ? 'bg-gradient-to-r from-red-600 via-orange-500 to-yellow-400' : 'bg-gradient-to-r from-orange-600 to-orange-400'}`}
+                                style={{ width: `${progressPercent}%`, boxShadow: '0 0 20px rgba(249, 115, 22, 0.4)' }}
+                            ></div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-4">
+                            <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
+                                <div className="text-lg font-black text-white italic">{completedCount}/30</div>
+                                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Dias</div>
+                            </div>
+                            <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
+                                <div className="text-lg font-black text-white italic">{disciplinePct}%</div>
+                                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Disciplina</div>
+                            </div>
+                            <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
+                                <div className="text-lg font-black text-white italic">LVL {Math.floor(completedCount/3) + 1}</div>
+                                <div className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Poder</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Grade de Progressão "Path to Glory" */}
+                    <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-10 gap-3 mb-12">
+                        {Array.from({ length: 30 }, (_, i) => i + 1).map(day => {
+                            const isDone = challengeLog.includes(day);
+                            const isActive = selectedDay === day;
+                            const isLocked = day > (lastCompletedDay + 1);
+                            const isBoss = isEvalDay(day);
+
+                            return (
+                                <button
+                                    key={day}
+                                    disabled={isLocked}
+                                    onClick={() => setSelectedDay(day)}
+                                    className={`aspect-square rounded-2xl flex flex-col items-center justify-center relative transition-all border-2 active:scale-90 ${
+                                        isActive ? 'day-current' : 
+                                        isDone ? 'day-completed border-green-500/40' : 
+                                        isLocked ? 'day-locked border-white/5' : 
+                                        'border-white/10 bg-white/5'
+                                    } ${isBoss ? 'boss-day' : ''}`}
+                                >
+                                    <span className={`text-xl font-black italic ${isActive ? 'text-white' : isDone ? 'text-green-400' : 'text-slate-500'}`}>
+                                        {day}
+                                    </span>
+                                    {isDone && (
+                                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center border-2 border-[#0f172a] shadow-lg">
+                                            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="white" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg>
+                                        </div>
+                                    )}
+                                    {isLocked && (
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px] rounded-2xl">
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                        </div>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Área de Missão / Boss Level */}
+                    <div className="bg-[#1e2330] rounded-[40px] p-8 border border-white/5 shadow-2xl relative">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+                            <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
+                                    <span className="text-orange-500 font-black text-[10px] uppercase tracking-[0.3em] italic">Missão Ativa</span>
+                                </div>
+                                <h3 className="text-3xl font-black italic tracking-tighter uppercase leading-tight">
+                                    {isRestDay ? 'Descanso Estratégico' : isBoss ? 'Evento: Boss Level' : 'Protocolo de Treino'}
+                                </h3>
+                            </div>
+                            {isCompleted && (
+                                <div className="bg-green-500/20 text-green-400 text-[10px] font-black px-5 py-2.5 rounded-full uppercase italic border border-green-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+                                    Missão Concluída ✓
+                                </div>
+                            )}
+                        </div>
+
+                        {isBoss && !isCompleted ? (
+                            <div className="evolution-radar p-8 border border-orange-500/10">
+                                <div className="flex items-center gap-4 mb-8">
+                                    <div className="w-14 h-14 bg-orange-600/20 rounded-2xl flex items-center justify-center text-orange-500 shadow-lg shadow-orange-600/10">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+                                    </div>
+                                    <div>
+                                        <h4 className="text-xl font-black uppercase italic text-white">Radar de Evolução</h4>
+                                        <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Sincronize seus dados biométricos</p>
+                                    </div>
+                                </div>
+                                
+                                {initialWeight && (
+                                    <div className="grid grid-cols-2 gap-4 mb-8">
+                                        <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
+                                            <div className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-1">Peso Inicial</div>
+                                            <div className="text-2xl font-black text-white italic">{initialWeight}kg</div>
+                                        </div>
+                                        <div className="bg-orange-500/5 p-4 rounded-2xl border border-orange-500/20">
+                                            <div className="text-[9px] text-orange-500 font-black uppercase tracking-widest mb-1">Evolução</div>
+                                            <div className="text-2xl font-black text-orange-500 italic">
+                                                {evaluationData.weight ? (parseFloat(evaluationData.weight) - initialWeight).toFixed(1) : '---'} kg
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-6">
+                                    <div className="relative">
+                                        <input 
+                                            type="number" 
+                                            value={evaluationData.weight}
+                                            onChange={e => setEvaluationData({...evaluationData, weight: e.target.value})}
+                                            className="w-full bg-black/40 border-none rounded-2xl px-6 py-5 text-white font-black italic text-xl placeholder:text-slate-700 outline-none focus:ring-2 focus:ring-orange-600 transition-all shadow-inner"
+                                            placeholder="PESO ATUAL (KG)"
+                                        />
+                                        <span className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-600 font-black italic">KG</span>
+                                    </div>
+                                    <textarea 
+                                        value={evaluationData.feel}
+                                        onChange={e => setEvaluationData({...evaluationData, feel: e.target.value})}
+                                        className="w-full bg-black/40 border-none rounded-2xl px-6 py-5 text-white font-black italic text-lg placeholder:text-slate-700 outline-none focus:ring-2 focus:ring-orange-600 transition-all min-h-[140px] resize-none shadow-inner"
+                                        placeholder="RELATÓRIO DE CAMPO (COMO TE SENTES?)"
+                                    />
+                                    <button 
+                                        onClick={handleSaveEvaluation}
+                                        disabled={isSaving || !evaluationData.weight}
+                                        className="w-full py-6 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600 rounded-2xl font-black text-sm uppercase tracking-[0.3em] shadow-xl shadow-orange-600/30 active:scale-95 transition-all disabled:opacity-50 group"
+                                    >
+                                        {isSaving ? 'A SINCRONIZAR...' : (
+                                            <span className="flex items-center justify-center gap-3">
+                                                CONCLUIR BOSS LEVEL 
+                                                <svg className="group-hover:translate-x-2 transition-transform" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                                            </span>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        ) : isRestDay && !isBoss ? (
+                            <div className="text-center py-12">
+                                <div className="w-24 h-24 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-8 shadow-[0_0_40px_rgba(59,130,246,0.1)] border border-blue-500/20">
+                                    <span className="text-5xl">🧘</span>
+                                </div>
+                                <h4 className="text-2xl font-black italic uppercase mb-4 text-white">Descanso Ativo</h4>
+                                <p className="text-sm text-slate-400 font-medium leading-relaxed mb-10 max-w-sm mx-auto italic">
+                                    "O guerreiro inteligente sabe quando afiar a espada." Foca em mobilidade leve e hidratação massiva hoje.
+                                </p>
+                                {!isCompleted && (
+                                    <button 
+                                        onClick={() => { onCompleteDay(selectedDay); if(selectedDay < 30) setSelectedDay(selectedDay+1); }}
+                                        className="w-full py-6 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black text-xs uppercase tracking-[0.3em] transition-all text-white shadow-xl active:scale-95"
+                                    >
+                                        ✓ MARCAR DESCANSO COMO FEITO
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                {getDayExercises.map(ex => (
+                                    <div 
+                                        key={ex.id} 
+                                        onClick={() => onSelect(ex)}
+                                        className="bg-white/5 rounded-[24px] p-5 flex items-center gap-5 group cursor-pointer hover:bg-white/10 transition-all border border-white/5 active:scale-[0.98]"
+                                    >
+                                        <div className="w-20 h-20 rounded-2xl bg-[#0a0a0c] flex items-center justify-center font-black italic text-orange-500 text-xs border border-white/5 overflow-hidden relative">
+                                            <div className="absolute inset-0 bg-orange-600/10 group-hover:bg-orange-600/0 transition-colors"></div>
+                                            <svg className="opacity-20 group-hover:opacity-100 transition-opacity" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                        </div>
+                                        <div className="flex-1">
+                                            <h4 className="text-base font-black italic uppercase text-white leading-tight mb-2 group-hover:text-orange-400 transition-colors">{ex.title}</h4>
+                                            <div className="flex gap-4">
+                                                <span className="text-[10px] font-black uppercase text-orange-500 bg-orange-500/10 px-2.5 py-1 rounded-md">3 SÉRIES</span>
+                                                <span className="text-[10px] font-black uppercase text-slate-500 bg-white/5 px-2.5 py-1 rounded-md">12-15 REPS</span>
+                                            </div>
+                                        </div>
+                                        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-orange-600 group-hover:shadow-[0_0_15px_rgba(249,115,22,0.4)] transition-all">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {!isCompleted && (
+                                    <button 
+                                        onClick={() => { onCompleteDay(selectedDay); if(selectedDay < 30) setSelectedDay(selectedDay+1); }}
+                                        className="w-full py-7 mt-8 bg-orange-600 hover:bg-orange-500 rounded-[28px] font-black text-sm uppercase tracking-[0.4em] italic shadow-2xl shadow-orange-600/40 active:scale-95 transition-all text-white flex items-center justify-center gap-4"
+                                    >
+                                        CONCLUIR PROTOCOLO <span className="text-white/50 text-xs">+1500 XP</span>
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Dashboard de Performance (Visual Tático) */}
+                    <div className="mt-12">
+                        <div className="flex items-center gap-3 mb-6 px-2">
+                            <div className="h-[2px] flex-1 bg-gradient-to-r from-transparent to-white/10"></div>
+                            <h4 className="text-[11px] font-black uppercase tracking-[0.4em] text-slate-500">Relatório Tático de Performance</h4>
+                            <div className="h-[2px] flex-1 bg-gradient-l from-transparent to-white/10"></div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="tactical-stat">
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className="text-[10px] text-orange-500 font-bold uppercase tracking-widest">REPETIÇÕES TOTAIS</span>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-600"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
+                                </div>
+                                <div className="text-3xl font-black text-white italic mb-1">
+                                    {totalReps.toLocaleString()} <span className="text-xs text-slate-500 not-italic uppercase">REPS</span>
+                                </div>
+                                <div className="w-full h-1 bg-white/5 rounded-full mt-3 overflow-hidden">
+                                    <div className="h-full bg-orange-500/50" style={{ width: `${Math.min(100, (totalReps/6480)*100)}%` }}></div>
+                                </div>
+                            </div>
+
+                            <div className="tactical-stat">
+                                <div className="flex justify-between items-start mb-4">
+                                    <span className="text-[10px] text-green-500 font-bold uppercase tracking-widest">DISCIPLINA DE FERRO</span>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-600"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+                                </div>
+                                <div className="text-3xl font-black text-white italic mb-1">
+                                    {disciplinePct}%
+                                </div>
+                                <div className="w-full h-1 bg-white/5 rounded-full mt-3 overflow-hidden">
+                                    <div className="h-full bg-green-500/50" style={{ width: `${disciplinePct}%` }}></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-8 text-center">
+                            <p className="text-[9px] text-slate-600 font-bold uppercase tracking-[0.3em]">
+                                Algoritmo de Progressão Ativo • v2.0 modo titã
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ================================================================
+        // TOOLTIP SYSTEM (Help Helpers)
+        // ================================================================
+
+        const TooltipHelp = ({ text, active, setActive }) => (
+            <div style={{ position: 'relative', display: 'inline-block', marginLeft: '6px' }}
+                onMouseEnter={() => setActive(text)} onMouseLeave={() => setActive(null)}>
+                <span style={{ cursor: 'pointer', background: 'rgba(255,255,255,0.1)', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold' }}>i</span>
+                {active === text && (
+                    <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', background: '#1e293b', color: '#fff', padding: '12px', borderRadius: '8px', fontSize: '13px', width: '220px', zIndex: 999, border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)', marginBottom: '8px', lineHeight: '1.5' }}>
+                        {text}
+                    </div>
+                )}
+            </div>
+        );
+
+        const InputField = ({ label, name, ph, tooltip, form, handleChange, activeTooltip, setActiveTooltip }) => {
+            const [val, setVal] = useState(form[name] || '');
+            useEffect(() => { setVal(form[name] || ''); }, [form[name]]);
+            return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: '1 1 140px', minWidth: '0', maxWidth: '100%', boxSizing: 'border-box' }}>
+                    <label style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
+                        {label} {tooltip && <TooltipHelp text={tooltip} active={activeTooltip} setActive={setActiveTooltip} />}
+                    </label>
+                    <input type="text" inputMode="decimal" name={name} placeholder={ph} value={val}
+                        onChange={e => {
+                            let v = e.target.value.replace(/,/g, '.');
+                            if (/^[0-9]*\.?[0-9]*$/.test(v)) {
+                                setVal(v);
+                                handleChange({ target: { name, value: v } });
+                            }
+                        }}
+                        style={{ padding: '14px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff', fontSize: '16px', outline: 'none', transition: 'border-color 0.2s', width: '100%', boxSizing: 'border-box' }}
+                        onFocus={e => e.target.style.borderColor = 'var(--accent)'}
+                        onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                    />
+                </div>
+            );
+        };
+
+        const HydrationSection = ({ session, userProfile }) => {
+            const [hydrationToday, setHydrationToday] = useState(0);
+            const [customWaterAmount, setCustomWaterAmount] = useState('');
+            const [customWaterUnit, setCustomWaterUnit] = useState('ml');
+            const [temperature, setTemperature] = useState(null);
+            const [dynamicGoal, setDynamicGoal] = useState(2000);
+            const [weatherLoading, setWeatherLoading] = useState(true);
+            const [hydrationLogs, setHydrationLogs] = useState([]);
+            const [showHydrationHistory, setShowHydrationHistory] = useState(false);
+
+            const handleCustomHydration = () => {
+                const val = parseFloat(customWaterAmount);
+                if (!val || val <= 0) return;
+                let mlToAdd = val;
+                if (customWaterUnit === 'L') mlToAdd = val * 1000;
+                if (mlToAdd > 5000) {
+                    alert("Valor demasiado alto para um único registro! (Máx 5L)");
+                    return;
+                }
+                addHydration(mlToAdd);
+                setCustomWaterAmount('');
+            };
+
+            const addHydration = async (ml) => {
+                const { data, error } = await window.supabase.from('registos_hidratacao').insert({
+                    user_id: session.user.id,
+                    quantidade_ml: ml
+                }).select().single();
+                if (data) {
+                    setHydrationToday(prev => prev + ml);
+                    setHydrationLogs(prev => [data, ...prev]);
+                } else if (error) {
+                    alert('Erro ao registar hidratação.');
+                }
+            };
+
+            const removeHydration = async (id, ml) => {
+                const { error } = await window.supabase.from('registos_hidratacao').delete().eq('id', id);
+                if (!error) {
+                    setHydrationToday(prev => Math.max(0, prev - ml));
+                    setHydrationLogs(prev => prev.filter(log => log.id !== id));
+                } else {
+                    alert('Erro ao remover registro.');
+                }
+            };
+
+            useEffect(() => {
+                const fetchWeather = async () => {
+                    setWeatherLoading(true);
+                    if (userProfile && userProfile.estado) {
+                        const cacheKey = `weather_${userProfile.estado}`;
+                        const cached = localStorage.getItem(cacheKey);
+                        if (cached) {
+                            try {
+                                const { temp, timestamp } = JSON.parse(cached);
+                                if ((Date.now() - timestamp) <= (12 * 60 * 60 * 1000)) {
+                                    setTemperature(temp);
+                                    setWeatherLoading(false);
+                                    return;
+                                }
+                            } catch (e) { }
+                        }
+                        try {
+                            const res = await fetch(`https://wttr.in/${userProfile.estado.replace(/ /g, '+')}?format=j1`);
+                            if (res.ok) {
+                                const data = await res.json();
+                                if (data?.current_condition?.[0]) {
+                                    const temp = parseInt(data.current_condition[0].temp_C);
+                                    setTemperature(temp);
+                                    localStorage.setItem(cacheKey, JSON.stringify({ temp, timestamp: Date.now() }));
+                                }
+                            }
+                        } catch (e) {}
+                    }
+                    setWeatherLoading(false);
+                };
+                fetchWeather();
+            }, [userProfile]);
+
+            useEffect(() => {
+                let extra = 0;
+                if (temperature !== null) {
+                    if (temperature > 33) extra = 1000;
+                    else if (temperature > 28) extra = 500;
+                }
+                setDynamicGoal(2000 + extra);
+            }, [temperature]);
+
+            useEffect(() => {
+                if (session) {
+                    const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+                    window.supabase.from('registos_hidratacao')
+                        .select('*')
+                        .eq('user_id', session.user.id)
+                        .gte('data', todayStr + 'T00:00:00Z')
+                        .lte('data', todayStr + 'T23:59:59Z')
+                        .order('data', { ascending: false })
+                        .then(({ data }) => {
+                            if (data) {
+                                setHydrationToday(data.reduce((acc, curr) => acc + curr.quantidade_ml, 0));
+                                setHydrationLogs(data);
+                            }
+                        });
+                }
+            }, [session]);
+
+            return (
+                <div className="progress-section-card" style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '28px', padding: '24px', marginBottom: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+                    <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                        <h3 style={{ color: '#fff', fontSize: '18px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', margin: 0 }}>
+                            <span style={{ color: '#38bdf8', fontSize: '24px' }}>💧</span> Hidratação Dinâmica
+                        </h3>
+                    </div>
+
+                    {/* Climate Intel Widget */}
+                    {temperature > 28 && (
+                        <div className="mb-6 bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4 flex items-center gap-3 animate-in slide-in-from-top-2">
+                            <span className="text-2xl">☀️</span>
+                            <div>
+                                <div className="text-[10px] text-orange-500 font-black uppercase tracking-widest">Alerta de Calor: {temperature}°C</div>
+                                <div className="text-[11px] text-slate-200 font-medium leading-tight">Recomendamos reduzir o volume ou aumentar a hidratação em 500ml.</div>
+                            </div>
+                        </div>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
+                        <div className={`water-circle-container ${hydrationToday >= dynamicGoal ? 'goal-reached' : ''}`} style={{ width: '180px', height: '180px' }}>
+                            <svg viewBox="0 0 100 100" className="water-svg">
+                                <defs>
+                                    <linearGradient id="waterGradientHome" x1="0" x2="0" y1="0" y2="1">
+                                        <stop offset="0%" stopColor="#0ea5e9" />
+                                        <stop offset="100%" stopColor="#0369a1" />
+                                    </linearGradient>
+                                    <path id="waveHome" d="M 0,10 C 30,10 30,15 60,15 90,15 90,10 120,10 150,10 150,15 180,15 210,15 210,10 240,10 v 100 h -240 z" />
+                                </defs>
+                                <mask id="circleMaskHome">
+                                    <circle cx="50" cy="50" r="50" fill="white" />
+                                </mask>
+                                <g mask="url(#circleMaskHome)">
+                                    <rect width="100" height="100" fill="rgba(56, 189, 248, 0.1)" />
+                                    <g className="wave-group" style={{ transform: `translateY(${100 - Math.min(100, (hydrationToday / dynamicGoal * 100))}px)`, transition: 'transform 1s ease' }}>
+                                        <use xlinkHref="#waveHome" x="0" y="0" className="wave-anim-1" fill="rgba(14, 165, 233, 0.6)" />
+                                        <use xlinkHref="#waveHome" x="0" y="0" className="wave-anim-2" fill="url(#waterGradientHome)" />
+                                    </g>
+                                </g>
+                            </svg>
+                            <div className="water-text">
+                                <span style={{ fontSize: '32px', fontWeight: '900', lineHeight: 1 }}>{Math.round(hydrationToday / dynamicGoal * 100)}%</span>
+                                <span style={{ fontSize: '11px', fontWeight: 'bold', opacity: 0.8, marginTop: '4px' }}>{hydrationToday}/{dynamicGoal}ML</span>
+                            </div>
+                        </div>
+                        <div style={{ textAlign: 'center' }}>
+                            <p style={{ color: '#38bdf8', fontSize: '13px', fontWeight: '800', margin: 0 }}>
+                                Clima de {userProfile?.estado || 'sua região'}: {temperature !== null ? temperature + '°C' : '--°C'}
+                            </p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px', width: '100%' }}>
+                            <button onClick={() => addHydration(250)} className="hydration-btn-clean" style={{ padding: '12px', flex: 1 }}>
+                                <span style={{ fontSize: '24px' }}>🥛</span>
+                                <span style={{ fontSize: '12px', fontWeight: '900' }}>+250ml</span>
+                            </button>
+                            <button onClick={() => addHydration(500)} className="hydration-btn-clean" style={{ padding: '12px', flex: 1 }}>
+                                <span style={{ fontSize: '24px' }}>🍾</span>
+                                <span style={{ fontSize: '12px', fontWeight: '900' }}>+500ml</span>
+                            </button>
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', background: 'rgba(255,255,255,0.05)', padding: '12px', borderRadius: '16px', width: '100%', boxSizing: 'border-box' }}>
+                            <input type="number" className="custom-water-input" placeholder="ML" value={customWaterAmount} onChange={(e) => setCustomWaterAmount(e.target.value)} style={{ width: '80px', background: 'transparent', color: '#fff', border: 'none', textAlign: 'center', fontSize: '14px', fontWeight: 'bold' }} />
+                            <button onClick={handleCustomHydration} style={{ flex: 1, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: '10px', padding: '12px', fontWeight: '900', fontSize: '11px', cursor: 'pointer', textTransform: 'uppercase' }}>ADICIONAR</button>
+                        </div>
+                        <button onClick={() => setShowHydrationHistory(!showHydrationHistory)} style={{ color: 'var(--text-muted)', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                            {showHydrationHistory ? 'Ocultar Detalhes' : 'Ver Registros Hoje'}
+                        </button>
+                        {showHydrationHistory && (
+                            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto' }}>
+                                {hydrationLogs.map(log => (
+                                    <div key={log.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
+                                        <span style={{ color: '#fff', fontSize: '12px', fontWeight: 'bold' }}>{log.quantidade_ml}ml</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span style={{ color: 'var(--text-muted)', fontSize: '10px' }}>{new Date(log.data).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <button onClick={() => removeHydration(log.id, log.quantidade_ml)} style={{ color: '#ef4444', fontSize: '12px' }}>✕</button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        
+                function ArsenalHub({ onNav, temAcessoPremium, ud, setSel, isVipUser }) {
+            const [activeTab, setActiveTab] = React.useState('nutriscan');
+
+            // Lógica de desbloqueio local para o desafio
+            const isDesafioUnlocked = React.useMemo(() => {
+                let local = false;
+                try { local = JSON.parse(localStorage.getItem('app_unlocked_modules') || '[]').includes('desafio30'); } catch(e) {}
+                return isVipUser || ud.userProfile?.permissions?.desafio30 || local;
+            }, [isVipUser, ud.userProfile?.permissions?.desafio30]);
+
+            return (
+                <div className="tab-content fade-in pb-24 px-1 sm:px-4">
+                    <div className="mb-6">
+                        <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
+                            <span className="text-orange-500">💼</span> Arsenal Premium
+                        </h2>
+                        <p className="text-slate-400 text-sm mt-1 font-medium">Ferramentas de elite para sua transformação.</p>
+                    </div>
+
+                    {/* Horizontal Navigation (Exactly like Bottom Nav style) */}
+                    <div className="flex bg-[#0f172a]/95 backdrop-blur-xl border-b border-white/5 -mx-4 px-2 py-3 mb-10 sticky top-0 z-50">
+                        <button 
+                            onClick={() => setActiveTab('nutriscan')}
+                            className={`flex-1 flex flex-col items-center justify-center gap-1.5 transition-all ${
+                                activeTab === 'nutriscan' ? 'text-[#f97316]' : 'text-[#94a3b8]'
+                            }`}
+                        >
+                            <div className="relative">
+                                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                                    <circle cx="12" cy="13" r="3" />
+                                </svg>
+                                {!temAcessoPremium && (
+                                    <div className="absolute -top-1 -right-2 text-[10px] opacity-70">🔒</div>
+                                )}
+                            </div>
+                            <span className="text-[10px] font-bold">📸 Nutri-Scan</span>
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('meudesafio')}
+                            className={`flex-1 flex flex-col items-center justify-center gap-1.5 transition-all ${
+                                activeTab === 'meudesafio' ? 'text-[#f97316]' : 'text-[#94a3b8]'
+                            }`}
+                        >
+                            <div className="relative">
+                                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                    <circle cx="12" cy="8" r="7" />
+                                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" />
+                                </svg>
+                                {!isDesafioUnlocked && (
+                                    <div className="absolute -top-1 -right-2 text-[10px] opacity-70">🔒</div>
+                                )}
+                            </div>
+                            <span className="text-[10px] font-bold">🏆 Meu Desafio</span>
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('sono')}
+                            className={`flex-1 flex flex-col items-center justify-center gap-1.5 transition-all ${
+                                activeTab === 'sono' ? 'text-[#f97316]' : 'text-[#94a3b8]'
+                            }`}
+                        >
+                            <div className="relative">
+                                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                                </svg>
+                            </div>
+                            <span className="text-[10px] font-bold">🌙 Sono Profundo</span>
+                        </button>
+                    </div>
+
+                    {/* Dynamic Content Area */}
+                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
+                        <div>
+                            {activeTab === 'nutriscan' ? (
+                                temAcessoPremium ? (
+                                    <NutritionDashboard ud={ud} onNav={onNav} />
+                                ) : (
+                                    <NutritionSalesPage onNav={onNav} />
+                                )
+                            ) : activeTab === 'meudesafio' ? (
+                                isDesafioUnlocked ? (
+                                    <Cronograma challengeLog={ud.challengeLog} onCompleteDay={ud.completeChallengeDay} onNav={onNav} ud={ud} onSelect={setSel} />
+                                ) : (
+                                    <DesafioSalesPage onNav={onNav} />
+                                )
+                            ) : (
+                                <SonoProfundo ud={ud} />
+                            )}
+                        </div>
+                    </div>
+
+                    <RestrictedAccessModal />
+                </div>
+            );
+        }
+
+        function SonoProfundo({ ud }) {
+            const [showModal, setShowModal] = useState(false);
+            const [sleepLogs, setSleepLogs] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [selectedTimer, setSelectedTimer] = useState(null);
+
+            // Info do Mês Atual
+            const currentMonthInfo = React.useMemo(() => {
+                const now = new Date();
+                const mName = new Intl.DateTimeFormat('pt-PT', { month: 'long' }).format(now);
+                return {
+                    name: mName.charAt(0).toUpperCase() + mName.slice(1),
+                    year: now.getFullYear(),
+                    month: now.getMonth()
+                };
+            }, []);
+
+            // Heatmap Real Data (Dias do Mês)
+            const heatmapDays = React.useMemo(() => {
+                const { year, month } = currentMonthInfo;
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                
+                return Array.from({ length: daysInMonth }, (_, i) => {
+                    const day = i + 1;
+                    const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+                    const log = sleepLogs.find(l => l.data === dateStr);
+                    
+                    if (log) {
+                        const q = log.qualidade;
+                        let color = 'bg-red-900/50';
+                        if (q >= 80) color = 'bg-green-500/50';
+                        else if (q >= 50) color = 'bg-orange-500/50';
+                        return { color, day };
+                    }
+                    return { color: 'bg-slate-800/40', day }; // Cinzento por defeito
+                });
+            }, [sleepLogs, currentMonthInfo]);
+
+            // Lógica de Cronotipo e Ciclo Circadiano
+            const chronoData = React.useMemo(() => {
+                if (sleepLogs.length === 0) return { type: 'Urso', advice: 'Sincronizado com o dia. Treina ao meio-dia.', bedtime: '23:00', pct: 0 };
+                
+                // Média de hora de deitar (convertida para minutos desde meia-noite)
+                const avgBedtimeMins = sleepLogs.reduce((acc, log) => {
+                    const [h, m] = (log.hora_deitar || '23:00').split(':').map(Number);
+                    let total = h * 60 + m;
+                    if (h < 12) total += 1440; // Se deitar depois da meia-noite
+                    return acc + total;
+                }, 0) / sleepLogs.length;
+
+                const avgH = Math.floor(avgBedtimeMins / 60) % 24;
+                const avgM = Math.round(avgBedtimeMins % 60);
+                const bedtimeStr = `${avgH.toString().padStart(2, '0')}:${avgM.toString().padStart(2, '0')}`;
+
+                let type = 'Urso';
+                let advice = 'Sincronizado com o dia. Treina entre as 11h e as 13h.';
+                if (avgBedtimeMins < 1320) { // Antes das 22h
+                    type = 'Leão';
+                    advice = 'Acorda com o sol. O teu pico de força é matinal (08h - 10h).';
+                } else if (avgBedtimeMins > 1440) { // Depois da meia-noite
+                    type = 'Lobo';
+                    advice = 'Pico cognitivo à tarde. Evita treinos intensos antes das 10h.';
+                }
+
+                // Cálculo de aproveitamento da janela hormonal (22:30 - 02:00)
+                // Simplificação: se dormir dentro do intervalo, soma pontos
+                const goldStart = 1350; // 22:30
+                const goldEnd = 1560;   // 02:00
+                const overlap = Math.max(0, Math.min(avgBedtimeMins + 480, goldEnd) - Math.max(avgBedtimeMins, goldStart));
+                const pct = Math.round((overlap / (goldEnd - goldStart)) * 100);
+
+                return { type, advice, bedtime: bedtimeStr, pct, avgMins: avgBedtimeMins };
+            }, [sleepLogs]);
+
+            // Lógica da Calculadora de Ciclos
+            const wakeUpCycles = React.useMemo(() => {
+                const now = new Date();
+                return [3, 4, 5, 6].map(num => {
+                    const time = new Date(now.getTime() + num * 90 * 60 * 1000);
+                    return {
+                        time: time.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }),
+                        cycles: num,
+                        hours: num * 1.5
+                    };
+                });
+            }, []);
+
+            const sleepDebt = React.useMemo(() => {
+                if (sleepLogs.length === 0) return { h: 0, m: 0, total: 0 };
+                const goalPerDay = 8;
+                const recentLogs = sleepLogs.slice(0, 7);
+                const actualTotalMins = recentLogs.reduce((acc, log) => acc + (parseFloat(log.horas_dormidas) || 0) * 60, 0);
+                const goalTotalMins = recentLogs.length * goalPerDay * 60;
+                const debtMins = goalTotalMins - actualTotalMins;
+
+                if (debtMins <= 0) return { h: 0, m: 0, total: 0 };
+                return {
+                    h: Math.floor(debtMins / 60),
+                    m: Math.round(debtMins % 60),
+                    total: debtMins
+                };
+            }, [sleepLogs]);
+
+            // Checklist state (localStorage)
+            const [checklist, setChecklist] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('sleep_checklist_today');
+                    const lastDate = localStorage.getItem('sleep_checklist_date');
+                    const today = new Date().toDateString();
+                    if (lastDate === today && saved) return JSON.parse(saved);
+                } catch(e) {}
+                return { screens: false, dark: false, supplements: false };
+            });
+
+            useEffect(() => {
+                localStorage.setItem('sleep_checklist_today', JSON.stringify(checklist));
+                localStorage.setItem('sleep_checklist_date', new Date().toDateString());
+            }, [checklist]);
+
+            const fetchSleep = async () => {
+                const { data: { session } } = await window.supabase.auth.getSession();
+                if (!session) return;
+                const { data } = await window.supabase
+                    .from('registos_sono')
+                    .select('*')
+                    .eq('user_id', session.user.id)
+                    .order('data', { ascending: false })
+                    .limit(31);
+                if (data) setSleepLogs(data);
+                setLoading(false);
+            };
+
+            useEffect(() => {
+                fetchSleep();
+            }, []);
+
+            const today = new Date().toISOString().split('T')[0];
+            const todayLog = sleepLogs.find(l => l.data === today);
+            const lastLog = todayLog || null;
+
+            // Lógica de Super-Compensação
+            const workoutsToday = ud.completedLog.filter(log => {
+                const logDate = new Date(log.ts).toDateString();
+                const todayDate = new Date().toDateString();
+                return logDate === todayDate;
+            }).length;
+
+            let statusBadge = { icon: '🧘', color: 'slate', title: 'Recuperação Otimizada', text: 'Sem carga detetada hoje. Foco em regeneração celular e descanso.' };
+            if (workoutsToday >= 3) { statusBadge = { icon: '🔥', color: 'orange', title: 'Super-Compensação Necessária', text: 'Treino intenso detetado. O corpo pede +1h de sono para reparação muscular.' }; } 
+            else if (workoutsToday > 0) { statusBadge = { icon: '⚡', color: 'orange', title: 'Manutenção de Ritmo', text: 'Carga moderada detetada. Mantém a meta de 8h para consolidar ganhos.' }; }
+
+            const consistency = sleepLogs.length > 2 ? '94%' : '--';
+
+            return (
+                <div className={`max-w-xl mx-auto py-2 pb-40 animate-in fade-in slide-in-from-bottom-6 duration-700 px-4 transition-all`}>
+                    
+                    {/* Header: Cronotipo & Recovery Status */}
+                    <div className="flex flex-col gap-4 mb-8">
+                        <div className="flex items-center justify-between">
+                            <div className="bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-2xl flex items-center gap-3">
+                                <div className="text-xl">{chronoData.type === 'Leão' ? '🦁' : chronoData.type === 'Lobo' ? '🐺' : '🐻'}</div>
+                                <div>
+                                    <p className="text-[8px] font-black text-orange-500 uppercase tracking-widest">Cronotipo Detetado</p>
+                                    <p className="text-xs font-black text-white italic">{chronoData.type}</p>
+                                </div>
+                            </div>
+                            <div className="flex-1 ml-4 bg-slate-900/40 border border-white/5 px-4 py-2 rounded-2xl">
+                                <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Dica de Performance</p>
+                                <p className="text-[10px] font-bold text-slate-300 leading-tight">{chronoData.advice}</p>
+                            </div>
+                        </div>
+
+                        {/* Alerta de Status de Recuperação */}
+                        <div className={`bg-${statusBadge.color}-500/10 border border-${statusBadge.color}-500/30 rounded-[32px] p-5 flex items-center gap-4 animate-in slide-in-from-top-4 duration-1000`}>
+                            <div className={`w-12 h-12 bg-${statusBadge.color}-500/20 rounded-2xl flex items-center justify-center text-2xl shadow-inner`}>{statusBadge.icon}</div>
+                            <div>
+                                <p className={`text-${statusBadge.color}-200 text-[12px] font-black uppercase tracking-tight leading-tight`}>{statusBadge.title}</p>
+                                <p className={`text-${statusBadge.color}-500/80 text-[10px] font-bold mt-1`}>{statusBadge.text}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* A. Hero: Sleep Score & Circadian Arc */}
+                    <div className="flex flex-col items-center mb-10 relative">
+                        {/* Sleep Debt Indicator (Dinâmico) */}
+                        {sleepDebt.total > 0 && (
+                            <div className="absolute -top-4 -right-2 bg-red-500/10 border border-red-500/30 px-3 py-1.5 rounded-full animate-pulse z-20 flex items-center gap-2">
+                                <span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                                <span className="text-[10px] font-black text-red-500 uppercase tracking-tighter italic">Dívida: -{sleepDebt.h}h {sleepDebt.m}m</span>
+                            </div>
+                        )}
+
+                        <div className="relative w-64 h-64 flex flex-col items-center justify-center">
+                            {/* Janela de Melatonina SVG Arc (Atrás do principal) */}
+                            <svg className="absolute inset-0 w-full h-full -rotate-90 scale-125 opacity-20">
+                                {/* Golden Window: 22:30 - 02:00 (Aproximadamente 90 graus de arco) */}
+                                <circle cx="128" cy="128" r="115" fill="none" stroke="rgba(251, 191, 36, 0.2)" strokeWidth="4" />
+                                <path d="M 128,13 A 115,115 0 0 1 243,128" fill="none" stroke="#fbbf24" strokeWidth="8" strokeLinecap="round" />
+                            </svg>
+
+                            <svg className="relative w-56 h-56 -rotate-90">
+                                <circle cx="112" cy="112" r="100" fill="none" stroke="rgba(249, 115, 22, 0.05)" strokeWidth="12" />
+                                <circle cx="112" cy="112" r="100" fill="none" stroke="url(#sleepOrangeGradient)" strokeWidth="12" 
+                                    strokeDasharray="628" strokeDashoffset={lastLog ? 628 - (628 * lastLog.qualidade) / 100 : 628} 
+                                    strokeLinecap="round" className="transition-all duration-1000" />
+                                <defs>
+                                    <linearGradient id="sleepOrangeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stopColor="#f97316" />
+                                        <stop offset="100%" stopColor="#fbbf24" />
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10 pt-4">
+                                {lastLog ? (
+                                    <React.Fragment>
+                                        <span className="block text-5xl font-black text-white italic">{lastLog.qualidade}%</span>
+                                        <span className="block text-[10px] font-black text-orange-400 uppercase tracking-[0.2em] mt-1">Qualidade de Elite</span>
+                                    </React.Fragment>
+                                ) : (
+                                    <React.Fragment>
+                                        <span className="block text-4xl font-black text-slate-700 italic">--%</span>
+                                        <span className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mt-1">Sem Dados Hoje</span>
+                                    </React.Fragment>
+                                )}
+                            </div>
+                        </div>
+                        
+                        {/* Circadian Insight */}
+                        <div className="mt-6 flex flex-col items-center gap-2">
+                            <div className="bg-amber-500/5 px-4 py-1.5 rounded-full border border-amber-500/20 text-center">
+                                <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">
+                                    Aproveitamento da Janela Hormonal: <span className="text-white italic">{chronoData.pct}%</span>
+                                </span>
+                            </div>
+                            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-tight max-w-[240px] text-center leading-tight">
+                                Estás a aproveitar {chronoData.pct}% da tua janela de recuperação hormonal profunda (GH).
+                            </p>
+                        </div>
+                    </div>
+
+
+
+                    {/* Calculadora de Ciclos (NEW) */}
+                    <div className="mb-10">
+                        <h4 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <span className="text-orange-500">⏰</span> Se eu dormir agora...
+                        </h4>
+                        <div className="grid grid-cols-2 gap-3">
+                            {wakeUpCycles.map(c => (
+                                <div key={c.cycles} className="bg-slate-900/40 border border-white/5 p-4 rounded-3xl text-center group hover:bg-slate-900/60 transition-all">
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Acordar Fresco</p>
+                                    <p className="text-xl font-black text-white italic group-hover:text-orange-400 transition-colors">{c.time}</p>
+                                    <p className="text-[8px] font-black text-slate-600 uppercase mt-1 tracking-widest">{c.cycles} CICLOS ({c.hours}H)</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Bolha de Insights (Coach IA Advanced Correlation) */}
+                    <div className="bg-gradient-to-br from-slate-900/40 to-slate-800/40 border border-white/5 rounded-[32px] p-6 mb-10 flex items-start gap-4">
+                        <div className="text-2xl animate-bounce" style={{ animationDuration: '3s' }}>💡</div>
+                        <div>
+                            <h4 className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1">Insight do Coach</h4>
+                            <p className="text-white text-xs font-medium leading-relaxed">
+                                {sleepDebt.total > 120 ? 
+                                    `Atenção: Acumulaste ${sleepDebt.h}h de dívida. O teu sistema nervoso está sob stress. Tenta dormir 9h hoje.` :
+                                    (lastLog?.qualidade > 85 ? 
+                                        "Recuperação de Elite detetada! O teu corpo está no estado anabólico perfeito para o treino de amanhã." :
+                                        (checklist.screens ? 
+                                            "Boa! O 'Digital Detox' antes de dormir está a estabilizar o teu ritmo circadiano." :
+                                            "Dica: Desligar os ecrãs 1h antes de deitar pode subir a tua qualidade de sono em 15%."
+                                        )
+                                    )
+                                }
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Padrão de Consistência Mensal (Heatmap) */}
+                    <div className="mb-10">
+                        <h4 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center justify-between">
+                            <span className="flex items-center gap-2"><span className="text-orange-500">🗓️</span> Padrão Mensal</span>
+                            <span className="text-[9px] text-slate-500 uppercase tracking-widest italic font-bold">Mês de {currentMonthInfo.name}</span>
+                        </h4>
+                        <div className="bg-slate-900/40 border border-white/5 rounded-[32px] p-6 shadow-inner">
+                            <div className="grid grid-cols-10 gap-2 mb-4">
+                                {heatmapDays.map((d, i) => (
+                                    <div key={i} className={`aspect-square rounded-md ${d.color} transition-all hover:scale-110 shadow-sm flex items-center justify-center border border-white/[0.03]`} title={`Dia ${d.day}`}>
+                                        <span className="text-[6px] font-black text-white/10">{d.day}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="flex justify-between items-center text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                                <span>Menos Descanso</span>
+                                <div className="flex gap-1.5 items-center">
+                                    <div className="w-2.5 h-2.5 rounded-sm bg-slate-800/40" title="Sem Registo"></div>
+                                    <div className="w-2.5 h-2.5 rounded-sm bg-red-900/50"></div>
+                                    <div className="w-2.5 h-2.5 rounded-sm bg-orange-500/50"></div>
+                                    <div className="w-2.5 h-2.5 rounded-sm bg-green-500/50"></div>
+                                </div>
+                                <span>Recuperação Elite</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* B. Cards de Bio-Métricas */}
+                    <div className="grid grid-cols-2 gap-4 mb-10">
+                        <div className="bg-slate-900/60 border border-white/5 rounded-3xl p-5 hover:bg-slate-900/80 transition-all group">
+                            <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">⭐</div>
+                            <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Qualidade</div>
+                            <div className="text-lg font-black text-white italic">{lastLog ? `${lastLog.qualidade/10}/10` : '--/10'}</div>
+                        </div>
+                        <div className="bg-slate-900/60 border border-white/5 rounded-3xl p-5 hover:bg-slate-900/80 transition-all group">
+                            <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">⚡</div>
+                            <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Energia</div>
+                            <div className="text-lg font-black text-white italic">{lastLog ? lastLog.feeling : '--'}</div>
+                        </div>
+                        <div className="bg-slate-900/60 border border-white/5 rounded-3xl p-5 hover:bg-slate-900/80 transition-all group">
+                            <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">🛏️</div>
+                            <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Tempo na Cama</div>
+                            <div className="text-lg font-black text-white italic">{lastLog ? `${Math.floor(lastLog.horas_dormidas)}h ${Math.round((lastLog.horas_dormidas % 1) * 60)}m` : '--h --m'}</div>
+                        </div>
+                        <div className="bg-slate-900/60 border border-white/5 rounded-3xl p-5 hover:bg-slate-900/80 transition-all group">
+                            <div className="text-2xl mb-2 group-hover:scale-110 transition-transform">📈</div>
+                            <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Consistência</div>
+                            <div className="text-lg font-black text-white italic">{consistency}</div>
+                        </div>
+                    </div>
+
+                    {/* C. Gráfico de Ciclo de Sono com Meta Visual */}
+                    <div className="bg-slate-900/60 border border-white/5 rounded-3xl p-6 mb-10 relative overflow-hidden">
+                        <div className="flex justify-between items-center mb-6">
+                            <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+                                <span className="text-orange-500">📊</span> Histórico de Horas
+                            </h4>
+                            <span className="text-[10px] text-slate-500 font-bold">Últimos 7 dias</span>
+                        </div>
+                        <div className="h-40 flex items-end gap-2 px-2 relative mt-4">
+                            <div className="absolute left-0 right-0 border-t border-dashed border-orange-500/30 z-0 pointer-events-none" style={{ bottom: '66.6%' }}>
+                                <span className="absolute right-0 -top-3 text-[8px] font-black text-orange-500/50 uppercase tracking-tighter">Meta: 8h</span>
+                            </div>
+
+                            {sleepLogs.length > 0 ? sleepLogs.slice(0, 7).reverse().map((l, i) => (
+                                <div key={i} className="flex-1 bg-gradient-to-t from-orange-600/40 to-amber-500/60 rounded-t-lg z-10 transition-all hover:opacity-80" style={{ height: `${Math.min((l.horas_dormidas / 12) * 100, 100)}%` }}></div>
+                            )) : (
+                                <div className="w-full h-full flex items-center justify-center border-t border-white/5 border-dashed">
+                                    <span className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Sem Histórico</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* D. Checklist de Higiene do Sono */}
+                    <div className="mb-10">
+                        <h4 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <span className="text-orange-500">⚔️</span> Preparação para a Batalha
+                        </h4>
+                        <div className="bg-slate-900/40 border border-white/5 rounded-[32px] p-6 space-y-4">
+                            {[
+                                { id: 'screens', label: 'Sem ecrãs (1h antes)', icon: '📵' },
+                                { id: 'dark', label: 'Quarto escuro e frio', icon: '❄️' },
+                                { id: 'supplements', label: 'Suplementação feita', icon: '💊' }
+                            ].map(item => (
+                                <div 
+                                    key={item.id} 
+                                    onClick={() => setChecklist({...checklist, [item.id]: !checklist[item.id]})}
+                                    className="flex items-center justify-between group cursor-pointer active:scale-[0.98] transition-all"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="text-lg bg-white/5 w-10 h-10 rounded-xl flex items-center justify-center">{item.icon}</div>
+                                        <span className={`text-xs font-bold transition-colors ${checklist[item.id] ? 'text-white' : 'text-slate-500'}`}>{item.label}</span>
+                                    </div>
+                                    <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${checklist[item.id] ? 'bg-orange-500 border-orange-500' : 'border-white/10 bg-white/5'}`}>
+                                        {checklist[item.id] && <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="white" strokeWidth="4"><path d="M20 6L9 17l-5-5"/></svg>}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* E. Mixer de Áudio com Temporizador */}
+                    <div className="mb-10">
+                        <h4 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <span className="text-orange-500">🎧</span> Som de Batalha (Descanso)
+                        </h4>
+                        <div className="flex flex-col gap-2 mb-6">
+                            {[
+                                { id: 'forest', label: 'Som Relaxante', icon: '😴', file: 'forest-noise.mp3' },
+                                { id: 'brown', label: 'Ruído Castanho', icon: '🟤', file: 'brown-noise.mp3' }
+                            ].map(sound => {
+                                const isPlaying = ud.currentAudioId === sound.id;
+                                return (
+                                    <button 
+                                        key={sound.id} 
+                                        onClick={() => {
+                                            if (isPlaying) {
+                                                ud.stopAudio();
+                                            } else {
+                                                const durationMs = selectedTimer ? selectedTimer * 60 * 1000 : null;
+                                                ud.playAudio(sound.id, sound.file, durationMs);
+                                            }
+                                        }}
+                                        className={`w-full bg-slate-900/60 hover:bg-slate-900/80 border ${isPlaying ? 'border-orange-500' : 'border-white/5'} p-4 rounded-2xl flex items-center justify-between group transition-all`}
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-10 h-10 rounded-xl ${isPlaying ? 'bg-orange-500/20' : 'bg-white/5'} flex items-center justify-center text-xl`}>{sound.icon}</div>
+                                            <span className={`text-sm font-bold ${isPlaying ? 'text-orange-500' : 'text-white'}`}>{sound.label}</span>
+                                        </div>
+                                        <div className={`w-8 h-8 rounded-full ${isPlaying ? 'bg-orange-600 animate-pulse' : 'bg-white/5'} flex items-center justify-center group-hover:bg-orange-600 transition-all`}>
+                                            {isPlaying ? (
+                                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                                            ) : (
+                                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                                            )}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Temporizador Pills */}
+                        <div className="flex items-center justify-between mb-3 px-1">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                Paragem Automática
+                            </span>
+                            {selectedTimer && <span className="text-[9px] text-orange-500 font-bold uppercase animate-pulse">Ativa</span>}
+                        </div>
+                        <div className="flex gap-2 px-1">
+                            {[30, 60, 90].map(m => (
+                                <button 
+                                    key={m} 
+                                    onClick={() => setSelectedTimer(selectedTimer === m ? null : m)}
+                                    className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all border ${
+                                        selectedTimer === m ? 'bg-orange-500 border-orange-500 text-white' : 'bg-white/5 border-white/10 text-slate-500 hover:border-white/20'
+                                    }`}
+                                >
+                                    {m} MIN
+                                </button>
+                            ))}
+                        </div>
+                        {selectedTimer && (
+                            <p className="text-[9px] text-orange-500/60 font-bold uppercase tracking-widest text-center mt-3 animate-pulse">
+                                Paragem automática ativa em {selectedTimer} minutos
+                            </p>
+                        )}
+                    </div>
+
+                    {/* F. Protocolos de Recuperação Neural (NEW) */}
+                    <div className="mb-10">
+                        <h4 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <span className="text-orange-500">🧠</span> Protocolos de Recuperação Neural
+                        </h4>
+                        <div className="grid grid-cols-1 gap-3">
+                            <div className="bg-gradient-to-r from-blue-900/20 to-indigo-900/20 border border-blue-500/20 p-5 rounded-3xl">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-lg">🧬</div>
+                                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Protocolo 01: Sincronização Alfa</span>
+                                </div>
+                                <p className="text-[11px] text-slate-300 font-medium">Utiliza o Mixer de Áudio (Ruído Castanho) durante 20 min antes de dormir para baixar a frequência cerebral de Beta para Alfa.</p>
+                            </div>
+                            <div className="bg-gradient-to-r from-purple-900/20 to-fuchsia-900/20 border border-purple-500/20 p-5 rounded-3xl">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center text-lg">🔥</div>
+                                    <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Protocolo 02: Purgatório Digital</span>
+                                </div>
+                                <p className="text-[11px] text-slate-300 font-medium">Bloqueio total de luz azul 90 min antes do sono. O pico de melatonina ocorre exatamente 45 min após o último estímulo de ecrã.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* CTA Fixo Premium */}
+                    <div className="fixed bottom-[64px] left-0 right-0 z-[500] px-4 py-4 bg-slate-950/80 backdrop-blur-2xl border-t border-white/5 sm:bottom-4 sm:left-auto sm:right-4 sm:w-[400px] sm:rounded-3xl sm:border">
+                        <div className="max-w-md mx-auto">
+                            <button 
+                                onClick={() => setShowModal(true)}
+                                className="w-full bg-gradient-to-r from-orange-600 to-amber-600 text-white font-black py-5 rounded-2xl shadow-[0_12px_30px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all text-sm uppercase tracking-tighter"
+                            >
+                                🌙 REGISTAR NOITE DE SONO
+                            </button>
+                        </div>
+                    </div>
+
+                    {showModal && <SleepLogModal onClose={() => setShowModal(false)} onSave={() => { fetchSleep(); setShowModal(false); }} />}
+                </div>
+            );
+        }
+
+
+
+        function SleepLogModal({ onClose, onSave }) {
+            const [form, setForm] = useState({ 
+                data: new Date().toISOString().split('T')[0], 
+                deitar: '23:00', 
+                acordar: '07:30', 
+                qualidade: 8, 
+                feeling: 'Normal' 
+            });
+            const [loading, setLoading] = useState(false);
+
+            // Cálculo automático de horas
+            const calculateHours = () => {
+                const [dHours, dMins] = form.deitar.split(':').map(Number);
+                const [aHours, aMins] = form.acordar.split(':').map(Number);
+                let start = new Date(0, 0, 0, dHours, dMins);
+                let end = new Date(0, 0, 0, aHours, aMins);
+                if (end < start) end.setDate(end.getDate() + 1);
+                const diff = (end - start) / (1000 * 60 * 60);
+                return diff.toFixed(2);
+            };
+
+            const handleSave = async () => {
+                setLoading(true);
+                const { data: { session } } = await window.supabase.auth.getSession();
+                if (!session) return;
+                
+                const horas = calculateHours();
+                
+                const { error } = await window.supabase.from('registos_sono').insert({
+                    user_id: session.user.id,
+                    data: form.data,
+                    hora_deitar: form.deitar,
+                    hora_acordar: form.acordar,
+                    horas_dormidas: parseFloat(horas),
+                    qualidade: parseInt(form.qualidade) * 10,
+                    feeling: form.feeling
+                });
+                
+                if (!error) onSave();
+                setLoading(false);
+                onClose();
+            };
+
+            const hoursTotal = calculateHours();
+
+            return (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md" onClick={onClose}></div>
+                    <div className="relative bg-gradient-to-br from-slate-900 to-slate-950 border border-white/10 rounded-[32px] p-8 w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                        <h3 className="text-2xl font-black text-white italic uppercase tracking-tight mb-6">Registar <span className="text-orange-500">Sono</span></h3>
+                        
+                        <div className="space-y-4 mb-8">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Hora de Deitar</label>
+                                    <div className="w-full bg-white/5 border border-white/10 rounded-xl focus-within:border-orange-500 transition-all time-input-wrapper">
+                                        <input 
+                                            type="time" 
+                                            value={form.deitar} 
+                                            onChange={e => setForm({...form, deitar: e.target.value})} 
+                                            onClick={(e) => { try { e.target.showPicker(); } catch(err) {} }}
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Hora de Acordar</label>
+                                    <div className="w-full bg-white/5 border border-white/10 rounded-xl focus-within:border-orange-500 transition-all time-input-wrapper">
+                                        <input 
+                                            type="time" 
+                                            value={form.acordar} 
+                                            onChange={e => setForm({...form, acordar: e.target.value})} 
+                                            onClick={(e) => { try { e.target.showPicker(); } catch(err) {} }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-orange-500/10 border border-orange-500/20 p-4 rounded-2xl flex justify-between items-center">
+                                <span className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Tempo Total</span>
+                                <span className="text-lg font-black text-white italic">{Math.floor(hoursTotal)}h {Math.round((hoursTotal % 1) * 60)}m</span>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Qualidade do Sono (1-10)</label>
+                                <input type="range" min="1" max="10" value={form.qualidade} onChange={e => setForm({...form, qualidade: e.target.value})} className="w-full accent-orange-500" />
+                                <div className="flex justify-between mt-1">
+                                    <span className="text-[9px] text-slate-600 font-bold uppercase">Pobre</span>
+                                    <span className="text-orange-500 font-black italic">{form.qualidade}/10</span>
+                                    <span className="text-[9px] text-slate-600 font-bold uppercase">Excelente</span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Como te sentes hoje?</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {['Cansado', 'Normal', 'Revigorado'].map(f => (
+                                        <button 
+                                            key={f}
+                                            onClick={() => setForm({...form, feeling: f})}
+                                            className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all border ${
+                                                form.feeling === f ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white/5 border-white/10 text-slate-500'
+                                            }`}
+                                        >
+                                            {f}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <button onClick={handleSave} disabled={loading} className="w-full py-5 bg-gradient-to-r from-orange-600 to-amber-600 rounded-2xl font-black text-white text-xs uppercase tracking-widest shadow-xl shadow-orange-600/20 active:scale-95 transition-all">
+                            {loading ? 'A GRAVAR...' : 'GRAVAR DESCANSO'}
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        function RestrictedAccessModal() {
+            const [show, setShow] = useState(false);
+            
+            useEffect(() => {
+                const handleOpen = () => setShow(true);
+                window.addEventListener('open-restricted-modal', handleOpen);
+                return () => window.removeEventListener('open-restricted-modal', handleOpen);
+            }, []);
+
+            if (!show) return null;
+
+            return (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md" onClick={() => setShow(false)}></div>
+                    <div className="relative bg-gradient-to-br from-slate-900 to-slate-950 border border-white/10 rounded-[32px] p-8 w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                        <div className="absolute top-0 right-0 p-6">
+                            <button onClick={() => setShow(false)} className="text-slate-500 hover:text-white transition-colors">
+                                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                            </button>
+                        </div>
+
+                        <div className="flex flex-col items-center text-center">
+                            <div className="w-20 h-20 bg-orange-500/10 rounded-3xl flex items-center justify-center mb-6 border border-orange-500/20">
+                                <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#f97316" strokeWidth="2">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                                </svg>
+                            </div>
+
+                            <h3 className="text-2xl font-black text-white italic uppercase tracking-tight mb-3">
+                                Acesso Restrito: <br/><span className="text-orange-500">Arsenal Premium</span>
+                            </h3>
+
+                            <p className="text-slate-400 font-medium text-sm leading-relaxed mb-8">
+                                Ferramentas de elite bloqueadas. Garante o teu acesso na plataforma oficial para elevar os teus resultados e dominar a arena.
+                            </p>
+
+                            <div className="w-full space-y-3">
+                                <button 
+                                    className="w-full py-5 bg-gradient-to-r from-orange-600 to-orange-500 rounded-2xl font-black text-white text-xs uppercase tracking-widest shadow-xl shadow-orange-600/20 active:scale-95 transition-all"
+                                    onClick={() => window.open('#', '_blank')}
+                                >
+                                    DESBLOQUEAR AGORA
+                                </button>
+                                <button 
+                                    className="w-full py-4 text-slate-500 hover:text-white font-bold text-xs uppercase tracking-widest transition-all"
+                                    onClick={() => setShow(false)}
+                                >
+                                    Voltar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Sub-componentes de Vendas para limpeza de código
+        function NutritionSalesPage({ onNav }) {
+            return (
+                <div className="max-w-xl mx-auto py-2 pb-40 animate-in fade-in slide-in-from-bottom-6 duration-700">
+                    <div className="flex justify-center mb-6">
+                        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[10px] font-black uppercase tracking-widest">
+                            <span className="animate-pulse">⚡</span> Oferta Especial
+                        </div>
+                    </div>
+                    <div className="flex justify-center gap-6 mb-8 drop-shadow-[0_0_25px_rgba(249,115,22,0.2)]">
+                        <span className="text-7xl sm:text-8xl">🤖</span>
+                        <span className="text-7xl sm:text-8xl">📸</span>
+                    </div>
+                    <h2 className="text-2xl sm:text-4xl font-black text-white leading-[1.15] mb-6 text-center tracking-tighter">
+                        Jogue a sua balança de cozinha <br/>
+                        <span className="text-orange-500 italic">no lixo hoje mesmo.</span>
+                    </h2>
+                    <p className="text-slate-400 text-sm sm:text-base max-w-md mx-auto mb-10 font-medium leading-relaxed text-center">
+                        Chega de pesar comida e somar calorias. O Algoritmo <span className="text-white font-bold">Nutri-Scan™</span> rastreia o seu prato e regista tudo no <span className="text-white font-bold">piloto automático em 3 segundos</span>.
+                    </p>
+                    <div className="fixed bottom-[64px] left-0 right-0 z-[500] px-4 py-4 bg-slate-950/80 backdrop-blur-2xl border-t border-white/5 sm:bottom-4 sm:left-auto sm:right-4 sm:w-[400px] sm:rounded-3xl sm:border">
+                        <button 
+                            onClick={() => onNav('extras')}
+                            className="w-full bg-gradient-to-r from-[#f97316] to-[#ea580c] text-white font-black py-5 rounded-2xl shadow-[0_12px_30px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all text-sm uppercase tracking-tighter"
+                        >
+                            👉 ATIVAR O NUTRI-SCAN™
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        function DesafioSalesPage({ onNav }) {
+            return (
+                <div className="max-w-xl mx-auto py-2 pb-40 animate-in fade-in slide-in-from-bottom-6 duration-700">
+                    <div className="flex justify-center mb-6">
+                        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[10px] font-black uppercase tracking-widest">
+                            🔥 Desafio VIP
+                        </div>
+                    </div>
+                    <div className="flex justify-center gap-6 mb-10 drop-shadow-[0_0_25px_rgba(249,115,22,0.2)]">
+                        <span className="text-7xl sm:text-8xl">🏆</span>
+                        <span className="text-7xl sm:text-8xl">📅</span>
+                    </div>
+                    <h2 className="text-2xl sm:text-4xl font-black text-white leading-[1.15] mb-6 text-center tracking-tighter">
+                        O Seu Novo Corpo <br/>
+                        <span className="text-orange-500 italic">em Apenas 30 Dias.</span>
+                    </h2>
+                    <div className="fixed bottom-[64px] left-0 right-0 z-[500] px-4 py-4 bg-slate-950/80 backdrop-blur-2xl border-t border-white/5 sm:bottom-4 sm:left-auto sm:right-4 sm:w-[400px] sm:rounded-3xl sm:border">
+                        <button 
+                            onClick={() => onNav('extras')}
+                            className="w-full bg-gradient-to-r from-[#f97316] to-[#ea580c] text-white font-black py-5 rounded-2xl shadow-[0_12px_30px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all text-sm uppercase tracking-tighter"
+                        >
+                            🚀 DESBLOQUEAR MEU DESAFIO
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+
+        function RankingTab({ session, userProfile, currentXP }) {
+            return (
+                <div className="tab-content fade-in pb-24">
+                    <div className="fade-in">
+                        <RankingView session={session} userProfile={userProfile} currentXP={currentXP} hideHeader={true} />
+                    </div>
+                </div>
+            );
+        }
+
+
+
+
+        function EvolucaoCorporal({ session, userProfile }) {
+            const [history, setHistory] = useState([]);
+            const [genero, setGenero] = useState('');
+            const [abaGrafico, setAbaGrafico] = useState('peso'); // 'peso' ou 'bf'
+            const [loading, setLoading] = useState(true);
+            const [formError, setFormError] = useState('');
+            const [sortField, setSortField] = useState('data');
+            const [sortDir, setSortDir] = useState('desc');
+            const [tooltip, setTooltip] = useState(null);
+
+            // Form state
+            const [form, setForm] = useState({
+                peso: '', altura: '', peito: '', pescoco: '', cintura: '',
+                quadril: '', braco_esq: '', braco_dir: '',
+                perna_esq: '', perna_dir: '', panturrilha: ''
+            });
+
+            useEffect(() => {
+                if (session) {
+                    window.supabase.from('evolucao_corporal').select('*').eq('user_id', session.user.id).order('data', { ascending: true })
+                        .then(({ data }) => {
+                            if (data && data.length > 0) {
+                                setHistory(data);
+                                if (data.length > 0) localStorage.setItem('lastEvolucao', JSON.stringify(data[data.length - 1]));
+                                const lastG = data.slice().reverse().find(h => h.genero)?.genero;
+                                if (lastG) setGenero(lastG);
+                            } else if (userProfile && userProfile.gender) {
+                                const g = userProfile.gender.toLowerCase();
+                                if (g.startsWith('m')) setGenero('m');
+                                else if (g.startsWith('f')) setGenero('f');
+                            }
+                            setLoading(false);
+                        });
+                }
+            }, [session, userProfile]);
+
+            const handleChange = (e) => setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
+
+            const calcBF = (g, pesc, cint, quad, alt) => {
+                if (!g || !pesc || !cint || !alt) return null;
+                const p = parseFloat(pesc);
+                const c = parseFloat(cint);
+                const a = parseFloat(alt);
+                if (g === 'm') {
+                    if (c - p <= 0) return null;
+                    const logW = Math.log10(c - p);
+                    const logH = Math.log10(a);
+                    const bf = 495 / (1.0324 - 0.19077 * logW + 0.15456 * logH) - 450;
+                    return Math.max(0, bf);
+                } else {
+                    const q = parseFloat(quad);
+                    if (!q || (c + q - p) <= 0) return null;
+                    const logW = Math.log10(c + q - p);
+                    const logH = Math.log10(a);
+                    const bf = 495 / (1.29579 - 0.35004 * logW + 0.22100 * logH) - 450;
+                    return Math.max(0, bf);
+                }
+            };
+
+            const handleGravar = async () => {
+                setFormError('');
+                const p = parseFloat(form.peso);
+                const h_cm = parseFloat(form.altura);
+
+                if (!p || p < 30 || p > 350) {
+                    setFormError('Peso inválido (30-350kg).');
+                    return;
+                }
+
+                const bf = calcBF(genero, form.pescoco, form.cintura, form.quadril, form.altura);
+
+                if (bf === null && (form.pescoco || form.cintura || form.altura)) {
+                    // Se o user preencheu algo mas o cálculo falhou
+                    if (genero === 'f' && !form.quadril) {
+                        setFormError('Para mulheres, o perímetro do Quadril é obrigatório para o cálculo de BF.');
+                        return;
+                    }
+                }
+
+
+                const record = {
+                    user_id: session.user.id,
+                    genero: genero,
+                    peso: p,
+                    altura_cm: h_cm || null,
+                    peito_cm: parseFloat(form.peito) || null,
+                    pescoco_cm: parseFloat(form.pescoco) || null,
+                    cintura_cm: parseFloat(form.cintura) || null,
+                    quadril_cm: parseFloat(form.quadril) || null,
+                    braco_esq_cm: parseFloat(form.braco_esq) || null,
+                    braco_dir_cm: parseFloat(form.braco_dir) || null,
+                    perna_esq_cm: parseFloat(form.perna_esq) || null,
+                    perna_dir_cm: parseFloat(form.perna_dir) || null,
+                    panturrilha_cm: parseFloat(form.panturrilha) || null,
+                    bf_percentagem: (bf !== null && !isNaN(bf)) ? bf : null
+                };
+
+                const { data, error } = await window.supabase.from('evolucao_corporal').insert(record).select().single();
+                if (data) {
+                    setHistory(prev => [...prev, data]);
+                    setForm({ peso: '', altura: form.altura, peito: '', pescoco: '', cintura: '', quadril: '', braco_esq: '', braco_dir: '', perna_esq: '', perna_dir: '', panturrilha: '' });
+                } else {
+                    console.error("Erro Supabase:", error);
+                    setFormError('Erro ao salvar. Verifique a conexão.');
+                }
+            };
+
+            const currentBFPreview = calcBF(genero, form.pescoco, form.cintura, form.quadril, form.altura);
+
+            const [metaBF, setMetaBF] = useState(15);
+            const [selectedRegion, setSelectedRegion] = useState(null);
+
+            const handleEliminar = async (id) => {
+                if (confirm('Eliminar este registo?')) {
+                    await window.supabase.from('evolucao_corporal').delete().eq('id', id);
+                    setHistory(prev => prev.filter(h => h.id !== id));
+                }
+            };
+
+            const sortedHistory = [...history].sort((a, b) => {
+                let valA = a[sortField];
+                let valB = b[sortField];
+                if (sortField === 'data') {
+                    valA = new Date(a.data).getTime();
+                    valB = new Date(b.data).getTime();
+                }
+                return sortDir === 'asc' ? valA - valB : valB - valA;
+            });
+
+            const lastLog = history.length > 0 ? history[history.length - 1] : null;
+            const prevLog = history.length > 1 ? history[history.length - 2] : null;
+            const startLog = history.length > 0 ? history[0] : null;
+
+            const deltaPeso = lastLog && startLog ? (lastLog.peso - startLog.peso) : 0;
+            const deltaBF = lastLog && startLog && lastLog.bf_percentagem !== null && startLog.bf_percentagem !== null ? (lastLog.bf_percentagem - startLog.bf_percentagem) : 0;
+
+            // Detector de Recomposição (Logic vs Previous for triggering celebration)
+            const isRecomp = lastLog && prevLog && lastLog.peso >= prevLog.peso && (lastLog.bf_percentagem < prevLog.bf_percentagem - 0.3);
+
+            const imcRaw = lastLog && lastLog.peso && lastLog.altura_cm ? (lastLog.peso / Math.pow(lastLog.altura_cm / 100, 2)) : 0;
+            const startImcRaw = startLog && startLog.peso && startLog.altura_cm ? (startLog.peso / Math.pow(startLog.altura_cm / 100, 2)) : 0;
+            const deltaIMC = imcRaw && startImcRaw ? (imcRaw - startImcRaw) : 0;
+
+            const massaGorda = (lastLog && lastLog.bf_percentagem) ? (lastLog.peso * (lastLog.bf_percentagem / 100)) : 0;
+            const massaMagra = lastLog ? (lastLog.peso - massaGorda) : 0;
+            const waistToHeight = lastLog && lastLog.cintura_cm && lastLog.altura_cm ? (lastLog.cintura_cm / lastLog.altura_cm) : 0;
+
+            // Body Regions Map Data (Inicio vs Agora)
+            const getRegDiff = (field) => {
+                const vLast = lastLog ? parseFloat(lastLog[field]) : NaN;
+                const vStart = startLog ? parseFloat(startLog[field]) : NaN;
+                if (isNaN(vLast) || isNaN(vStart)) return "0.0cm";
+                const d = vLast - vStart;
+                if (Math.abs(d) < 0.01) return "0.0cm";
+                return (d > 0 ? "+" : "") + d.toFixed(1) + "cm";
+            };
+
+            const regions = [
+                { id: 'chest', label: 'Peito', cx: 50, cy: 30, diff: getRegDiff('peito_cm') },
+                { id: 'arm', label: 'Braço', cx: 30, cy: 38, diff: getRegDiff('braco_dir_cm') },
+                { id: 'waist', label: 'Cintura', cx: 50, cy: 45, diff: getRegDiff('cintura_cm') },
+                { id: 'thigh', label: 'Coxa', cx: 42, cy: 70, diff: getRegDiff('perna_dir_cm') },
+                { id: 'calf', label: 'Gêmeos', cx: 42, cy: 88, diff: getRegDiff('panturrilha_cm') }
+            ];
+
+            // Chart Logic
+            const chartData = history.slice(-10).map((h, i) => ({
+                x: i,
+                y: abaGrafico === 'peso' ? h.peso : (h.bf_percentagem || 0),
+                raw: h
+            }));
+
+            // Mini Components
+            const Counter = ({ value, decimals = 1, suffix = '' }) => {
+                const [display, setDisplay] = useState(0);
+                useEffect(() => {
+                    let start = 0;
+                    const end = parseFloat(value) || 0;
+                    const duration = 1000;
+                    const startTime = performance.now();
+
+                    const animate = (now) => {
+                        const elapsed = now - startTime;
+                        const progress = Math.min(elapsed / duration, 1);
+                        const current = start + (end - start) * progress;
+                        setDisplay(current);
+                        if (progress < 1) requestAnimationFrame(animate);
+                    };
+                    requestAnimationFrame(animate);
+                }, [value]);
+                return <span className="font-technical">{display.toFixed(decimals)}{suffix}</span>;
+            };
+
+            const MetricCard = ({ title, value, delta, suffix, icon, decimals = 1 }) => (
+                <div className="stat-premium-card group relative overflow-hidden" style={{ flex: 1, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(249, 115, 22, 0.1)', padding: '20px', borderRadius: '24px', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+                    <div className="absolute inset-0 shimmer opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity"></div>
+                    <div className="flex justify-between items-start mb-4">
+                        <div style={{ background: 'rgba(249, 115, 22, 0.1)', color: 'var(--accent)', padding: '10px', borderRadius: '14px', boxShadow: '0 0 15px rgba(249, 115, 22, 0.2)' }}>
+                            {icon}
+                        </div>
+                        {delta !== 0 && (
+                            <div style={{ fontSize: '11px', fontWeight: '900', color: delta > 0 ? '#ef4444' : '#22c55e', display: 'flex', alignItems: 'center', gap: '4px', background: delta > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)', padding: '4px 8px', borderRadius: '8px' }}>
+                                <span>{delta > 0 ? '▲' : '▼'}</span>
+                                <span>{Math.abs(delta).toFixed(1)}</span>
+                            </div>
+                        )}
+                    </div>
+                    <div>
+                        <div style={{ color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>{title}</div>
+                        <div style={{ fontSize: '28px', color: '#fff', fontWeight: '900' }}>
+                            <Counter value={value} decimals={decimals} suffix={suffix} />
+                        </div>
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="progress-dashboard animate-in fade-in duration-700" style={{ paddingBottom: '100px', maxWidth: '1000px', margin: '0 auto' }}>
+                    
+                    {/* Header Elite */}
+                    <div style={{ textAlign: 'center', marginBottom: '40px', marginTop: '20px' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '15px', background: 'rgba(249, 115, 22, 0.05)', padding: '12px 24px', borderRadius: '20px', border: '1px solid rgba(249, 115, 22, 0.1)', marginBottom: '16px' }}>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5"><path d="M12 2v20M2 12h20M12 12l7.07-7.07M4.93 19.07L12 12" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', color: '#fff' }}>Evolução Corporal <span style={{ color: 'var(--accent)' }}>V5.0</span></h2>
+                        </div>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '500' }}>Central de Biohacking: Inteligência Preditiva e Mapeamento Antropométrico.</p>
+                    </div>
+
+                    {/* Detector de Recomposição Corporal (Biohacking Insight) */}
+                    {isRecomp && (
+                        <div className="mb-8 p-6 bg-gradient-to-r from-green-500/20 via-green-500/5 to-transparent border border-green-500/30 rounded-[32px] flex items-center gap-6 shadow-[0_0_50px_rgba(34,197,94,0.15)] animate-bounce-subtle">
+                            <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(34,197,94,0.4)] flex-shrink-0">
+                                <span className="text-3xl">✨</span>
+                            </div>
+                            <div>
+                                <div className="text-[10px] text-green-500 font-black uppercase tracking-[3px] mb-1">Bio-Insight Detetado</div>
+                                <h3 className="text-white text-lg font-black m-0 uppercase italic">Recomposição Corporal!</h3>
+                                <p className="text-slate-300 text-sm font-medium m-0 leading-relaxed">Você está trocando gordura por músculo real. Seu corpo está ficando mais denso e atlético.</p>
+                            </div>
+                            <div className="ml-auto opacity-20">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Dashboard Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                        <MetricCard title="Peso Corporal" value={lastLog?.peso} delta={deltaPeso} suffix=" kg" icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L3.41 13.41a2 2 0 0 1 0-2.83L10.59 3.41a2 2 0 0 1 2.83 0l7.17 7.17a2 2 0 0 1 0 2.83z"/><path d="m9 15 6-6"/></svg>} />
+                        <MetricCard title="Gordura Corporal" value={lastLog?.bf_percentagem} delta={deltaBF} suffix="%" icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2c4.5 0 8.5 3.5 8.5 8.5 0 4.5-3.5 8.5-8.5 8.5s-8.5-4-8.5-8.5c0-5 4-8.5 8.5-8.5z"/><path d="M12 12v.01"/><path d="M12 7v.01"/><path d="M12 17v.01"/></svg>} />
+                        
+                        {/* Previsão AI Card */}
+                        <div className="stat-premium-card md:col-span-2 bg-gradient-to-br from-orange-600/20 to-transparent border border-orange-500/30 p-6 rounded-[24px] relative overflow-hidden group">
+                            <div className="flex justify-between items-center mb-4">
+                                <div className="text-[10px] text-orange-500 font-black uppercase tracking-widest flex items-center gap-2">
+                                    <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
+                                    Previsão AI: Destino
+                                </div>
+                                <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/10">
+                                    <span className="text-[9px] text-slate-400 font-bold uppercase">Meta:</span>
+                                    <input 
+                                        type="number" 
+                                        value={metaBF} 
+                                        onChange={(e) => setMetaBF(parseFloat(e.target.value))}
+                                        className="bg-transparent border-none text-white text-[10px] font-black w-8 focus:outline-none"
+                                    />
+                                    <span className="text-[9px] text-white">%</span>
+                                </div>
+                            </div>
+                            <div className="flex flex-col">
+                                {(() => {
+                                    if (!lastLog || history.length < 2) return (
+                                        <div className="text-white text-lg font-black uppercase tracking-tight leading-tight">
+                                            Aguardando mais dados...
+                                            <p className="text-[10px] text-slate-500 font-bold mt-1">Registe o seu progresso pelo menos 2 vezes para ativar a IA.</p>
+                                        </div>
+                                    );
+
+                                    const hValid = [...history].filter(h => h.bf_percentagem !== null && h.bf_percentagem > 0).sort((a,b) => new Date(a.data) - new Date(b.data));
+                                    
+                                    if (hValid.length < 2) {
+                                        const hasRecords = history.length > 0;
+                                        return (
+                                            <div className="text-white text-lg font-black uppercase tracking-tight leading-tight">
+                                                {hasRecords ? "Registos incompletos" : "Aguardando mais dados..."}
+                                                <p className="text-[10px] text-orange-400 font-bold mt-1">
+                                                    {hasRecords 
+                                                        ? "Os seus registos anteriores não têm Pescoço/Cintura. Faça 2 novos registos completos." 
+                                                        : "Registe o seu progresso pelo menos 2 vezes para ativar a IA."}
+                                                </p>
+                                            </div>
+                                        );
+                                    }
+
+
+                                    const oldest = hValid[0];
+                                    const newest = hValid[hValid.length - 1];
+
+                                    if (newest.bf_percentagem <= metaBF) return <div className="text-green-500 text-2xl font-black italic uppercase tracking-tighter">Meta Atingida! 🔥</div>;
+
+                                    const diffBF = newest.bf_percentagem - oldest.bf_percentagem;
+                                    const weeks = Math.max(0.1, (new Date(newest.data) - new Date(oldest.data)) / (1000*60*60*24*7));
+                                    const bfRate = diffBF / weeks; // Taxa semanal
+
+                                    if (bfRate >= 0) return (
+                                        <div className="text-white text-lg font-black uppercase tracking-tight leading-tight">
+                                            Ritmo Estável / Subida
+                                            <p className="text-[10px] text-slate-500 font-bold mt-1">A sua gordura não baixou entre o 1º e o último registo. É necessário progresso para estimar data.</p>
+                                        </div>
+                                    );
+
+                                    const weeksLeft = (newest.bf_percentagem - metaBF) / Math.abs(bfRate);
+                                    const date = new Date(Date.now() + weeksLeft * 7 * 24 * 60 * 60 * 1000);
+                                    const dateStr = date.toLocaleDateString('pt-PT', { day: '2-digit', month: 'long', year: 'numeric' });
+                                    
+                                    return (
+                                        <div className="flex flex-col">
+                                            <span className="text-[10px] text-slate-400 font-bold uppercase mb-1">Chegada prevista para:</span>
+                                            <div className="text-white text-xl font-black italic tracking-tighter uppercase leading-none">
+                                                {dateStr}
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                            <div className="text-slate-500 text-[10px] font-bold mt-4 max-w-[180px] leading-snug">Previsão baseada no seu ritmo real de queima de gordura entre o primeiro e o último registo válido.</div>
+                            <div className="absolute -bottom-6 -right-6 opacity-5 group-hover:rotate-12 transition-transform duration-700">
+                                <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Seção de Mapeamento Antropométrico */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                        <div className="progress-section-card bg-[#0f172a]/60 border border-white/5 rounded-[32px] p-8">
+                            <div className="flex justify-between items-center mb-8">
+                                <div>
+                                    <h3 className="text-white text-lg font-black uppercase tracking-wider">Mapeamento Corporal 3D</h3>
+                                    <p className="text-slate-500 text-[11px] font-bold">Toque nas zonas para ver a evolução local (cm)</p>
+                                </div>
+                                <div className="p-2 bg-orange-500/10 rounded-xl">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                                </div>
+                            </div>
+                            
+                            <div className="relative flex justify-center py-6">
+                                <svg viewBox="0 0 100 100" className="w-full h-auto max-w-[280px] overflow-visible">
+                                    <defs>
+                                        <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                                            <stop offset="0%" stopColor="rgba(255,255,255,0.08)" />
+                                            <stop offset="100%" stopColor="rgba(255,255,255,0.02)" />
+                                        </linearGradient>
+                                    </defs>
+                                    {/* Stylized Performance Silhouette */}
+                                    <path d="M50 5 Q55 5 55 12 L55 18 L68 28 L66 48 L56 58 L60 95 L52 95 L50 75 L48 95 L40 95 L44 58 L34 48 L32 28 L45 18 L45 12 Q45 5 50 5 Z" fill="url(#bodyGrad)" stroke="rgba(249,115,22,0.15)" strokeWidth="0.5" />
+                                    
+                                    {regions.map(r => (
+                                        <g key={r.id} onClick={() => setSelectedRegion(r)} className="cursor-pointer group">
+                                            <circle cx={r.cx} cy={r.cy} r="2.5" fill={selectedRegion?.id === r.id ? '#f97316' : 'rgba(255,255,255,0.2)'} className="transition-all duration-300" />
+                                            <circle cx={r.cx} cy={r.cy} r="6" fill="transparent" stroke="#f97316" strokeWidth="0.5" className="opacity-0 group-hover:opacity-100 animate-pulse" />
+                                            {selectedRegion?.id === r.id && (
+                                                <g>
+                                                    <line x1={r.cx} y1={r.cy} x2={r.cx + 15} y2={r.cy - 10} stroke="#f97316" strokeWidth="0.5" />
+                                                    <rect x={r.cx + 15} y={r.cy - 18} width="35" height="16" rx="4" fill="#000" stroke="#f97316" strokeWidth="0.5" />
+                                                    <text x={r.cx + 32} y={r.cy - 7} textAnchor="middle" fill="#fff" fontSize="5" fontWeight="bold">{r.diff}</text>
+                                                </g>
+                                            )}
+                                        </g>
+                                    ))}
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-6">
+                            <div className="bg-gradient-to-br from-orange-500/10 to-transparent border border-orange-500/20 rounded-[32px] p-8 flex-1">
+                                <div className="text-[10px] text-orange-500 font-black uppercase tracking-widest mb-4">Análise de Zona: {selectedRegion?.label || "Selecione"}</div>
+                                {selectedRegion ? (
+                                    <>
+                                        <div className="flex items-end gap-3 mb-6">
+                                            <div className="text-4xl font-technical text-white">{selectedRegion.diff}</div>
+                                            <div className="text-xs text-slate-500 mb-2 uppercase font-black tracking-tighter">vs Start</div>
+                                        </div>
+                                        <p className="text-slate-400 text-xs leading-relaxed font-medium">A alteração de {selectedRegion.diff} nesta zona reflete a eficácia do treino focado em hipertrofia e definição localizada.</p>
+                                    </>
+                                ) : (
+                                    <div className="h-full flex items-center justify-center text-slate-600 text-xs font-bold italic uppercase tracking-widest">Toque no mapa para analisar perímetros</div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Marcos e Conquistas (PT-IA) */}
+                    <div className="mb-8 p-6 bg-gradient-to-r from-orange-500/10 via-transparent to-transparent border border-orange-500/20 rounded-[32px] flex flex-col sm:flex-row items-center gap-6 shadow-[0_10px_40px_rgba(0,0,0,0.3)] animate-in slide-in-from-left duration-500">
+                        <div className="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center shadow-[0_0_25px_rgba(249,115,22,0.4)] flex-shrink-0">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-2.34c3.37-.3 6-3.14 6-6.66H4c0 3.52 2.63 6.36 6 6.66z"/></svg>
+                        </div>
+                        <div className="text-center sm:text-left flex-1">
+                            <div className="text-[10px] text-orange-500 font-black uppercase tracking-[3px] mb-1">Próximo Marco Elite</div>
+                            <p className="text-white text-sm font-bold m-0 leading-relaxed">
+                                {lastLog 
+                                    ? `Faltam apenas 1.2kg para você atingir a proporção ideal de definição muscular. Mantenha o foco no ganho limpo! 🧠`
+                                    : "Realize sua primeira avaliação técnica para desbloquear os marcos de performance."
+                                }
+                            </p>
+                        </div>
+                        <div className="w-full sm:w-auto flex flex-col items-center gap-2">
+                            <button onClick={() => alert('🔥 SNAPSHOT GERADO!\n\nInstruções de Elite:\n1. Tire um print desta tela agora.\n2. Compartilhe nos seus Stories.\n3. Marque @_.mariana_barros_\n\nNós vamos repostar os melhores resultados na nossa página oficial! 🚀')} className="w-full sm:w-auto bg-white/5 hover:bg-white/10 p-3 rounded-xl border border-white/10 text-white transition-all flex items-center justify-center gap-2 group">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="group-hover:rotate-12 transition-transform"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
+                                <span className="text-[11px] font-black uppercase tracking-wider">Exportar Relatório</span>
+                            </button>
+                            <div className="text-[8px] text-orange-500/60 font-black uppercase tracking-tighter">Marque a gente e seja repostado 📸</div>
+                        </div>
+                    </div>
+
+                    {/* Gráfico Ultra-Premium */}
+                    <div className="progress-section-card relative" style={{ background: 'linear-gradient(180deg, #111827 0%, #0a0a0c 100%)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '32px', padding: '24px sm:32px', marginBottom: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-10">
+                            <div>
+                                <h3 className="ps-title" style={{ margin: 0, fontSize: '18px' }}>Análise de Tendência</h3>
+                                <div className="mt-2 flex items-center gap-3">
+                                    <div className="px-2.5 py-1 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
+                                        {(() => {
+                                            const h30 = history.filter(h => (new Date() - new Date(h.data)) / (1000*60*60*24) <= 30).sort((a,b) => new Date(a.data) - new Date(b.data));
+                                            if (h30.length < 2) return <span className="text-[10px] text-slate-500 font-bold uppercase">Tendência: Analisando...</span>;
+                                            const diff = h30[h30.length-1].peso - h30[0].peso;
+                                            const weeks = Math.max(1, (new Date(h30[h30.length-1].data) - new Date(h30[0].data)) / (1000*60*60*24*7));
+                                            const rate = diff / weeks;
+                                            return (
+                                                <>
+                                                    <span className="text-lg">{rate > 0.05 ? '📈' : rate < -0.05 ? '📉' : '➖'}</span>
+                                                    <span className="text-[10px] text-white font-black uppercase tracking-wider">
+                                                        Velocidade: {rate > 0.05 ? `Ganho médio de ${rate.toFixed(2)}kg/semana` : rate < -0.05 ? `Perda média de ${Math.abs(rate).toFixed(2)}kg/semana` : 'Peso Estável'}
+                                                    </span>
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="flex p-1 bg-black/40 rounded-xl border border-white/5">
+                                <button onClick={() => setAbaGrafico('peso')} style={{ padding: '8px 20px', borderRadius: '10px', fontSize: '11px', fontWeight: '900', transition: 'all 0.3s', background: abaGrafico === 'peso' ? 'var(--accent)' : 'transparent', color: '#fff', textTransform: 'uppercase' }}>Peso</button>
+                                <button onClick={() => setAbaGrafico('bf')} style={{ padding: '8px 20px', borderRadius: '10px', fontSize: '11px', fontWeight: '900', transition: 'all 0.3s', background: abaGrafico === 'bf' ? '#06b6d4' : 'transparent', color: '#fff', textTransform: 'uppercase' }}>Gordura%</button>
+                            </div>
+                        </div>
+
+                        <div className="relative h-[250px] w-full mt-4">
+                            {true ? (
+                                    (() => {
+                                        const currentChartData = history.slice(-10).map((h, i) => ({
+                                            x: i,
+                                            y: abaGrafico === 'peso' ? h.peso : (h.bf_percentagem || 0),
+                                            raw: h
+                                        }));
+
+                                        if (currentChartData.length === 0) return (
+                                            <div className="h-full flex items-center justify-center text-slate-500 font-bold text-[10px] uppercase tracking-widest">
+                                                Aguardando primeiro registo...
+                                            </div>
+                                        );
+
+                                        const chartColor = abaGrafico === 'peso' ? 'var(--accent)' : '#06b6d4';
+
+                                        const vals = currentChartData.map(d => d.y);
+                                        const minVal = Math.min(...vals);
+                                        const maxVal = Math.max(...vals);
+                                        const buffer = (maxVal - minVal) || (maxVal * 0.05) || 2;
+                                        const min = minVal - buffer;
+                                        const max = maxVal + buffer;
+                                        const range = (max - min) || 1;
+
+                                        const pts = currentChartData.map((d, i) => ({
+                                            x: currentChartData.length > 1 ? (i / (currentChartData.length - 1)) * 100 : 50,
+                                            y: 20 - ((d.y - minVal) / range) * 20 + 10 
+                                        }));
+
+                                        const getSpline = (p) => {
+                                            if (p.length < 2) return "";
+                                            let d = `M ${p[0].x},${p[0].y}`;
+                                            for (let i = 0; i < p.length - 1; i++) {
+                                                const cp1x = p[i].x + (p[i + 1].x - p[i].x) * 0.5;
+                                                d += ` C ${cp1x},${p[i].y} ${cp1x},${p[i + 1].y} ${p[i + 1].x},${p[i + 1].y}`;
+                                            }
+                                            return d;
+                                        };
+
+                                        const pathD = getSpline(pts);
+                                        const areaD = pathD ? `${pathD} L ${pts[pts.length - 1].x},40 L ${pts[0].x},40 Z` : "";
+                                        const gridSteps = [0, 0.25, 0.5, 0.75, 1];
+
+                                        return (
+                                            <svg viewBox="-15 -5 125 55" preserveAspectRatio="none" className="w-full h-full overflow-visible">
+                                                <defs>
+                                                    <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="0%" stopColor={chartColor} stopOpacity="0.3" />
+                                                        <stop offset="100%" stopColor={chartColor} stopOpacity="0" />
+                                                    </linearGradient>
+                                                </defs>
+                                                {gridSteps.map(step => {
+                                                    const yPos = 40 - step * 40;
+                                                    return <line key={step} x1="0" y1={yPos} x2="100" y2={yPos} stroke="rgba(255,255,255,0.05)" strokeWidth="0.1" strokeDasharray="1 1" />;
+                                                })}
+                                                {gridSteps.map(step => {
+                                                    const yPos = 40 - step * 40;
+                                                    const val = min + step * range;
+                                                    return <text key={step} x="-2" y={yPos + 1} fill="rgba(255,255,255,0.2)" fontSize="2.5" textAnchor="end" className="font-mono">{val.toFixed(1)}</text>;
+                                                })}
+                                                {pts.map((p, i) => {
+                                                    const date = new Date(currentChartData[i].raw.data);
+                                                    return <text key={i} x={p.x} y="46" fill="rgba(255,255,255,0.2)" fontSize="2.2" textAnchor="middle" className="font-mono">{`${date.getDate()}/${date.getMonth() + 1}`}</text>;
+                                                })}
+                                                {areaD && <path d={areaD} fill="url(#chartGradient)" />}
+                                                {pathD && <path d={pathD} fill="none" stroke={chartColor} strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" />}
+                                                {pts.map((p, i) => (
+                                                    <g key={i}>
+                                                        <circle cx={p.x} cy={p.y} r="1.2" fill={chartColor} fillOpacity="0.2" className="animate-pulse" />
+                                                        <circle cx={p.x} cy={p.y} r="0.6" fill="#0f172a" stroke={chartColor} strokeWidth="0.4" 
+                                                            onMouseEnter={(e) => setTooltip({ x: e.clientX, y: e.clientY, data: currentChartData[i].raw })}
+                                                            onMouseLeave={() => setTooltip(null)}
+                                                            className="cursor-pointer hover:r-[1] transition-all"
+                                                        />
+                                                    </g>
+                                                ))}
+                                            </svg>
+                                        );
+                                    })()
+                            ) : (
+                                <div className="h-full flex items-center justify-center text-slate-500 font-bold text-xs uppercase tracking-widest">Aguardando dados suficientes para gerar gráfico...</div>
+                            )}
+                            
+                            {tooltip && (
+                                <div className="fixed z-[1000] bg-slate-900 border border-white/10 p-3 rounded-xl shadow-2xl pointer-events-none" style={{ left: tooltip.x, top: tooltip.y - 70, transform: 'translateX(-50%)' }}>
+                                    <div className="text-[10px] text-slate-500 font-bold uppercase mb-1">{new Date(tooltip.data.data).toLocaleDateString()}</div>
+                                    <div className="text-sm font-black text-white">{abaGrafico === 'peso' ? tooltip.data.peso + 'kg' : tooltip.data.bf_percentagem?.toFixed(1) + '%'}</div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Raio-X Técnico Elite */}
+                    <div className="mb-8">
+                        <div className="progress-section-card overflow-hidden" style={{ background: '#0a0a0c', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '28px', padding: '0' }}>
+                            <div style={{ padding: '24px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div className="w-2 h-6 bg-cyan-500 rounded-full shadow-[0_0_10px_#06b6d4]"></div>
+                                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Diagnóstico Estrutural</h3>
+                            </div>
+                            <div style={{ padding: '24px' }}>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="p-5 bg-white/5 rounded-2xl border border-white/5 relative group">
+                                        <div className="absolute top-2 right-2 w-1.5 h-1.5 bg-cyan-500 rounded-full animate-pulse"></div>
+                                        <div className="text-[10px] text-cyan-500 font-black uppercase mb-2">Músculo/Osso</div>
+                                        <div className="text-2xl font-technical text-white mb-1"><Counter value={massaMagra} suffix="kg" /></div>
+                                        <div className="w-full h-1 bg-white/5 rounded-full mt-3 overflow-hidden">
+                                            <div className="h-full bg-cyan-500" style={{ width: `${(massaMagra/100)*100}%` }}></div>
+                                        </div>
+                                    </div>
+                                    <div className="p-5 bg-white/5 rounded-2xl border border-white/5 relative group">
+                                        <div className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full"></div>
+                                        <div className="text-[10px] text-red-500 font-black uppercase mb-2">Massa Gorda</div>
+                                        <div className="text-2xl font-technical text-white mb-1"><Counter value={massaGorda} suffix="kg" /></div>
+                                        <div className="w-full h-1 bg-white/5 rounded-full mt-3 overflow-hidden">
+                                            <div className="h-full bg-red-500" style={{ width: `${(massaGorda/50)*100}%` }}></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="mt-6 p-6 bg-gradient-to-br from-orange-500/10 to-transparent rounded-2xl border border-orange-500/20 text-center relative overflow-hidden">
+                                    {(() => {
+                                        const status = waistToHeight < 0.50 ? { color: '#22c55e', text: 'SAUDÁVEL', desc: 'Risco metabólico baixo. Excelentes níveis.' } :
+                                                       waistToHeight <= 0.55 ? { color: '#eab308', text: 'ATENÇÃO', desc: 'Risco moderado. Considere ajustes.' } :
+                                                       { color: '#ef4444', text: 'ALERTA', desc: 'Risco elevado. Foco na gordura visceral.' };
+                                        return (
+                                            <>
+                                                <div className="text-[11px] text-orange-500 font-black uppercase mb-2 tracking-widest">Proporção Cintura / Altura</div>
+                                                <div className="text-4xl font-technical text-white mb-2" style={{ textShadow: `0 0 20px ${status.color}44` }}>{(waistToHeight || 0).toFixed(2)}</div>
+                                                <div className="text-[11px] text-slate-500 font-bold mb-3">{status.desc}</div>
+                                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black tracking-widest mx-auto" style={{ borderColor: `${status.color}44`, color: status.color, background: `${status.color}11` }}>
+                                                    <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: status.color }}></div>
+                                                    {status.text}
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Histórico Elite */}
+                    <div className="progress-section-card mb-8" style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '28px', padding: '32px' }}>
+                         <div className="flex justify-between items-center mb-8">
+                            <h3 className="ps-title" style={{ margin: 0 }}>Logbook de Performance</h3>
+                            <div className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Total: {history.length} registos</div>
+                         </div>
+                         <div className="overflow-x-auto">
+                            <table className="w-full text-left border-separate border-spacing-y-2">
+                                <thead>
+                                    <tr className="text-[11px] text-slate-500 font-black uppercase tracking-widest">
+                                        <th className="pb-4 px-4 cursor-pointer hover:text-white transition-colors" onClick={() => { setSortField('data'); setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); }}>Data {sortField === 'data' && (sortDir === 'asc' ? '↑' : '↓')}</th>
+                                        <th className="pb-4 px-4 cursor-pointer hover:text-white transition-colors" onClick={() => { setSortField('peso'); setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); }}>Peso {sortField === 'peso' && (sortDir === 'asc' ? '↑' : '↓')}</th>
+                                        <th className="pb-4 px-4">BF%</th>
+                                        <th className="pb-4 px-4">Pescoço / Cintura</th>
+                                        <th className="pb-4 px-4">Músculo (kg)</th>
+                                        <th className="pb-4 px-4 text-right">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {sortedHistory.map((row, idx) => (
+                                        <tr key={row.id} className="group hover:scale-[1.01] transition-transform duration-200">
+                                            <td className="py-4 px-4 bg-white/[0.03] rounded-l-2xl border-y border-l border-white/5 text-sm text-white font-bold">{new Date(row.data).toLocaleDateString()}</td>
+                                            <td className="py-4 px-4 bg-white/[0.03] border-y border-white/5 font-technical text-orange-500 text-lg">{row.peso}kg</td>
+                                            <td className="py-4 px-4 bg-white/[0.03] border-y border-white/5 font-technical text-cyan-400 font-black">{row.bf_percentagem ? row.bf_percentagem.toFixed(1) + '%' : <span className="text-slate-600 opacity-50 italic">N/A</span>}</td>
+                                            <td className="py-4 px-4 bg-white/[0.03] border-y border-white/5 text-xs text-slate-400 font-bold uppercase">{row.pescoco_cm || '--'} / {row.cintura_cm || '--'}cm</td>
+                                            <td className="py-4 px-4 bg-white/[0.03] border-y border-white/5 text-sm text-white font-bold">{(row.peso * (1 - (row.bf_percentagem || 0)/100)).toFixed(1)}kg</td>
+                                            <td className="py-4 px-4 bg-white/[0.03] rounded-r-2xl border-y border-r border-white/5 text-right">
+                                                <button onClick={() => handleEliminar(row.id)} className="p-2.5 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all">
+                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                         </div>
+                    </div>
+
+                    {/* Formulário Elite */}
+                    <div className="progress-section-card bg-gradient-to-b from-[#1e293b] to-[#0f172a] border border-white/10" style={{ borderRadius: '32px', padding: '40px' }}>
+                        <div className="flex items-center gap-4 mb-10">
+                            <div className="w-12 h-12 rounded-2xl bg-orange-500 flex items-center justify-center shadow-[0_0_20px_rgba(249,115,22,0.4)]">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-black text-white m-0">Novo Registo Bio</h3>
+                                <p className="text-slate-400 text-sm font-medium">Input técnico de perímetria corporal</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-10">
+                            {/* Secção Base */}
+                            <div>
+                                <div className="text-[10px] text-orange-500 font-black uppercase tracking-[3px] mb-6 flex items-center gap-3">
+                                    <span className="flex-grow h-px bg-orange-500/20"></span>
+                                    Métricas Base
+                                    <span className="flex-grow h-px bg-orange-500/20"></span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-[11px] text-slate-500 font-black uppercase ml-1">Género (Obrigatório)</label>
+                                        <div className="flex bg-black/40 rounded-2xl p-1 border border-white/10">
+                                            <button onClick={() => setGenero('m')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${genero === 'm' ? 'bg-orange-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Masc.</button>
+                                            <button onClick={() => setGenero('f')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${genero === 'f' ? 'bg-orange-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Fem.</button>
+                                        </div>
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-[11px] text-slate-500 font-black uppercase ml-1">Peso (kg)</label>
+                                        <input type="number" name="peso" value={form.peso} onChange={handleChange} placeholder="75.5" className="bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all outline-none" />
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-[11px] text-slate-500 font-black uppercase ml-1">Altura (cm)</label>
+                                        <input type="number" name="altura" value={form.altura} onChange={handleChange} placeholder="175" className="bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all outline-none" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Secção Perímetros */}
+                            <div>
+                                <div className="text-[10px] text-cyan-500 font-black uppercase tracking-[3px] mb-6 flex items-center gap-3">
+                                    <span className="flex-grow h-px bg-cyan-500/20"></span>
+                                    Perímetros (cm)
+                                    <span className="flex-grow h-px bg-cyan-500/20"></span>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+                                    {[
+                                        { label: 'Peito', name: 'peito' },
+                                        { label: 'Pescoço', name: 'pescoco' },
+                                        { label: 'Cintura', name: 'cintura' },
+                                        { label: 'Quadril', name: 'quadril' },
+                                        { label: 'Braco Esq', name: 'braco_esq' },
+                                        { label: 'Braco Dir', name: 'braco_dir' },
+                                        { label: 'Perna Esq', name: 'perna_esq' },
+                                        { label: 'Perna Dir', name: 'perna_dir' },
+                                        { label: 'Panturrilha', name: 'panturrilha' }
+                                    ].map(f => (
+                                        <div key={f.name} className="flex flex-col gap-2">
+                                            <label className="text-[10px] text-slate-600 font-black uppercase ml-1">{f.label}</label>
+                                            <input type="number" name={f.name} value={form[f.name]} onChange={handleChange} placeholder="0.0" className="bg-black/20 border border-white/5 rounded-xl p-3 text-white text-sm font-bold focus:border-cyan-500 transition-all outline-none" />
+                                        </div>
+                                    ))}
+                                    
+                                    {/* BF Preview Box */}
+                                    <div className="col-span-2 sm:col-span-1 bg-cyan-500/10 border border-dashed border-cyan-500/30 rounded-xl p-3 flex flex-col justify-center items-center">
+                                        <div className="text-[8px] text-cyan-500 font-black uppercase mb-1">Gordura IA (Estimada)</div>
+                                        <div className="text-white text-xl font-black italic">
+                                            {currentBFPreview !== null ? `${currentBFPreview.toFixed(1)}%` : '--.-%'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {formError && <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-bold text-center">{formError}</div>}
+
+                        <button 
+                            onClick={handleGravar} 
+                            disabled={loading || !genero}
+                            className="mt-12 w-full bg-white text-black font-black py-5 rounded-2xl text-base uppercase tracking-widest hover:bg-orange-500 hover:text-white hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed group flex items-center justify-center gap-3"
+                        >
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="group-hover:rotate-12 transition-transform"><path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            Submeter Avaliação Elite
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        const MOCK_INTL = [
+            "John Smith", "Michael Johnson", "Emily Davis", "David Miller", "James Wilson", "Robert Taylor", "William Brown", "Jean Dupont", "Pierre Lefebvre", "Marie Laurent", "Julien Morel", "Thomas Bernard", "Nicolas Petit", "Alejandro Garcia", "Javier Martinez", "Sofia Hernandez", "Diego Lopez", "Lucia Rodriguez", "Carlos Sanchez", "Marco Rossi", "Giuseppe Conti", "Francesca Marino", "Alessandro De Luca", "Roberto Mancini", "Antonio Ricci", "Chris Evans", "Sarah Parker", "Hans Schmidt", "Luca Ferrari", "Elena Romano", "Sven Larsson", "Oliver Wagner", "Emma Wilson", "Liam Thompson", "Noah Müller", "Mia Dubois", "Lucas Fischer", "Jakob Weber", "Lukas Meyer", "Finn Wagner", "Leon Becker", "Paul Schulz", "Jonas Hoffmann", "Felix Schäfer", "Maximilian Koch", "Tim Bauer", "David Richter", "Jan Wolf", "Lukas Neumann", "Marcel Schwarz"
+        ];
+        const MOCK_BR = [
+            "Gabriel Silva", "Lucas Santos", "Matheus Oliveira", "Pedro Costa", "João Pereira", "Rafael Rodrigues", "Guilherme Almeida", "Felipe Nascimento", "Gustavo Lima", "Vitor Araujo", "Ana Beatriz", "Julia Soares", "Beatriz Castro", "Lara Fernandes", "Isabela Martins", "Sophia Lopes", "Manuela Gomes", "Alice Ribeiro", "Helena Carvalho", "Enzo Cardoso", "Nicolas Rocha", "Arthur Mendes", "Davi Barbosa", "Miguel Freitas", "Bernardo Vieira", "Ricardo Alves", "Bruno Souza", "Tiago Ferreira", "Hugo Santos", "Leonardo Lima", "Caio Mello", "Igor Cavalcanti", "Murilo Peixoto", "Renan Correa", "Cauã Silveira", "Breno Fogaça", "Yuri Bernardes", "Ian Gouveia", "Danilo Macedo", "Erick Meireles", "Thales Viana", "Laís Porto", "Raquel Sales", "Talita Guimarães", "Letícia Assis", "Priscila Moura", "Carla Neves", "Amanda Leite", "Fabiana Monteiro", "Patrícia Nogueira"
+        ];
+        
+        const generateFakeRanking = (currentXP, filterMode = 'global', estado = 'WW') => {
+            const shift = Math.max(0, currentXP - 850);
+            
+            // Gerar Ranking Local (Estado)
+            let localList = [];
+            for (let i = 0; i < 50; i++) {
+                let base = 0;
+                if (i === 0) base = 990;
+                else if (i === 1) base = 950;
+                else if (i === 2) base = 920;
+                else if (i === 3) base = 890;
+                else if (i === 4) base = 860;
+                else base = Math.max(0, 860 - ((i - 4) * 30));
+                
+                const variance = (i * 17) % 20;
+                const xpFinal = base + shift + variance;
+
+                localList.push({
+                    id: `mock-local-${i}`,
+                    name: MOCK_BR[i % MOCK_BR.length],
+                    xp: xpFinal,
+                    level: Math.floor(xpFinal / 1000) + 1,
+                    estado: estado,
+                    isFake: true,
+                    avatar: i === 0 ? '👨‍🦱' : i === 1 ? '🧔' : i === 2 ? '👱‍♂️' : '🧑'
+                });
+            }
+
+            // Gerar Ranking Internacional (Mundial)
+            let intlList = [];
+            for (let i = 0; i < 50; i++) {
+                let base = 0;
+                if (i === 0) base = 1100;
+                else if (i === 1) base = 1050;
+                else if (i === 2) base = 1010;
+                else if (i === 3) base = 970;
+                else if (i === 4) base = 940;
+                else base = Math.max(0, 940 - ((i - 4) * 25));
+                
+                const variance = (i * 13) % 20;
+                const xpFinal = base + shift + variance;
+
+                intlList.push({
+                    id: `mock-intl-${i}`,
+                    name: MOCK_INTL[i % MOCK_INTL.length],
+                    xp: xpFinal,
+                    level: Math.floor(xpFinal / 1000) + 1,
+                    estado: 'WW',
+                    isFake: true,
+                    avatar: i === 0 ? '👲' : i === 1 ? '🧕' : i === 2 ? '👳‍♂️' : '👩'
+                });
+            }
+
+            if (filterMode === 'local') {
+                return localList;
+            } else {
+                // Global mode: mix INTL and LOCAL so local champions appear in the world ranking
+                let combined = [...intlList, ...localList];
+                combined.sort((a, b) => b.xp - a.xp);
+                combined.forEach((u, idx) => {
+                    if (u.id.includes('intl')) {
+                        const fakeEstados = ['WW', 'US', 'EU', 'AS', 'UK'];
+                        u.estado = fakeEstados[(idx * 7) % fakeEstados.length];
+                    }
+                });
+                return combined.slice(0, 50);
+            }
+        };
+
+        function RankingView({ session, userProfile, currentXP }) {
+            const [topUsers, setTopUsers] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [myRank, setMyRank] = useState(null);
+            const [filterMode, setFilterMode] = useState('global');
+            const [timeLeft, setTimeLeft] = useState('');
+
+            useEffect(() => {
+                const updateCountdown = () => {
+                    const now = new Date();
+                    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+                    const diffMs = nextMonth - now;
+                    
+                    const d = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                    const h = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    const m = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                    
+                    setTimeLeft(`${d}d ${h < 10 ? '0'+h : h}h ${m < 10 ? '0'+m : m}m`);
+                };
+                
+                updateCountdown();
+                const timer = setInterval(updateCountdown, 60000);
+                return () => clearInterval(timer);
+            }, []);
+
+            useEffect(() => {
+                const fetchRanking = async () => {
+                    setLoading(true);
+                    
+                    let combined = generateFakeRanking(currentXP || 0, filterMode, filterMode === 'global' ? 'WW' : (userProfile?.estado || 'SP'));
+
+                    if (session) {
+                        combined.push({
+                            id: session.user.id,
+                            name: userProfile?.name || 'Tu',
+                            xp: currentXP || 0,
+                            level: Math.floor((currentXP || 0) / 1000) + 1,
+                            estado: userProfile?.estado || 'PT',
+                            isReal: true,
+                            avatar: '👤'
+                        });
+                    }
+
+                    combined.sort((a, b) => b.xp - a.xp);
+                    
+                    const finalTop = combined.slice(0, 50);
+                    setTopUsers(finalTop);
+
+                    if (session) {
+                        const index = combined.findIndex(u => u.id === session.user.id);
+                        setMyRank(index !== -1 ? index + 1 : combined.length + 1);
+                    }
+                    setLoading(false);
+                };
+
+                fetchRanking();
+            }, [session, currentXP, filterMode, userProfile?.estado]);
+
+            const currentLeague = myRank <= 3 ? 'elite' : myRank <= 10 ? 'diamond' : myRank <= 25 ? 'platinum' : 'standard';
+
+            return (
+                <div className={`ranking-wrapper ${currentLeague} animate-in fade-in duration-500`}>
+                    {currentLeague === 'elite' && (
+                        <div className="floating-dust">
+                            {[...Array(15)].map((_, i) => (
+                                <div key={i} className="dust-particle" style={{
+                                    left: `${(i * 7) % 100}%`,
+                                    '--duration': `${15 + (i % 10)}s`,
+                                    '--drift': `${(i % 2 === 0 ? 1 : -1) * 40}px`,
+                                    animationDelay: `${i * 1.2}s`
+                                }} />
+                            ))}
+                        </div>
+                    )}
+                    
+                    <div className="progress-dashboard relative z-10 pb-40">
+                        <div className="page-header mb-2 text-center">
+                        <h1 style={{ fontSize: '28px', fontWeight: '900' }}>🏆 Hall of Fame</h1>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                            Temporada Alpha: Elite Arsenal
+                        </p>
+                    </div>
+
+                    {/* Banner FOMO */}
+                    <div className="mb-8 mx-auto max-w-[400px] bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4 flex items-center justify-center gap-3 animate-pulse">
+                        <span style={{ fontSize: '20px' }}>⏳</span>
+                        <div className="text-center">
+                            <div className="text-[10px] text-orange-500/80 font-black uppercase tracking-widest">Temporada termina em</div>
+                            <div className="text-lg font-technical text-white tracking-widest">{timeLeft}</div>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', justifyContent: 'center' }}>
+                        <button 
+                            onClick={() => setFilterMode('global')}
+                            style={{ padding: '8px 20px', borderRadius: '99px', border: '1px solid rgba(255,255,255,0.1)', background: filterMode === 'global' ? 'var(--accent)' : 'rgba(255,255,255,0.05)', color: filterMode === 'global' ? '#fff' : 'var(--text-secondary)', fontWeight: '900', transition: 'all 0.2s', cursor: 'pointer', fontSize: '11px', textTransform: 'uppercase' }}
+                        >🌍 Global</button>
+                        <button 
+                            onClick={() => {
+                                if (!userProfile?.estado) {
+                                    alert('Por favor, atualize o seu Estado no Perfil para ver o ranking local.');
+                                    return;
+                                }
+                                setFilterMode('local')
+                            }}
+                            style={{ padding: '8px 20px', borderRadius: '99px', border: '1px solid rgba(255,255,255,0.1)', background: filterMode === 'local' ? 'var(--accent)' : 'rgba(255,255,255,0.05)', color: filterMode === 'local' ? '#fff' : 'var(--text-secondary)', fontWeight: '900', transition: 'all 0.2s', cursor: 'pointer', fontSize: '11px', textTransform: 'uppercase' }}
+                        >📍 Local (Estado)</button>
+                    </div>
+
+                    {loading ? (
+                        <div className="flex items-center justify-center h-[30vh]">
+                            <div className="w-12 h-12 border-4 border-orange-500/20 border-t-orange-500 rounded-full animate-spin"></div>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {topUsers.map((u, i) => {
+                                const isMe = session && u.id === session.user.id;
+                                const rank = i + 1;
+                                
+                                let tierStyle = {
+                                    bg: 'rgba(255,255,255,0.03)',
+                                    border: 'rgba(255,255,255,0.05)',
+                                    icon: '',
+                                    glow: 'none',
+                                    accent: 'var(--text-primary)'
+                                };
+
+                                if (rank <= 3) {
+                                    tierStyle = {
+                                        bg: 'linear-gradient(90deg, rgba(234,179,8,0.15) 0%, rgba(255,255,255,0.02) 100%)',
+                                        border: 'rgba(234,179,8,0.4)',
+                                        icon: '👑',
+                                        glow: '0 0 25px rgba(234,179,8,0.15)',
+                                        accent: '#facc15'
+                                    };
+                                } else if (rank <= 10) {
+                                    tierStyle = {
+                                        bg: 'linear-gradient(90deg, rgba(34,211,238,0.1) 0%, rgba(255,255,255,0.02) 100%)',
+                                        border: 'rgba(34,211,238,0.3)',
+                                        icon: '💎',
+                                        glow: 'none',
+                                        accent: '#22d3ee'
+                                    };
+                                } else if (rank <= 25) {
+                                    tierStyle = {
+                                        bg: 'linear-gradient(90deg, rgba(226,232,240,0.08) 0%, rgba(255,255,255,0.02) 100%)',
+                                        border: 'rgba(226,232,240,0.2)',
+                                        icon: '⚙️',
+                                        glow: 'none',
+                                        accent: '#e2e8f0'
+                                    };
+                                } else {
+                                    tierStyle = {
+                                        bg: 'rgba(255,255,255,0.03)',
+                                        border: 'rgba(255,255,255,0.05)',
+                                        icon: '🏅',
+                                        glow: 'none',
+                                        accent: '#94a3b8'
+                                    };
+                                }
+
+                                if (isMe) {
+                                    tierStyle.bg = 'rgba(249, 115, 22, 0.15)';
+                                    tierStyle.border = 'rgba(249, 115, 22, 0.6)';
+                                }
+
+                                return (
+                                    <div 
+                                        key={u.id} 
+                                        style={{
+                                            display: 'flex', alignItems: 'center', gap: '16px', padding: '20px', borderRadius: '24px',
+                                            border: `1px solid ${tierStyle.border}`, background: tierStyle.bg, boxShadow: tierStyle.glow,
+                                            transition: 'transform 0.2s'
+                                        }}
+                                        className={rank <= 3 ? "animate-pulse" : ""}
+                                    >
+                                        <div style={{ width: '40px', fontSize: '22px', textAlign: 'center', fontWeight: '900' }}>
+                                            {tierStyle.icon || <span style={{ color: '#475569', fontSize: '12px' }}>#{rank}</span>}
+                                        </div>
+
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontSize: '15px', fontWeight: '900', color: isMe ? 'var(--accent)' : '#fff' }}>
+                                                {u.name} {isMe && <span className="ml-2 px-2 py-0.5 bg-orange-500 text-[9px] rounded-full text-white">TU</span>}
+                                            </div>
+                                            <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                                Nível {u.level} • {filterMode === 'global' ? 'World Class' : (u.estado || 'Atleta')}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ textAlign: 'right' }}>
+                                            <div style={{ fontSize: '18px', fontWeight: '900', color: tierStyle.accent }}>
+                                                {u.xp?.toLocaleString()}
+                                                <span style={{ fontSize: '9px', color: 'var(--text-muted)', marginLeft: '4px' }}>XP</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {session && (
+                        <div style={{ position: 'fixed', bottom: '90px', left: '20px', right: '20px', zIndex: 100 }}>
+                            <div style={{ 
+                                background: 'rgba(15, 23, 42, 0.8)', 
+                                backdropFilter: 'blur(12px)',
+                                border: '1px solid rgba(249, 115, 22, 0.5)', 
+                                borderRadius: '28px', 
+                                padding: '16px 24px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '16px',
+                                maxWidth: '500px',
+                                margin: '0 auto',
+                                boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
+                            }}>
+                                <div style={{ 
+                                    width: '50px', height: '50px', background: 'var(--accent)', borderRadius: '18px', 
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                    fontSize: '20px', fontWeight: '900', color: '#fff',
+                                    boxShadow: '0 0 20px rgba(249,115,22,0.3)'
+                                }}>
+                                    #{(!myRank || myRank > 50) ? '?' : myRank}
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: '13px', fontWeight: '900', color: '#fff' }}>Minha Posição</div>
+                                    <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>
+                                        {(!myRank || myRank > 50) ? (
+                                            <>🎯 Alvo: <span className="text-orange-500">Faltam {Math.max(1, (topUsers[49]?.xp || 0) - currentXP)} XP</span> para entrar no ranking.</>
+                                        ) : myRank === 1 ? (
+                                            <>🏆 <span className="text-orange-500">És o Top 1!</span> Mantém a posição.</>
+                                        ) : (
+                                            <>🎯 Próximo Alvo: <span className="text-orange-500">Faltam {Math.max(1, (topUsers[myRank - 2]?.xp || 0) - currentXP)} XP</span> para subir.</>
+                                        )}
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => console.log('Train Triggered')}
+                                    style={{ 
+                                        background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '14px', 
+                                        padding: '10px 14px', color: '#fff', fontSize: '10px', fontWeight: '900', 
+                                        textTransform: 'uppercase', cursor: 'pointer' 
+                                    }}
+                                >⚡ Treinar</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+        function HelpDashboard() {
+            const [faqOpen, setFaqOpen] = React.useState(null);
+
+            const handleReset = () => {
+                if (window.confirm('Tem certeza que deseja apagar todos os dados da aplicação e limpar a cache do seu dispositivo? Esta ação fará log-out e não pode ser desfeita.')) {
+                    localStorage.clear();
+                    window.location.reload();
+                }
+            };
+
+            const toggleFaq = (idx) => {
+                setFaqOpen(faqOpen === idx ? null : idx);
+            };
+
+            const faqs = [
+                { q: "Como acessar os Módulos Premium?", a: "Se adquiriu o Combo de Ouro, todos os módulos extra (Pilates, Idosos, Ginástica Pélvica) estarão disponíveis na aba 'Extras', bastando ativá-los gratuitamente se já estão desbloqueados na sua conta." },
+                { q: "Como funciona a Matemática Calórica?", a: "Utilizamos a fórmula profissional de Mifflin-St Jeor no Raio-X corporal. A calculadora estipula o seu gasto diário (TDEE) cruzando o seu nível cardiorespiratório e musculatura com o seu objetivo em dias ativos vs dias de descanso." },
+                { q: "Onde configuro o Peso Inicial?", a: "Pode configurar clicando no botão do Raio-X na aba de Evolução Corporal. Os seus registros permanecerão seguros mesmo que feche o app." },
+                { q: "Posso perder o meu registro de treinos de hoje?", a: "Apenas se limpar o cache do celular manualmente ou clicar em 'Limpar Cache do App' nas opções avançadas. A melhor prática é 'Instalar' a plataforma web como App para a tela inicial." }
+            ];
+
+            return (
+                <div className="progress-dashboard">
+                    <div className="page-header" style={{ marginBottom: '16px' }}>
+                        <h1>Central de Suporte</h1>
+                    </div>
+
+                    <div style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)', padding: '12px 16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
+                        <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 10px #22c55e', animation: 'pulse 2s infinite' }}></div>
+                        <span style={{ color: '#22c55e', fontWeight: '700', fontSize: '15px' }}>Sistemas Operacionais: 100% 🟢</span>
+                    </div>
+
+                    <div className="install-app-card" style={{ marginBottom: '32px' }}>
+                        <h3 className="install-app-card-title">📱 Como instalar a App</h3>
+                        <p className="install-app-card-text">
+                            Adicione a plataforma à sua Tela Inicial para que atue como um aplicativo nativo. Para Android ou iOS, clique em <strong style={{ color: 'var(--text-primary)' }}>Compartilhar</strong> (ícone exportar/opções) e depois em <strong style={{ color: 'var(--accent)' }}>"Adicionar à Tela Inicial"</strong>.
+                        </p>
+                        <div style={{ width: '100%', maxWidth: '280px', borderRadius: '8px', overflow: 'hidden', margin: '0 auto', marginTop: '16px' }}>
+                            <video src="./instalar_app.mp4" poster="./OIP.webp" controls playsInline preload="none" style={{ width: "100%", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.5)" }}></video>
+                        </div>
+                    </div>
+
+                    <h3 className="ps-title" style={{ marginTop: '32px' }}>Mini-Glossário da Plataforma</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '32px' }}>
+                        <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.4), rgba(15,23,42,0.8))', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                            <div style={{ fontSize: '24px', marginBottom: '8px' }}>🏆</div>
+                            <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>XP & Ranking</h4>
+                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Ganhe XP a cada treino e suba o seu nível competitivo no Hall of Fame de Elite.</p>
+                        </div>
+                        <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.4), rgba(15,23,42,0.8))', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                            <div style={{ fontSize: '24px', marginBottom: '8px' }}>📈</div>
+                            <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>Avaliação Física</h4>
+                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Mantenha as suas métricas visuais no Raio-X baseadas no Mifflin-St Jeor.</p>
+                        </div>
+                        <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.4), rgba(15,23,42,0.8))', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                            <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔓</div>
+                            <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>Módulos Extra</h4>
+                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>O ecossistema extra e de reabilitação. Explore de acordo com a permissão (VIP).</p>
+                        </div>
+                    </div>
+
+                    <h3 className="ps-title" style={{ marginTop: '32px' }}>Perguntas Frequentes (FAQ)</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
+                        {faqs.map((f, i) => (
+                            <div key={i} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                                <button onClick={() => toggleFaq(i)} style={{ width: '100%', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left' }}>
+                                    <span style={{ fontWeight: '600', fontSize: '15px' }}>{f.q}</span>
+                                    <span style={{ color: 'var(--accent)', transform: faqOpen === i ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s' }}>▼</span>
+                                </button>
+                                {faqOpen === i && (
+                                    <div style={{ padding: '0 16px 16px', color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.6' }}>
+                                        {f.a}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    <h3 className="ps-title" style={{ marginTop: '32px' }}>Fala Connosco</h3>
+                    <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.5), rgba(15,23,42,0.8))', padding: '24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', marginBottom: '32px', textAlign: 'center' }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '20px' }}>
+                            Descobriu um bug? Tem alguma sugestão de melhoria fenomenal para o nosso ecossistema? Envie um e-mail com detalhes.
+                        </p>
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                            <a href="mailto:suporte@app.com" style={{ display: 'inline-block', background: 'var(--accent)', color: '#fff', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', textDecoration: 'none', boxShadow: '0 4px 12px rgba(249,115,22,0.3)', flex: 1, maxWidth: '280px' }}>
+                                ✉️ Reportar Erro / Suporte
+                            </a>
+                        </div>
+                    </div>
+
+                    <h3 className="ps-title" style={{ marginTop: '32px', color: 'var(--red)' }}>Opções Avançadas</h3>
+                    <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '24px', borderRadius: '16px', marginBottom: '40px' }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '16px' }}>Encontrou um erro grave de cache que está a corromper as suas estatísticas? Use o botão para deslogar e limpar a Base local interna do seu perfil.</p>
+                        <button onClick={handleReset} style={{ width: '100%', background: 'transparent', border: '1px solid var(--red)', color: 'var(--red)', padding: '12px', borderRadius: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            Limpar Cache da App
+                        </button>
+                    </div>
+
+                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px', paddingBottom: '30px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px' }}>
+                        <div style={{ marginBottom: '6px', fontWeight: '700' }}>Plataforma Centralizada de Treino</div>
+                        <div style={{ letterSpacing: '1px', opacity: 0.7 }}>Versão 1.1.0</div>
+                        <div style={{ marginTop: '12px', display: 'flex', gap: '16px', justifyContent: 'center' }}>
+                            <a href="#termos" style={{ color: 'var(--text-muted)', textDecoration: 'underline' }}>Termos & Condições</a>
+                            <a href="#privacidade" style={{ color: 'var(--text-muted)', textDecoration: 'underline' }}>Privacidade</a>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const TREINO_MOCK = {
+            "grupos": [
+                {
+                    "id": "g1",
+                    "nome": "Membros Superiores",
+                    "icone_name": "💪"
+                },
+                {
+                    "id": "g2",
+                    "nome": "Membros Inferiores",
+                    "icone_name": "🦵"
+                },
+                {
+                    "id": "g3",
+                    "nome": "Abdominais",
+                    "icone_name": "🎯"
+                },
+                {
+                    "id": "g4",
+                    "nome": "Cardio & Mobilidade",
+                    "icone_name": "🌿"
+                }
+            ],
+            "musculos": [
+                {
+                    "id": "m1",
+                    "group_id": "g1",
+                    "nome": "Peitoral"
+                },
+                {
+                    "id": "m2",
+                    "group_id": "g1",
+                    "nome": "Costas"
+                },
+                {
+                    "id": "m3",
+                    "group_id": "g1",
+                    "nome": "Ombros"
+                },
+                {
+                    "id": "m4",
+                    "group_id": "g1",
+                    "nome": "Braços"
+                },
+                {
+                    "id": "m5",
+                    "group_id": "g2",
+                    "nome": "Quadríceps"
+                },
+                {
+                    "id": "m6",
+                    "group_id": "g2",
+                    "nome": "Posteriores"
+                },
+                {
+                    "id": "m7",
+                    "group_id": "g2",
+                    "nome": "Glúteos"
+                },
+                {
+                    "id": "m8",
+                    "group_id": "g2",
+                    "nome": "Panturrilhas"
+                },
+                {
+                    "id": "m9",
+                    "group_id": "g2",
+                    "nome": "Abdutores e Pelve"
+                },
+                {
+                    "id": "m10",
+                    "group_id": "g3",
+                    "nome": "Reto Abdominal"
+                },
+                {
+                    "id": "m11",
+                    "group_id": "g3",
+                    "nome": "Oblíquos e Core"
+                },
+                {
+                    "id": "m12",
+                    "group_id": "g4",
+                    "nome": "Cardio / HIIT"
+                },
+                {
+                    "id": "m13",
+                    "group_id": "g4",
+                    "nome": "Mobilidade"
+                }
+            ],
+            "areas": [
+                {
+                    "id": "a_p1",
+                    "muscle_id": "m1",
+                    "nome": "Peito Completo"
+                },
+                {
+                    "id": "a_p2",
+                    "muscle_id": "m1",
+                    "nome": "Peito Superior"
+                },
+                {
+                    "id": "a_p3",
+                    "muscle_id": "m1",
+                    "nome": "Peito Inferior"
+                },
+                {
+                    "id": "a_c1",
+                    "muscle_id": "m2",
+                    "nome": "Trapézio e Pescoço"
+                },
+                {
+                    "id": "a_c2",
+                    "muscle_id": "m2",
+                    "nome": "Trapézio e Rombóides (Costas)"
+                },
+                {
+                    "id": "a_c3",
+                    "muscle_id": "m2",
+                    "nome": "Grande Dorsal"
+                },
+                {
+                    "id": "a_c4",
+                    "muscle_id": "m2",
+                    "nome": "Lombar"
+                },
+                {
+                    "id": "a_c5",
+                    "muscle_id": "m2",
+                    "nome": "Costas Laterais"
+                },
+                {
+                    "id": "a_o1",
+                    "muscle_id": "m3",
+                    "nome": "Deltóide Frontal / Médio"
+                },
+                {
+                    "id": "a_o2",
+                    "muscle_id": "m3",
+                    "nome": "Deltóide Posterior"
+                },
+                {
+                    "id": "a_b1",
+                    "muscle_id": "m4",
+                    "nome": "Bíceps"
+                },
+                {
+                    "id": "a_b2",
+                    "muscle_id": "m4",
+                    "nome": "Tríceps"
+                },
+                {
+                    "id": "a_b3",
+                    "muscle_id": "m4",
+                    "nome": "Antebraços"
+                },
+                {
+                    "id": "a_b4",
+                    "muscle_id": "m4",
+                    "nome": "Punhos e Mãos"
+                },
+                {
+                    "id": "a_q1",
+                    "muscle_id": "m5",
+                    "nome": "Quadríceps Frontal (Perna Base)"
+                },
+                {
+                    "id": "a_q2",
+                    "muscle_id": "m5",
+                    "nome": "Vastos (Isolado)"
+                },
+                {
+                    "id": "a_po1",
+                    "muscle_id": "m6",
+                    "nome": "Isquiotibiais"
+                },
+                {
+                    "id": "a_g1",
+                    "muscle_id": "m7",
+                    "nome": "Glúteo Completo"
+                },
+                {
+                    "id": "a_pa1",
+                    "muscle_id": "m8",
+                    "nome": "Panturrilhas (Perfil)"
+                },
+                {
+                    "id": "a_pa2",
+                    "muscle_id": "m8",
+                    "nome": "Panturrilhas (Posterior)"
+                },
+                {
+                    "id": "a_qa1",
+                    "muscle_id": "m9",
+                    "nome": "Psoas / Flexores"
+                },
+                {
+                    "id": "a_qa2",
+                    "muscle_id": "m9",
+                    "nome": "Abdutores / Fáscia Lata"
+                },
+                {
+                    "id": "a_ab1",
+                    "muscle_id": "m10",
+                    "nome": "Abdominal Superior"
+                },
+                {
+                    "id": "a_ab2",
+                    "muscle_id": "m10",
+                    "nome": "Gomos Centrais"
+                },
+                {
+                    "id": "a_ob1",
+                    "muscle_id": "m11",
+                    "nome": "Oblíquos / Serrátil"
+                },
+                {
+                    "id": "a_ob2",
+                    "muscle_id": "m11",
+                    "nome": "Core Completo (Reforço)"
+                },
+                {
+                    "id": "a_ca1",
+                    "muscle_id": "m12",
+                    "nome": "Alta Intensidade (HIIT)"
+                },
+                {
+                    "id": "a_ca2",
+                    "muscle_id": "m12",
+                    "nome": "Resistência / LISS"
+                },
+                {
+                    "id": "a_mo1",
+                    "muscle_id": "m13",
+                    "nome": "Alongamento Dinâmico"
+                }
+            ],
+            "exercicios": [
+                {
+                    "id": "ex_peit_1",
+                    "area_id": "a_p1",
+                    "nome": "Flexões Normais",
+                    "nivel": "Intermediário",
+                    "sets_reps": "4x 12",
+                    "duracao_minutos": 5,
+                    "sprite_pos": "20% 0%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_peit_2",
+                    "area_id": "a_p2",
+                    "nome": "Flexões Inclinadas",
+                    "nivel": "Iniciante",
+                    "sets_reps": "3x 10",
+                    "duracao_minutos": 4,
+                    "sprite_pos": "20% 0%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_peit_3",
+                    "area_id": "a_p3",
+                    "nome": "Dips / Fundos para Peito",
+                    "nivel": "Avançado",
+                    "sets_reps": "4x 10",
+                    "duracao_minutos": 5,
+                    "sprite_pos": "20% 0%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_c_1",
+                    "area_id": "a_c1",
+                    "nome": "Encolhimentos",
+                    "nivel": "Iniciante",
+                    "sets_reps": "4x 15",
+                    "duracao_minutos": 4,
+                    "sprite_pos": "0% 0%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_c_3",
+                    "area_id": "a_c3",
+                    "nome": "Elevações Pull-Ups",
+                    "nivel": "Avançado",
+                    "sets_reps": "4x 8",
+                    "duracao_minutos": 6,
+                    "sprite_pos": "20% 66.666%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_c_4",
+                    "area_id": "a_c4",
+                    "nome": "Extensão Lombar",
+                    "nivel": "Intermediário",
+                    "sets_reps": "3x 15",
+                    "duracao_minutos": 5,
+                    "sprite_pos": "40% 66.666%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_o_1",
+                    "area_id": "a_o1",
+                    "nome": "Press Militar",
+                    "nivel": "Intermediário",
+                    "sets_reps": "4x 10",
+                    "duracao_minutos": 6,
+                    "sprite_pos": "40% 0%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_o_2",
+                    "area_id": "a_o2",
+                    "nome": "Face Pull",
+                    "nivel": "Intermediário",
+                    "sets_reps": "3x 15",
+                    "duracao_minutos": 5,
+                    "sprite_pos": "80% 66.666%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_b_1",
+                    "area_id": "a_b1",
+                    "nome": "Curl Bíceps",
+                    "nivel": "Iniciante",
+                    "sets_reps": "3x 12",
+                    "duracao_minutos": 4,
+                    "sprite_pos": "60% 0%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_b_2",
+                    "area_id": "a_b2",
+                    "nome": "Apoios Fechados",
+                    "nivel": "Intermediário",
+                    "sets_reps": "3x 12",
+                    "duracao_minutos": 4,
+                    "sprite_pos": "60% 66.666%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_q_1",
+                    "area_id": "a_q1",
+                    "nome": "Agachamento Livre",
+                    "nivel": "Intermediário",
+                    "sets_reps": "4x 15",
+                    "duracao_minutos": 6,
+                    "sprite_pos": "0% 100%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_po_1",
+                    "area_id": "a_po1",
+                    "nome": "Romanian Deadlift",
+                    "nivel": "Intermediário",
+                    "sets_reps": "4x 12",
+                    "duracao_minutos": 5,
+                    "sprite_pos": "60% 100%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_g_1",
+                    "area_id": "a_g1",
+                    "nome": "Ponte de Glúteos",
+                    "nivel": "Iniciante",
+                    "sets_reps": "4x 15",
+                    "duracao_minutos": 4,
+                    "sprite_pos": "40% 100%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_pa_1",
+                    "area_id": "a_pa1",
+                    "nome": "Elevação de Gémeos",
+                    "nivel": "Iniciante",
+                    "sets_reps": "4x 20",
+                    "duracao_minutos": 3,
+                    "sprite_pos": "80% 100%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_ab_1",
+                    "area_id": "a_ab1",
+                    "nome": "Crunches / Encolhimentos",
+                    "nivel": "Iniciante",
+                    "sets_reps": "3x 20",
+                    "duracao_minutos": 4,
+                    "sprite_pos": "0% 33.333%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_ab_2",
+                    "area_id": "a_ab2",
+                    "nome": "Elevação de Pernas",
+                    "nivel": "Intermediário",
+                    "sets_reps": "3x 15",
+                    "duracao_minutos": 5,
+                    "sprite_pos": "40% 33.333%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_ab_3",
+                    "area_id": "a_ob2",
+                    "nome": "Prancha Isométrica",
+                    "nivel": "Intermediário",
+                    "sets_reps": "3x 45s",
+                    "duracao_minutos": 4,
+                    "sprite_pos": "20% 33.333%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_ob_1",
+                    "area_id": "a_ob1",
+                    "nome": "Prancha Lateral Dir/Esq",
+                    "nivel": "Avançado",
+                    "sets_reps": "3x 45s",
+                    "duracao_minutos": 4,
+                    "sprite_pos": "60% 33.333%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_ca_1",
+                    "area_id": "a_ca1",
+                    "nome": "Burpees Escalados",
+                    "nivel": "Avançado",
+                    "sets_reps": "5x 1 min",
+                    "duracao_minutos": 8,
+                    "sprite_pos": "20% 33.333%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_ca_2",
+                    "area_id": "a_ca1",
+                    "nome": "Jumping Jacks",
+                    "nivel": "Iniciante",
+                    "sets_reps": "4x 2 mins",
+                    "duracao_minutos": 10,
+                    "sprite_pos": "20% 33.333%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_ca_3",
+                    "area_id": "a_ca2",
+                    "sprint_pos": "",
+                    "nome": "Corrida Estacionária",
+                    "nivel": "Intermediário",
+                    "sets_reps": "3x 5 mins",
+                    "duracao_minutos": 15,
+                    "sprite_pos": "0% 100%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_mo_1",
+                    "area_id": "a_mo1",
+                    "nome": "Rotações Canivete",
+                    "nivel": "Iniciante",
+                    "sets_reps": "2x 10 rep",
+                    "duracao_minutos": 4,
+                    "sprite_pos": "80% 33.333%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_gen_100",
+                    "area_id": "a_c2",
+                    "nome": "Treino Isolado: Trapézio e Rombóides (Costas)",
+                    "nivel": "Intermediário",
+                    "sets_reps": "3x 12",
+                    "duracao_minutos": 5,
+                    "sprite_pos": "40% 66.666%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_gen_101",
+                    "area_id": "a_c2",
+                    "nome": "Trapézio e Rombóides (Costas) (Variação B)",
+                    "nivel": "Avançado",
+                    "sets_reps": "4x 10",
+                    "duracao_minutos": 6,
+                    "sprite_pos": "20% 0%",
+                    "is_enabled": true
+                },
+                {
+                    "id": "ex_gen_102",
+                    "area_id": "a_c5",
+                    "nome": "Treino Costas Laterais",
+                    "nivel": "Intermediário",
+                    "sets_reps": "3x 12",
+                    "duracao_minutos": 5,
+                    "sprite_pos": "40% 66.666%",
+                    "is_enabled": true
+                }
+            ]
+        };
+
+        const ExerciciosCardCustom = ({ ex, index, onClickImage, onClickBody }) => {
+            return (
+                <div className="playlist-item" style={{ display: 'flex', gap: '16px', marginBottom: '8px', alignItems: 'stretch' }}>
+                    <div className="step-badge" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--accent)', color: '#fff', padding: '0 8px', borderRadius: '12px', writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontWeight: '900', fontSize: '14px', letterSpacing: '2px', flexShrink: 0, opacity: 0.9, minHeight: '120px' }}>
+                        PASSO {index + 1}
+                    </div>
+                    <div className="card" style={{ flexGrow: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', border: '1px solid rgba(255,255,255,0.05)', backgroundColor: 'var(--bg-secondary)', overflow: 'hidden', cursor: 'pointer' }} onClick={onClickBody}>
+                        <div style={{ position: 'relative', width: '100%', height: '140px', borderRadius: '12px', overflow: 'hidden', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); onClickImage(ex); }}>
+                            <div style={{ width: '100%', height: '100%', backgroundSize: '600% 400%', backgroundRepeat: 'no-repeat', backgroundImage: 'url("muscles.png")', backgroundPosition: ex.sprite_pos, filter: 'invert(1) hue-rotate(180deg) brightness(1.2)', transform: 'scale(1.4)' }}></div>
+                            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.8) 100%)' }}></div>
+                            <div style={{ position: 'absolute', bottom: '12px', left: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                <span style={{ background: ex.nivel === 'Iniciante' ? '#22c55e' : (ex.nivel === 'Intermediário' ? '#ea580c' : '#ef4444'), color: '#fff', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
+                                    {ex.nivel}
+                                </span>
+                            </div>
+                            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(4px)', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <svg viewBox="0 0 24 24" width="24" height="24" fill="#fff" stroke="none"><path d="M8 5v14l11-7z"></path></svg>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 style={{ fontSize: '17px', fontWeight: '800', lineHeight: 1.3, marginBottom: '8px' }}>{ex.nome}</h3>
+                            <div style={{ display: 'flex', gap: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--accent)" strokeWidth="2.5"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                                    <span style={{ fontWeight: '700', color: '#fff' }}>{ex.sets_reps}</span>
+                                </span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--accent)" strokeWidth="2.5"><circle cx="12" cy="12" r="9" strokeLinecap="round" strokeLinejoin="round"></circle><path d="M12 7v5l3 3" strokeLinecap="round" strokeLinejoin="round"></path></svg>
+                                    <span style={{ fontWeight: '700', color: '#fff' }}>{ex.duracao_minutos} min</span>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+
+
+        function SmartRestTimer({ timeSeconds, onComplete, onSkip }) {
+            const [timeLeft, setTimeLeft] = useState(timeSeconds);
+
+            useEffect(() => {
+                if (timeLeft <= 0) {
+                    try {
+                        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                        const osc = ctx.createOscillator();
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(800, ctx.currentTime);
+                        osc.connect(ctx.destination);
+                        osc.start();
+                        osc.stop(ctx.currentTime + 1);
+                        if (navigator.vibrate) navigator.vibrate([1000]);
+                    } catch (e) { }
+                    onComplete();
+                    return;
+                }
+
+                const timer = setInterval(() => {
+                    setTimeLeft(prev => {
+                        const p = prev - 1;
+                        if (p > 0 && p <= 3) {
+                            try {
+                                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                                const osc = ctx.createOscillator();
+                                osc.frequency.setValueAtTime(440, ctx.currentTime);
+                                osc.connect(ctx.destination);
+                                osc.start();
+                                osc.stop(ctx.currentTime + 0.2);
+                            } catch (e) { }
+                        }
+                        return p;
+                    });
+                }, 1000);
+                return () => clearInterval(timer);
+            }, [timeLeft, onComplete]);
+
+            const pct = (timeLeft / timeSeconds) * 100;
+            const radius = 60;
+            const circ = 2 * Math.PI * radius;
+            const strokeDashoffset = circ - (pct / 100) * circ;
+
+            return (
+                <div className="modal-overlay" style={{ background: 'rgba(15,23,42,0.95)', zIndex: 11000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <h2 style={{ color: '#fff', fontSize: '24px', marginBottom: '40px', fontWeight: '800' }}>Tempo de Descanso</h2>
+                    <div style={{ position: 'relative', width: '160px', height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="160" height="160" style={{ transform: 'rotate(-90deg)', position: 'absolute' }}>
+                            <circle cx="80" cy="80" r={radius} fill="transparent" stroke="rgba(255,255,255,0.1)" strokeWidth="12" />
+                            <circle cx="80" cy="80" r={radius} fill="transparent" stroke="var(--accent)" strokeWidth="12" strokeDasharray={circ} strokeDashoffset={strokeDashoffset} style={{ transition: 'stroke-dashoffset 1s linear' }} strokeLinecap="round" />
+                        </svg>
+                        <div style={{ fontSize: '48px', fontWeight: '900', color: '#fff' }}>{timeLeft}s</div>
+                    </div>
+                    <button className="btn-massive-success" style={{ marginTop: '50px', background: 'rgba(255,255,255,0.1)', color: '#fff' }} onClick={onSkip}>
+                        Saltar Descanso
+                    </button>
+                </div>
+            );
+        }
+
+        function TrackSetsModal({ ex, onClose, onShowTimer, onUpdateStreak }) {
+            const totalSets = parseInt((ex?.sets_reps || '1').split('x')[0]) || 1;
+            const targetReps = parseInt((ex?.sets_reps || '0').split('x')[1]) || 0;
+
+            const [setsData, setSetsData] = useState(Array(totalSets).fill({ weight: '', reps: '' }));
+            const [lastSessionData, setLastSessionData] = useState([]);
+
+            useEffect(() => {
+                async function fetchLastLocal() {
+                    if (!window.supabase) return;
+                    const { data: { session } } = await window.supabase.auth.getSession();
+                    if (!session) return;
+                    const res = await window.supabase.from('workout_logs').select('*').eq('user_id', session.user.id).eq('exercise_id', ex.id).order('date', { ascending: false }).limit(totalSets);
+                    if (res.data) setLastSessionData(res.data);
+                }
+                fetchLastLocal();
+            }, [ex, totalSets]);
+
+            const handleSaveSet = async (idx) => {
+                const row = setsData[idx];
+                const w = parseFloat(row.weight) || 0;
+                const r = parseInt(row.reps) || 0;
+
+                if (window.supabase) {
+                    const { data: { session } } = await window.supabase.auth.getSession();
+                    if (session) {
+                        await window.supabase.from('workout_logs').insert({
+                            user_id: session.user.id,
+                            exercise_id: ex.id,
+                            weight: w,
+                            reps: r,
+                            set_number: idx + 1
+                        });
+                        if (onUpdateStreak) onUpdateStreak();
+                    }
+                }
+
+                const isCompound = ex?.category?.includes('Composto') || ex?.category?.includes('Membros Inferiores') || ex?.category?.includes('Core');
+                const rest = isCompound ? (ex.rest_time_compound || 120) : (ex.rest_time_isolation || 60);
+                onShowTimer(rest);
+            };
+
+            return (
+                <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()} style={{ zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div className="password-modal-content" style={{ maxWidth: '400px', width: '90%', padding: '24px' }}>
+                        <button onClick={onClose} style={{ position: 'absolute', top: '16px', right: '16px', color: 'var(--text-muted)', fontSize: '24px', background: 'none', border: 'none' }}>&times;</button>
+                        <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#fff', marginBottom: '8px' }}>{ex.nome || ex.title || 'Tracking'}</h2>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '24px' }}>Registro Dinâmico de Progressive Overload</p>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            {Array.from({ length: totalSets }).map((_, idx) => {
+                                const last = lastSessionData[idx];
+                                const phWeight = last ? `Última: ${last.weight}kg` : "Kg";
+                                const phReps = last ? `${last.reps} reps` : (targetReps ? `Alvo: ${targetReps}` : "Reps");
+                                return (
+                                    <div key={idx} style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'var(--text-muted)', width: '30px' }}>{idx + 1}</div>
+                                        <input type="number" placeholder={phWeight} style={{ flex: 1, background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', color: '#fff', padding: '10px', borderRadius: '8px', fontSize: '14px' }}
+                                            value={setsData[idx].weight} onChange={e => { const n = [...setsData]; n[idx] = { ...n[idx], weight: e.target.value }; setSetsData(n); }} />
+                                        <input type="number" placeholder={phReps} style={{ flex: 1, background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)', color: '#fff', padding: '10px', borderRadius: '8px', fontSize: '14px' }}
+                                            value={setsData[idx].reps} onChange={e => { const n = [...setsData]; n[idx] = { ...n[idx], reps: e.target.value }; setSetsData(n); }} />
+                                        <button style={{ background: 'var(--accent)', color: '#fff', padding: '10px 14px', borderRadius: '8px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }} onClick={() => handleSaveSet(idx)}>✓</button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function useIntersectionObserver(options = {}) {
+            const [isIntersecting, setIsIntersecting] = useState(false);
+            const targetRef = useRef(null);
+
+            useEffect(() => {
+                const observer = new IntersectionObserver(([entry]) => {
+                    if (entry.isIntersecting) {
+                        setIsIntersecting(true);
+                        observer.disconnect();
+                    }
+                }, { rootMargin: '200px', ...options });
+
+                if (targetRef.current) observer.observe(targetRef.current);
+                return () => observer.disconnect();
+            }, [options]);
+
+            return [targetRef, isIntersecting];
+        }
+
+        function PremiumExerciseCard({ exercise, onClick, categoryImage }) {
+            const handleAdapterClick = () => {
+                if (onClick) onClick({
+                    id: exercise.id,
+                    nome: exercise.title,
+                    media: exercise.video_url,
+                    reps: '15 Reps'
+                });
+            };
+
+            return (
+                <div className="premium-card" onClick={handleAdapterClick} style={{ cursor: 'pointer' }}>
+                    <div className="premium-card-media" style={{ background: '#000 !important', backgroundColor: '#000', overflow: 'hidden' }}>
+                        <img src={categoryImage || "muscles.png"} alt={exercise.title} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8, background: '#000' }} />
+                        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #000 0%, transparent 50%)', backgroundColor: 'transparent' }}></div>
+                    </div>
+                    <div className="premium-card-content">
+                        <h3 className="premium-card-title">{exercise.title}</h3>
+                        <div className="premium-card-meta">{exercise.target_muscle}</div>
+                    </div>
+                </div>
+            );
+        }
+
+        function TreinoModuleLive({ setSel, hasAccess, onGoToExtras }) {
+            const [viewMode, setViewMode] = useState('categories');
+            const [data, setData] = useState([]);
+            const [categories, setCategories] = useState([]);
+            const [activeTab, setActiveTab] = useState(null);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                async function fetchLiveData() {
+                    const CACHE_KEY = 'treinos_categorias_cache';
+
+                    const processAndSetData = (ex) => {
+                        ex.sort((a, b) => {
+                            const numA = parseInt((a.title.match(/\d+/) || [0])[0], 10);
+                            const numB = parseInt((b.title.match(/\d+/) || [0])[0], 10);
+                            return numA - numB;
+                        });
+
+                        setData(ex);
+                        const uniqueCats = Array.from(new Set(ex.map(e => e.category))).filter(c => c && c !== 'Ignorado' && c.toLowerCase() !== 'core');
+                        const ORDEM_CATEGORIAS = ['Pernas', 'Costas', 'Peito', 'Ombros', 'Braços', 'Abdominais', 'Cardio', 'Outros'];
+                        uniqueCats.sort((a, b) => {
+                            const indexA = ORDEM_CATEGORIAS.indexOf(a);
+                            const indexB = ORDEM_CATEGORIAS.indexOf(b);
+                            if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+                            if (indexA === -1) return 1;
+                            if (indexB === -1) return -1;
+                            return indexA - indexB;
+                        });
+                        setCategories(uniqueCats);
+                        if (uniqueCats.length > 0) setActiveTab(uniqueCats[0]);
+                    };
+
+                    try {
+                        const cached = localStorage.getItem(CACHE_KEY);
+                        if (cached) {
+                            const parsed = JSON.parse(cached);
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                processAndSetData(parsed);
+                                setLoading(false);
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("Erro ao ler cache do localStorage", e);
+                    }
+
+                    try {
+                        const { data: ex, error } = await window.supabase
+                            .from('exercises')
+                            .select('*')
+                            .eq('is_enabled', true)
+                            .order('title', { ascending: true });
+
+                        if (ex) {
+                            processAndSetData(ex);
+                            try {
+                                localStorage.setItem(CACHE_KEY, JSON.stringify(ex));
+                            } catch (e) {
+                                console.warn("Erro ao guardar no localStorage", e);
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Erro fetch exercises", e);
+                    } finally {
+                        setLoading(false);
+                    }
+                }
+                if (window.supabase) fetchLiveData();
+                else setLoading(false);
+            }, []);
+
+            if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>A sincronizar base de dados... ⏳</div>;
+
+            const categoryConfigs = {
+                'pernas': { color: '#3b82f6', img: './assets/categories/pernas.png' },
+                'costas': { color: '#a855f7', img: './assets/categories/costas.png' },
+                'peito': { color: '#ef4444', img: './assets/categories/peito.png' },
+                'ombros': { color: '#f59e0b', img: './assets/categories/ombros.png' },
+                'braços': { color: '#ec4899', img: './assets/categories/bracos.png' },
+                'abdominais': { color: '#06b6d4', img: './assets/categories/abdominais.png' },
+                'cardio': { color: '#22c55e', img: './assets/categories/cardio.png' },
+                'outros': { color: '#eab308', img: './assets/categories/outros.png' },
+                'outro': { color: '#eab308', img: './assets/categories/outros.png' }
+            };
+
+            const displayedExercises = data.filter(e => e.category === activeTab);
+
+            return (
+                <div className="w-full" id="treino-module-live-root">
+                    <div style={{
+                        animation: 'fade-in 0.4s ease-out',
+                        paddingBottom: '100px',
+                        width: '100%',
+                        position: 'relative'
+                    }}>
+
+                        {viewMode === 'categories' ? (
+                            <div style={{ animation: 'fade-in 0.3s ease' }}>
+                                <div style={{ padding: '24px', fontSize: '28px', fontWeight: '900', color: 'white', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                    <Zap size={32} className="text-white" />
+                                    <span className="text-white">O que vamos treinar hoje?</span>
+                                </div>
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(2, 1fr)',
+                                    gap: '24px',
+                                    padding: '24px',
+                                    width: '100%'
+                                }}>
+                                    {categories.map(cat => {
+                                        const config = categoryConfigs[cat.toLowerCase()] || categoryConfigs['outros'];
+                                        const themeColor = config.color;
+
+                                        return (
+                                            <button
+                                                key={cat}
+                                                onClick={() => {
+                                                    setActiveTab(cat);
+                                                    setViewMode('exercises');
+                                                }}
+                                                style={{
+                                                    outline: 'none',
+                                                    position: 'relative',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    padding: '24px 12px',
+                                                    background: 'linear-gradient(180deg, rgba(30, 41, 59, 0.45) 0%, rgba(2, 6, 23, 0.98) 100%)',
+                                                    backdropFilter: 'blur(20px)',
+                                                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                    borderRadius: '40px',
+                                                    aspectRatio: '1 / 1.25',
+                                                    boxShadow: '0 20px 40px -15px rgba(0,0,0,0.9)',
+                                                    overflow: 'hidden',
+                                                    cursor: 'pointer'
+                                                }}
+                                            >
+                                                <div style={{ width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(0,0,0,0.6)', border: `1px solid ${themeColor}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
+                                                    <img src={config.img} alt={cat} style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.25)' }} />
+                                                </div>
+                                                <span style={{ color: '#ffffff', fontSize: '18px', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', textAlign: 'center', marginTop: '16px' }}>
+                                                    {cat}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ animation: 'fade-in 0.3s ease' }}>
+                                <div style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                    <button 
+                                        onClick={() => setViewMode('categories')}
+                                        style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: 'white', padding: '12px 20px', borderRadius: '16px', fontWeight: 'bold', cursor: 'pointer' }}
+                                    >
+                                        ← Voltar
+                                    </button>
+                                    <h2 style={{ fontSize: '24px', fontWeight: '900', textTransform: 'uppercase', color: 'white' }}>{activeTab}</h2>
+                                </div>
+                                <div style={{ padding: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '20px' }}>
+                                    {displayedExercises.map(ex => (
+                                        <PremiumExerciseCard
+                                            key={ex.id}
+                                            exercise={ex}
+                                            onClick={setSel}
+                                            categoryImage={categoryConfigs[activeTab?.toLowerCase()]?.img || categoryConfigs['outros'].img}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        function ArsenalVIP({ ud, onNav, temAcessoNutriScan, hasDesafio, hasSono, temAcessoPremium, setSel, isVipUser }) {
+            const [activeSubTab, setActiveSubTab] = useState('nutricao');
+
+            const SUB_TABS = [
+                { id: 'nutricao', label: 'Nutrição' },
+                { id: 'cronograma', label: 'Meu Desafio' },
+                { id: 'sono', label: 'Sono Profundo' }
+            ];
+
+            const renderSubPage = () => {
+                switch (activeSubTab) {
+                    case 'nutricao':
+                        return temAcessoNutriScan ? (
+                            <NutritionDashboard ud={ud} onNav={onNav} />
+                        ) : (
+                            <TeaserScannerPage onGoToExtras={() => onNav('extras')} />
+                        );
+                    case 'cronograma':
+                        return hasDesafio ? (
+                            <Cronograma 
+                                challengeLog={ud.challengeLog} 
+                                onCompleteDay={ud.completeChallengeDay} 
+                                onNav={onNav} 
+                                ud={ud} 
+                                onSelect={setSel} 
+                            />
+                        ) : (
+                            <TeaserDesafioPage />
+                        );
+                    case 'sono':
+                        return hasSono ? (
+                            <SonoProfundo ud={ud} />
+                        ) : (
+                            <TeaserSonoPage />
+                        );
+                    default:
+                        return null;
+                }
+            };
+
+            return (
+                <div className="arsenal-vip-container">
+                    <div className="flex gap-2 mb-6 overflow-x-auto pb-2 no-scrollbar px-1">
+                        {SUB_TABS.map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveSubTab(tab.id)}
+                                className={`px-5 py-3 rounded-2xl font-bold text-sm transition-all whitespace-nowrap ${
+                                    activeSubTab === tab.id 
+                                    ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20 scale-105' 
+                                    : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                                }`}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="animate-in fade-in duration-500">
+                        {renderSubPage()}
+                    </div>
+                </div>
+            );
+        }
+
+        function App() {
+
+            const ud = useUserData();
+            const [page, setPage] = useState('inicio');
+            
+            const [warriorCount, setWarriorCount] = useState(101 + (Math.floor(Date.now() / 300000) % 899));
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    setWarriorCount(101 + (Math.floor(Date.now() / 300000) % 899));
+                }, 60000); 
+                return () => clearInterval(interval);
+            }, []);
+
+            const [temAcessoPremium, setTemAcessoPremium] = useState(false); 
+            const [temAcessoNutriScan, setTemAcessoNutriScan] = useState(false);
+            const [temAcessoVIP, setTemAcessoVIP] = useState(false);
+            const [temAcessoTotalVIP, setTemAcessoTotalVIP] = useState(false);
+            const [hasDesafio, setHasDesafio] = useState(false);
+            const [hasSono, setHasSono] = useState(false);
+
+            React.useEffect(() => {
+                const checkAccess = () => {
+                    const profile = ud.userProfile;
+                    const localModules = JSON.parse(localStorage.getItem('app_unlocked_modules') || '[]');
+                    
+                    const totalVip = profile?.permissions?.total_vip || localModules.includes('total_vip') || profile?.is_vip;
+                    const gold = profile?.acesso_combo_ouro || localModules.includes('vip_gold') || totalVip;
+                    const nutri = profile?.assinatura_scanner_ia_ativa || localModules.includes('scanner_ia') || localStorage.getItem('acessoScannerIA') === 'true' || totalVip;
+                    const vip = profile?.permissions?.vip || localModules.includes('comunidade_vip') || totalVip;
+                    
+                    const desafio = profile?.permissions?.desafio30 || localModules.includes('desafio30') || gold || totalVip;
+                    const sono = profile?.permissions?.sono || localModules.includes('sono') || gold || totalVip;
+
+                    setTemAcessoTotalVIP(!!totalVip);
+                    setTemAcessoPremium(!!gold);
+                    setTemAcessoNutriScan(!!nutri);
+                    setTemAcessoVIP(!!vip);
+                    setHasDesafio(!!desafio);
+                    setHasSono(!!sono);
+                };
+                checkAccess();
+            }, [ud.userProfile]);
+
+            const [selectedGroup, setSelectedGroup] = useState(null);
+            const [selectedMuscle, setSelectedMuscle] = useState(null);
+            const [selectedArea, setSelectedArea] = useState(null);
+            const [search, setSearch] = useState('');
+            const [cat, setCat] = useState('Todos');
+            const [diff, setDiff] = useState('Todos');
+            const [modFilter, setModFilter] = useState('base');
+            const [sel, setSel] = useState(null);
+            const [trackEx, setTrackEx] = useState(null);
+            const [restTimer, setRestTimer] = useState(0);
+            const [notifOpen, setNotifOpen] = useState(false);
+            const [safeVideoModalOpen, setSafeVideoModalOpen] = useState(false);
+            const [showBackToTop, setShowBackToTop] = useState(false);
+            const [isLoadingExercises, setIsLoadingExercises] = useState(true);
+            const [isQuestActive, setIsQuestActive] = React.useState(true);
+            const [questSuccess, setQuestSuccess] = React.useState(false);
+            const [showXpModal, setShowXpModal] = useState(false);
+
+            const handleScannerUnlock = React.useCallback(() => {
+                localStorage.setItem('acessoScannerIA', 'true');
+                setTemAcessoNutriScan(true);
+            }, []);
+
+            const completeQuest = React.useCallback(() => {
+                setQuestSuccess(true);
+                setTimeout(() => setIsQuestActive(false), 2000);
+            }, []);
+            const [dailyWorkout, setDailyWorkout] = useState([]);
+            const [dailyWorkoutOpen, setDailyWorkoutOpen] = useState(false);
+            const [dailyWorkoutIndex, setDailyWorkoutIndex] = useState(0);
+            const [completedDailyIds, setCompletedDailyIds] = useState([]); 
+            const [streakCount, setStreakCount] = useState(0);
+            const [allExercises, setAllExercises] = useState([]);
+            const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+
+            // GARBAGE COLLECTION EXTREMA: Corta qualquer vídeo ativo quando muda de página ou fecha modais
+            useEffect(() => {
+                document.querySelectorAll('video').forEach(v => {
+                    if (!v.paused) v.pause();
+                    v.removeAttribute('src');
+                    v.load();
+                });
+            }, [page]);
+
+            useEffect(() => {
+                if (!dailyWorkoutOpen) {
+                    document.querySelectorAll('video').forEach(v => {
+                        if (!v.paused) v.pause();
+                        v.removeAttribute('src');
+                        v.load();
+                    });
+                }
+            }, [dailyWorkoutOpen]);
+
+            useEffect(() => {
+                if (!sel) {
+                    document.querySelectorAll('video').forEach(v => {
+                        if (!v.paused) v.pause();
+                        v.removeAttribute('src');
+                        v.load();
+                    });
+                }
+            }, [sel]);
+
+            const handleLogout = useCallback(async () => {
+                if (window.supabase) {
+                    await window.supabase.auth.signOut();
+                }
+                localStorage.clear();
+                sessionStorage.clear();
+                window.location.reload();
+            }, []);
+
+            const fetchUserStreaks = useCallback(async () => {
+                if (!window.supabase) return;
+                const { data: { session } } = await window.supabase.auth.getSession();
+                if (!session) return;
+
+                try {
+                    const { data, error } = await window.supabase
+                        .from('workout_logs')
+                        .select('created_at')
+                        .eq('user_id', session.user.id)
+                        .order('created_at', { ascending: false });
+
+                    if (error) throw error;
+
+                    if (data && data.length > 0) {
+                        const localDates = data.map(log => safeFormatDate(log.created_at)).filter(Boolean);
+                        const uniqueDates = [...new Set(localDates)];
+                        if (uniqueDates.length === 0) { setStreakCount(0); return; }
+
+                        const today = safeFormatDate(new Date());
+                        const yesterdayDate = new Date();
+                        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+                        const yesterday = safeFormatDate(yesterdayDate);
+
+                        if (uniqueDates[0] !== today && uniqueDates[0] !== yesterday) {
+                            setStreakCount(0);
+                            return;
+                        }
+
+                        let streak = 0;
+                        let currentDayStr = uniqueDates[0];
+
+                        for (let i = 0; i < uniqueDates.length; i++) {
+                            const dateStr = uniqueDates[i];
+                            const d1 = new Date(currentDayStr);
+                            const d2 = new Date(dateStr);
+                            const diffTime = Math.abs(d1 - d2);
+                            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+                            if (i === 0) {
+                                streak = 1;
+                            } else if (diffDays === 1) {
+                                streak++;
+                                currentDayStr = dateStr;
+                            } else if (diffDays > 1) {
+                                break;
+                            }
+                        }
+                        setStreakCount(streak);
+                    } else {
+                        setStreakCount(0);
+                    }
+                } catch (e) {
+                    console.error("Erro ao calcular streaks:", e);
+                }
+            }, []);
+
+            const fetchAllExercises = useCallback(async () => {
+                if (!window.supabase) return;
+                try {
+                    const { data, error } = await window.supabase
+                        .from('exercises')
+                        .select('*')
+                        .eq('is_enabled', true)
+                        .order('title', { ascending: true });
+                    if (data) setAllExercises(data);
+                } catch (e) {
+                    console.error('Erro ao buscar exercícios:', e);
+                } finally {
+                    setIsLoadingExercises(false);
+                }
+            }, []);
+
+            useEffect(() => {
+                if (ud.session) fetchAllExercises();
+            }, [ud.session, fetchAllExercises]);
+
+
+
+            useEffect(() => {
+                const handleScroll = () => {
+                    setShowBackToTop(window.scrollY > 400);
+                };
+                window.addEventListener('scroll', handleScroll);
+                return () => window.removeEventListener('scroll', handleScroll);
+            }, []);
+
+            useEffect(() => {
+                if (ud.session) fetchUserStreaks();
+            }, [ud.session, fetchUserStreaks]);
+
+            const completedExLogs = ud.completedLog || [];
+            
+            const completedExList = React.useMemo(() => {
+                if (!allExercises || allExercises.length === 0) return [];
+                return completedExLogs.map(lg => (allExercises || []).find(e => e.id === lg.id)).filter(Boolean);
+            }, [completedExLogs, allExercises]);
+
+            const totalSetsValue = React.useMemo(() => {
+                let total = 0;
+                completedExList.forEach(e => {
+                    const val = parseInt(e?.sets || '0');
+                    if (!isNaN(val)) total += val;
+                });
+                return total;
+            }, [completedExList]);
+
+            const estMinutesValue = totalSetsValue * 1.5;
+
+            const catStats = React.useMemo(() => {
+                if (!allExercises || allExercises.length === 0) return [];
+
+                const rawCats = Array.from(new Set(allExercises.map(e => e?.category || 'Outros'))).filter(c => c && c !== 'Ignorado' && c !== 'Outros');
+                const ORDEM = ['Pernas', 'Costas', 'Peito', 'Ombros', 'Braços', 'Abdominais', 'Cardio', 'Mobilidade', 'Membros Inferiores', 'Membros Superiores'];
+                
+                const activeCategories = rawCats.sort((a, b) => {
+                    const ia = ORDEM.indexOf(a);
+                    const ib = ORDEM.indexOf(b);
+                    if (ia === -1 && ib === -1) return a.localeCompare(b);
+                    if (ia === -1) return 1;
+                    if (ib === -1) return -1;
+                    return ia - ib;
+                });
+
+                const counts = {};
+                activeCategories.forEach(c => counts[c] = 0);
+                completedExList.forEach(e => {
+                    if (e?.category && counts[e.category] !== undefined) {
+                        counts[e.category]++;
+                    }
+                });
+
+                const maxCount = Math.max(...Object.values(counts), 1);
+
+                return activeCategories.map(c => ({
+                    name: c,
+                    done: counts[c] || 0,
+                    pct: Math.round(((counts[c] || 0) / maxCount) * 100) || 0
+                }));
+            }, [completedExList, allExercises]);
+
+            const getCategoryLabel = useCallback((title = "") => {
+                const t = title.toLowerCase();
+                if (t.includes("perna")) return "PERNAS";
+                if (t.includes("abdom")) return "ABDOMINAIS";
+                if (t.includes("peito") || t.includes("supino")) return "PEITO";
+                if (t.includes("costas") || t.includes("remada")) return "COSTAS";
+                if (t.includes("ombro")) return "OMBROS";
+                if (t.includes("braço") || t.includes("braco") || t.includes("biceps") || t.includes("triceps")) return "BRAÇOS";
+                if (t.includes("cardio") || t.includes("corrida") || t.includes("polichinelo")) return "CARDIO";
+                return "EXERCÍCIO";
+            }, []);
+
+            const getBunnyEmbedUrl = useCallback((exercise) => {
+                const BUNNY_LIBRARY_ID = '630822';
+                if (!exercise) return null;
+
+                const candidates = [
+                    exercise.video_url,
+                    exercise.bunnyVideoId,
+                    exercise.bunny_id,
+                    exercise.video_id,
+                    exercise.videoId,
+                ].filter(Boolean).map(String);
+
+                for (const raw of candidates) {
+                    const value = raw.trim();
+                    if (!value) continue;
+
+                    if (value.includes('iframe.mediadelivery.net/embed/')) return value;
+
+                    const guidMatch = value.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
+                    if (guidMatch && (value.includes('.b-cdn.net') || value.includes('mediadelivery.net'))) {
+                        return `https://iframe.mediadelivery.net/embed/${BUNNY_LIBRARY_ID}/${guidMatch[1]}`;
+                    }
+
+                    if (value.match(/^[a-zA-Z0-9]{8,}$/) && !value.includes('youtube') && !value.includes('youtu.be')) {
+                        return `https://iframe.mediadelivery.net/embed/${BUNNY_LIBRARY_ID}/${value}`;
+                    }
+                }
+
+                return null;
+            }, []);
+
+            const generateDailyWorkout = useCallback(() => {
+                const bunnyOnly = allExercises.filter(ex => {
+                    if (!getBunnyEmbedUrl(ex)) return false;
+                    const cat = (ex.category || '').toLowerCase().trim();
+                    return !['outros', 'outro', 'ignorado'].includes(cat);
+                });
+                if (bunnyOnly.length === 0) return [];
+                setCompletedDailyIds([]);
+                const shuffled = [...bunnyOnly];
+                for (let i = shuffled.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+                }
+                const generated = shuffled.slice(0, 7);
+                setDailyWorkout(generated);
+                return generated;
+            }, [allExercises, getBunnyEmbedUrl]);
+
+            useEffect(() => {
+                if (allExercises.length > 0 && dailyWorkout.length === 0) {
+                    generateDailyWorkout();
+                }
+            }, [allExercises, dailyWorkout.length, generateDailyWorkout]);
+
+            const startDailyWorkout = useCallback(() => {
+                const queue = dailyWorkout.length ? dailyWorkout : generateDailyWorkout();
+                if (!queue || queue.length === 0) return;
+                setDailyWorkoutIndex(0);
+                setDailyWorkoutOpen(true);
+            }, [dailyWorkout, generateDailyWorkout]);
+
+            const concludeDailyWorkout = useCallback(async () => {
+                try {
+                    if (window.supabase) {
+                        const { data: { session } } = await window.supabase.auth.getSession();
+                        if (session) {
+                            await window.supabase.from('workout_logs').insert({
+                                user_id: session.user.id,
+                                exercise_id: 'full-body-daily',
+                                weight: 0,
+                                reps: dailyWorkout.length || 7,
+                                set_number: 1
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.error('Erro ao concluir treino full body:', e);
+                } finally {
+                    setDailyWorkoutOpen(false);
+                    fetchUserStreaks();
+                }
+            }, [dailyWorkout.length, fetchUserStreaks]);
+
+            useEffect(() => {
+                if (page === 'inicio') generateDailyWorkout();
+            }, [page, generateDailyWorkout]);
+
+            const isVipUser = temAcessoTotalVIP; 
+
+            const handleAccessModule = useCallback((moduleId) => {
+                if (moduleId === 'scanner_ia') {
+                    setPage('nutricao');
+                    return;
+                }
+                if (moduleId === 'desafio30') {
+                    setPage('cronograma');
+                    return;
+                }
+                setModFilter(moduleId);
+                if (moduleId === 'senior') setCat('Idosos');
+                else if (moduleId === 'pilates') setCat('Pilates');
+                else if (moduleId === 'gymnastics') setCat('Ginástica');
+                else setCat('Todos');
+                setDiff('Todos');
+                setSearch('');
+                setPage('treinos');
+            }, []);
+
+            const calculateRecovery = useCallback(() => {
+                const logs = ud.completedLog || [];
+                const exercises = allExercises || [];
+                const RECOVERY_WINDOW = 48 * 60 * 60 * 1000;
+                const groups = {
+                    superior: ["Membros Superiores", "Braços"],
+                    inferior: ["Membros Inferiores"],
+                    core: ["Core"]
+                };
+                const getStatus = (groupNames) => {
+                    const groupExIds = exercises.filter(ex => groupNames.includes(ex.category)).map(ex => ex.id);
+                    const groupLogs = logs.filter(l => groupExIds.includes(l.id));
+                    if (groupLogs.length === 0) return 100;
+                    const lastTs = Math.max(...groupLogs.map(l => l.ts || 0));
+                    if (!lastTs) return 100;
+                    const elapsed = Date.now() - lastTs;
+                    if (elapsed >= RECOVERY_WINDOW) return 100;
+                    return Math.max(5, Math.floor((elapsed / RECOVERY_WINDOW) * 100));
+                };
+                return { superior: getStatus(groups.superior), inferior: getStatus(groups.inferior), core: getStatus(groups.core) };
+            }, [ud.completedLog, allExercises]);
+
+            const recovery = calculateRecovery();
+
+            if (ud.authLoading) {
+                return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f172a', color: '#f97316', fontWeight: 'bold', fontSize: '1.2rem' }}>A preparar a Arena...</div>;
+            }
+
+            if (!ud.session) {
+                return <AuthModal />;
+            }
+
+            if (ud.recoveryMode) {
+                return (
+                    <div className="fixed inset-0 z-[15000] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
+                        <div className="auth-card" style={{ maxWidth: '400px', width: '100%', position: 'relative' }}>
+                            <h2 style={{ color: '#fff', fontSize: '20px', fontWeight: '900', marginBottom: '12px' }}>Definir Nova Senha</h2>
+                            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', marginBottom: '24px' }}>
+                                Insira a sua nova senha abaixo para recuperar o acesso total.
+                            </div>
+                            <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                const pwd = e.target.newPwd.value;
+                                if(pwd.length < 6) return alert('A senha deve ter pelo menos 6 caracteres.');
+                                const { error } = await window.supabase.auth.updateUser({ password: pwd });
+                                if(error) alert('Erro: ' + error.message);
+                                else { 
+                                    alert('Senha atualizada com sucesso!'); 
+                                    ud.setRecoveryMode(false); 
+                                }
+                            }}>
+                                <div className="input-group" style={{ marginBottom: '20px' }}>
+                                    <label style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Nova Senha</label>
+                                    <input type="password" name="newPwd" className="ob-input" placeholder="••••••" required style={{ width: '100%', padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} />
+                                </div>
+                                <button type="submit" className="ob-submit-btn" style={{ width: '100%', padding: '14px', borderRadius: '14px', background: '#f97316', color: '#fff', fontWeight: '900', border: 'none', cursor: 'pointer' }}>Salvar Nova Senha</button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (!ud.userProfile) {
+                return <Onboarding onComplete={ud.saveProfile} />;
+            }
+
+            const getMotivationalPhrase = (goal) => {
+                switch (goal) {
+                    case 'Perder Peso': return 'A consistência derrete qualquer obstáculo. Vamos suar?';
+                    case 'Ganhar Massa': return 'Construir o corpo peça a peça. Hora de desafiar os músculos.';
+                    case 'Tonificar e Definir': return 'A escultura revela-se na repetição. Foco nos detalhes.';
+                    case 'Saúde e Mobilidade': return 'O corpo livre é um corpo forte. Vamos destrancar o seu potencial.';
+                    default: return 'O treino de hoje constrói o corpo de amanhã.';
+                }
+            };
+
+            const today = new Date();
+            const filtered = allExercises.filter(ex => {
+                const exMod = ex.moduleId || 'base';
+                const hasModuleAccess = isVipUser || ud.userProfile?.permissions?.[exMod];
+                if (ex.premium && !hasModuleAccess) return false;
+                if (page === 'explorar' && modFilter !== 'all' && exMod !== modFilter) return false;
+                if (cat !== 'Todos' && ex.category !== cat) return false;
+                if (diff !== 'Todos' && ex.difficulty !== diff) return false;
+                if (search.trim()) {
+                    const q = search.toLowerCase();
+                    if (!ex.title.toLowerCase().includes(q) && !ex.category.toLowerCase().includes(q)) return false;
+                }
+                return true;
+            });
+
+            const nowForXP = new Date();
+            const currentMonthXP = nowForXP.getMonth();
+            const currentYearXP = nowForXP.getFullYear();
+            
+            const xpPorDia = {};
+            (ud.completedLog || []).forEach(lg => {
+                const rawTs = lg.ts || lg.created_at;
+                const dObj = new Date(rawTs);
+                if (dObj.getMonth() === currentMonthXP && dObj.getFullYear() === currentYearXP) {
+                    const dStr = safeFormatDate(rawTs);
+                    if (dStr) {
+                        xpPorDia[dStr] = (xpPorDia[dStr] || 0) + 10;
+                    }
+                }
+            });
+            let totalExerciciosXP = 0;
+            for (const day in xpPorDia) {
+                totalExerciciosXP += Math.min(xpPorDia[day], 250);
+            }
+
+            let passiveMultiplier = 0;
+            const isVipOrGold = ud.userProfile?.permissions?.vip || ud.userProfile?.permissions?.gold || temAcessoPremium || temAcessoTotalVIP;
+            if (temAcessoNutriScan || isVipOrGold) passiveMultiplier += 1500;
+            if (ud.userProfile?.permissions?.senior || isVipOrGold) passiveMultiplier += 1000;
+            if (ud.userProfile?.permissions?.pilates || isVipOrGold) passiveMultiplier += 1000;
+            if (ud.userProfile?.permissions?.gymnastics || isVipOrGold) passiveMultiplier += 1000;
+            if (hasDesafio || isVipOrGold) passiveMultiplier += 1000;
+            if (hasSono || isVipOrGold) passiveMultiplier += 1000;
+
+            let passiveXP = 0;
+            if (passiveMultiplier > 0) {
+                const createdDate = ud.userProfile?.created_at ? new Date(ud.userProfile.created_at) : new Date();
+                const startOfCurrentMonth = new Date(currentYearXP, currentMonthXP, 1);
+                const startDate = createdDate > startOfCurrentMonth ? createdDate : startOfCurrentMonth;
+                const diffTime = Math.abs(nowForXP - startDate);
+                const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+                passiveXP = diffDays * 1000;
+            }
+
+            const homeXP = totalExerciciosXP + passiveXP + (ud.xpBonus || 0);
+            const userLevel = Math.floor(homeXP / 1000) + 1;
+            
+            const top1Base = 1100;
+            const top1Xp = homeXP >= 990 ? top1Base + (homeXP - 990) : top1Base;
+            
+            const sortedRanking = [
+                { id: 'f1', name: 'Lucas S.', xp: top1Xp, isFake: true, avatar: '👨‍🦱' },
+                { id: 'f2', name: 'Mateus M.', xp: 950, isFake: true, avatar: '🧔' },
+                { id: 'f3', name: 'Pedro C.', xp: 780, isFake: true, avatar: '👱‍♂️' },
+                { id: 'f4', name: 'Tiago B.', xp: 600, isFake: true, avatar: '👨‍🦲' },
+                { id: 'f5', name: 'André V.', xp: 300, isFake: true, avatar: '🧑' },
+                { id: 'u1', name: ud.userProfile?.name || 'Tu', xp: homeXP, isFake: false, avatar: '😎' }
+            ].sort((a, b) => b.xp - a.xp);
+            // -----------------------------------
+
+            const renderPage = () => {
+                switch (page) {
+                    case 'inicio': {
+                        const completedExLogs = ud.completedLog || [];
+                        const homeStreak = streakCount || 0;
+                        const dayOfWeek = today.getDay() === 0 ? 6 : today.getDay() - 1;
+                        const weekDays = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'];
+
+                        const startOfWeek = new Date(today);
+                        startOfWeek.setDate(today.getDate() - dayOfWeek);
+                        const weekActivity = [false, false, false, false, false, false, false];
+
+                        const todayStr = safeFormatDate(today);
+                        const startOfWeekStr = safeFormatDate(startOfWeek);
+
+                        completedExLogs.forEach(lg => {
+                            const rawTs = lg.ts || lg.created_at;
+                            const lgDateStr = safeFormatDate(rawTs);
+                            if (!lgDateStr) return;
+
+                            if (lgDateStr >= startOfWeekStr) {
+                                const dObj = new Date(rawTs);
+                                const dStr = dObj.getDay();
+                                const idx = dStr === 0 ? 6 : dStr - 1;
+                                if (idx >= 0 && idx < 7) weekActivity[idx] = true;
+                            }
+                        });
+
+                        // Lógica Nutrição Estática Premium
+                        const metaTdee = 2700;
+                        const kcalConsumed = 0;
+
+                        // Variáveis Dinâmicas de Texto do Objetivo
+                        const resolvedUserGoal = ud.metaProfile?.user_goal || ud.metaProfile?.objetivo_principal || ud.userProfile?.goal;
+                        const dynamicFocusText = resolvedUserGoal ? `Foco: ${resolvedUserGoal}` : 'Foco: Ganho de Massa';
+                        const dynamicPText = "Meta diária de ganho de massa magra.";
+
+                        // XP e Nível são calculados globalmente agora.
+
+                        const totalCompleted = ud.completedLog?.length || 0;
+                        const locTop1 = generateFakeRanking(homeXP, 'local', 'WW')[0].xp;
+                        const globTop1 = generateFakeRanking(homeXP, 'global', 'WW')[0].xp;
+                        const missingLocal = Math.max(0, locTop1 - homeXP);
+                        const missingGlobal = Math.max(0, globTop1 - homeXP);
+
+
+                        return (
+                            <div className="w-full min-h-screen pb-24 overflow-y-auto px-5">
+                                {/* 1. HEADER DINÂMICO PREMIUM */}
+                                <div className="dashboard-header sticky top-0 z-[100] backdrop-blur-xl bg-slate-900/80 border-b border-white/5 py-3 px-5 -mx-5 -mt-5 mb-6 flex justify-between items-center">
+                                    {/* Lado Esquerdo: Avatar & Identidade (Agora Interativo) */}
+                                    <div className="relative">
+                                        <button 
+                                            onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                                            className="flex items-center gap-3 active:scale-95 transition-all text-left group"
+                                        >
+                                            <div
+                                                style={{
+                                                    width: '42px', height: '42px', borderRadius: '50%',
+                                                        background: (ud.userProfile?.gender === 'Masculino' || ud.userProfile?.gender === 'male') 
+                                                        ? 'url(avatar_male.png) center / 220% no-repeat'
+                                                        : (ud.userProfile?.gender === 'Feminino' || ud.userProfile?.gender === 'female')
+                                                        ? 'url(avatar_female.png) center / 220% no-repeat'
+                                                        : ud.userProfile?.avatar_url 
+                                                        ? `url(${ud.userProfile.avatar_url}) center/cover` 
+                                                        : 'linear-gradient(135deg, #22d3ee, #06b6d4)',
+                                                    border: '2px solid rgba(255,255,255,0.1)'
+                                                }}
+                                                className="flex items-center justify-center font-bold text-white shadow-lg flex-shrink-0 group-hover:border-cyan-400/50 transition-colors"
+                                            >
+                                                {(!ud.userProfile?.avatar_url && (ud.userProfile?.gender !== 'Masculino' && ud.userProfile?.gender !== 'Feminino' && ud.userProfile?.gender !== 'male' && ud.userProfile?.gender !== 'female')) && (ud.userProfile?.name ? ud.userProfile.name.charAt(0).toUpperCase() : 'A')}
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <h1 className="text-base font-black text-white leading-tight group-hover:text-cyan-400 transition-colors flex items-center gap-1.5">
+                                                    Olá, {ud.userProfile?.name || 'Guerreiro'}!
+                                                    <svg className={`transition-transform duration-300 ${isProfileMenuOpen ? 'rotate-180' : ''} text-white/30`} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                                                </h1>
+                                                <div className="flex items-center mt-0.5 gap-2">
+                                                    <span className="bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[10px] font-black px-2 py-0.5 rounded-full tracking-wider uppercase">Nível {userLevel}</span>
+                                                    <span className="text-[10px] text-yellow-500 font-bold flex items-center gap-1"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15 8L21 9L16 14L17.5 20L12 17L6.5 20L8 14L3 9L9 8L12 2Z"/></svg> {homeXP.toLocaleString()} XP</span>
+                                                </div>
+                                            </div>
+                                        </button>
+
+                                        {/* Dropdown Menu de Perfil */}
+                                        {isProfileMenuOpen && (
+                                            <>
+                                                <div 
+                                                    className="fixed inset-0 z-[110]" 
+                                                    onClick={() => setIsProfileMenuOpen(false)}
+                                                />
+                                                <div className="absolute top-full left-0 mt-3 w-56 bg-slate-800/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl z-[120] overflow-hidden animate-fade-in-up" style={{ animation: 'fade-in-up 0.3s ease-out' }}>
+                                                    <div className="p-4 border-b border-white/5">
+                                                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Perfil Selecionado</div>
+                                                        <div className="text-sm font-bold text-white truncate">{ud.userProfile?.name || 'Utilizador'}</div>
+                                                    </div>
+                                                    <div className="p-2">
+                                                        <button 
+                                                            onClick={handleLogout}
+                                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-500 hover:bg-red-500/10 transition-colors text-sm font-bold"
+                                                        >
+                                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                                                            Terminar Sessão
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    {/* Lado Direito: Streak e Notificações */}
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-2xl border border-white/10 streak-glow">
+                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-orange-500">
+                                                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                                            </svg>
+                                            <span className="text-sm font-black text-white">{homeStreak}</span>
+                                        </div>
+                                        <button
+                                            onClick={() => setNotifOpen(true)}
+                                            className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white relative hover:bg-white/10 transition-colors"
+                                        >
+                                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+                                            <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-orange-500 rounded-full border-2 border-slate-900"></span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="home-dashboard p-4 sm:p-6 max-w-4xl mx-auto">
+                                {/* 1. Community Indicator */}
+                                <div className="flex items-center gap-3 mb-6 opacity-80">
+                                    <div className="relative flex h-2 w-2">
+                                        <div className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></div>
+                                        <div className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></div>
+                                    </div>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{warriorCount} guerreiros a treinar agora</span>
+                                </div>
+
+
+
+                                {/* 2 & 3. HERO + PROVA SOCIAL (Impacto) */}
+                                <div className="grid grid-cols-1 gap-4 mb-8">
+                                    {!temAcessoPremium ? (
+                                        <div
+                                            className="flash-quest-card rounded-[28px] p-7 relative overflow-hidden group cursor-pointer"
+                                            onClick={() => setPage('extras')}
+                                        >
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-[0_0_14px_rgba(249,115,22,0.6)]"></span>
+                                                <span className="text-xs text-slate-300 font-black uppercase tracking-widest">Oferta Exclusiva</span>
+                                            </div>
+                                            <div className="text-[32px] font-black text-white leading-[1.1] tracking-tight drop-shadow-[0_6px_18px_rgba(249,115,22,0.35)] mb-3">
+                                                60% OFF + ACESSO VITALÍCIO
+                                            </div>
+                                            <p className="text-[14px] text-slate-300 leading-relaxed font-medium mb-6">
+                                                Desbloqueie o Combo de Ouro: Desafio 30 Dias (Modo Titã) + Biblioteca completa de Módulos de Elite num único pack vitalício.
+                                            </p>
+                                            <div className="bg-orange-500 text-white font-black py-4 px-6 rounded-2xl text-xs uppercase tracking-[0.2em] text-center group-hover:bg-orange-400 transition-colors">ATIVE SEU COMBO AGORA</div>
+                                        </div>
+                                    ) : !temAcessoNutriScan ? (
+                                        <div
+                                            className="flash-quest-card rounded-[28px] p-7 relative overflow-hidden group cursor-pointer border-green-500/30"
+                                            onClick={() => setPage('nutricao')}
+                                            style={{ animation: 'flash-pulse 3s infinite', borderColor: 'rgba(34, 197, 94, 0.4)' }}
+                                        >
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_14px_rgba(34,197,94,0.6)]"></span>
+                                                <span className="text-xs text-slate-300 font-black uppercase tracking-widest">Upgrade Disponível</span>
+                                            </div>
+                                            <div className="text-[32px] font-black text-white leading-[1.1] tracking-tight mb-3">
+                                                NUTRI-SCAN IA
+                                            </div>
+                                            <p className="text-[14px] text-slate-300 leading-relaxed font-medium mb-6">
+                                                Analise as suas refeições com inteligência artificial. Lembre-se de ativar este módulo para precisão total.
+                                            </p>
+                                            <div className="bg-green-600 text-white font-black py-4 px-6 rounded-2xl text-xs uppercase tracking-[0.2em] text-center group-hover:bg-green-500 transition-colors">DESBLOQUEAR SCANNER</div>
+                                        </div>
+                                    ) : !temAcessoVIP ? (
+                                        <div
+                                            className="flash-quest-card rounded-[28px] p-7 relative overflow-hidden group cursor-pointer border-cyan-500/30"
+                                            onClick={() => setPage('extras')}
+                                            style={{ animation: 'flash-pulse 3s infinite', borderColor: 'rgba(6, 182, 212, 0.4)' }}
+                                        >
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 shadow-[0_0_14px_rgba(6,182,212,0.6)]"></span>
+                                                <span className="text-xs text-slate-300 font-black uppercase tracking-widest">Oportunidade Final</span>
+                                            </div>
+                                            <div className="text-[32px] font-black text-white leading-[1.1] tracking-tight mb-3">
+                                                COMUNIDADE VIP
+                                            </div>
+                                            <p className="text-[14px] text-slate-300 leading-relaxed font-medium mb-6">
+                                                Junte-se ao círculo interno dos guerreiros de elite. Acesso exclusivo a conteúdos e suporte.
+                                            </p>
+                                            <div className="bg-cyan-600 text-white font-black py-4 px-6 rounded-2xl text-xs uppercase tracking-[0.2em] text-center group-hover:bg-cyan-500 transition-colors">ADQUIRIR ACESSO VIP</div>
+                                        </div>
+                                    ) : (
+                                        <div
+                                            className="flash-quest-card rounded-[28px] p-7 relative overflow-hidden border-amber-500/30"
+                                            style={{ background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(15, 23, 42, 0.9) 100%)', borderColor: 'rgba(251, 191, 36, 0.4)' }}
+                                        >
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-[0_0_14px_rgba(251,191,36,0.6)]"></span>
+                                                <span className="text-xs text-amber-300 font-black uppercase tracking-widest">Status: Lendário</span>
+                                            </div>
+                                            <div className="text-[32px] font-black text-white leading-[1.1] tracking-tight mb-3">
+                                                100% FOCO ATIVO
+                                            </div>
+                                            <p className="text-[14px] text-slate-300 leading-relaxed font-medium mb-2">
+                                                Parabéns! Já desbloqueou todos os extras da plataforma.
+                                            </p>
+                                            <p className="text-[12px] text-amber-500/80 font-bold italic">
+                                                Estamos a trabalhar nos próximos módulos de elite para si. Continue a treinar!
+                                            </p>
+                                        </div>
+                                    )}
+
+                                </div>
+
+                                {/* NOVO BOTÃO XP/RANKING */}
+                                <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
+                                    <button
+                                        onClick={() => setShowXpModal(true)}
+                                        className="w-full relative overflow-hidden rounded-[28px] p-6 group cursor-pointer border border-yellow-500/30 transition-transform active:scale-[0.98]"
+                                        style={{ background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.15) 0%, rgba(15, 23, 42, 0.95) 100%)', boxShadow: '0 8px 32px rgba(234, 179, 8, 0.15)' }}
+                                    >
+                                        <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                                        <div className="flex items-center justify-between relative z-10">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center border border-yellow-300/50 shadow-[0_0_20px_rgba(234,179,8,0.4)]">
+                                                    <span className="text-2xl drop-shadow-md">🏆</span>
+                                                </div>
+                                                <div className="text-left">
+                                                    <h3 className="text-[17px] font-black text-white leading-tight tracking-tight mb-1 drop-shadow-md">Como Ganhar 100 Dólares/mês</h3>
+                                                    <div className="flex flex-col gap-0.5 mt-0.5">
+                                                        <p className="text-[10px] text-orange-400 font-black uppercase tracking-widest drop-shadow-md">
+                                                            {missingLocal === 0 ? "🏆 Top 1 Local!" : `Local: Faltam ${missingLocal.toLocaleString()} XP`}
+                                                        </p>
+                                                        <p className="text-[10px] text-cyan-400 font-black uppercase tracking-widest drop-shadow-md">
+                                                            {missingGlobal === 0 ? "🌍 Top 1 Global!" : `Global: Faltam ${missingGlobal.toLocaleString()} XP`}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-yellow-500 group-hover:bg-yellow-500 group-hover:text-white transition-colors">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                            </div>
+                                        </div>
+                                    </button>
+                                </div>
+
+                                {/* 4. Treino dinâmico do dia */}
+                                <div className="flex items-center justify-between gap-3 mb-4">
+                                    <h2 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                        O Seu Treino Full Body de Hoje
+                                    </h2>
+                                    <button
+                                        onClick={generateDailyWorkout}
+                                        className="text-[11px] font-black uppercase tracking-[0.12em] text-orange-300 hover:text-orange-200 transition-colors"
+                                        title="Trocar sequência"
+                                    >
+                                        ↻ Trocar Sequência
+                                    </button>
+                                </div>
+
+                                <div className="relative overflow-hidden w-full bg-slate-800/40 rounded-3xl shadow-xl mt-6 group mb-8">
+                                    <img
+                                        src="./assets/hero-bg.webp"
+                                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 pointer-events-none z-0 opacity-80"
+                                        alt="Treino Premium"
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/80 to-transparent pointer-events-none z-0"></div>
+
+                                    {/* Tag Flutuante */}
+                                    <div className="absolute top-5 left-5 z-20 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-2 pointer-events-none">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></div>
+                                        <span className="text-[10px] font-black text-white uppercase tracking-widest">Resultados Premium</span>
+                                    </div>
+
+                                    {/* Content Base */}
+                                    <div className="relative z-10 p-6 pointer-events-auto flex flex-col gap-5 mt-[140px]">
+                                        <div>
+                                            <h3 className="text-3xl font-black text-white leading-tight mb-2 drop-shadow-xl">
+                                                Sequência inteligente para corpo inteiro.
+                                            </h3>
+                                            <p className="text-[13px] text-slate-300 font-medium leading-relaxed">
+                                                Treino montado profissionalmente com 6 blocos: Pernas, Costas, Peito, Ombros, Braços e Cardio.
+                                            </p>
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
+                                                <div className="text-sm font-black text-white">{dailyWorkout.length}/7</div>
+                                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Treino montado</div>
+                                            </div>
+                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
+                                                <div className="text-sm font-black text-white">{Math.max(1, dailyWorkout.length * 6)} min</div>
+                                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Duração estimada</div>
+                                            </div>
+                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
+                                                <div className="text-sm font-black text-white">{homeStreak} dias</div>
+                                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Streak</div>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={startDailyWorkout}
+                                            disabled={isLoadingExercises}
+                                            className={`w-full py-4 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl text-white font-black tracking-[0.15em] uppercase text-sm shadow-[0_8px_25px_rgba(249,115,22,0.28)] hover:scale-[1.02] active:scale-[0.98] transition-all transform flex items-center justify-center gap-3 ${isLoadingExercises ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                        >
+                                            {isLoadingExercises ? (
+                                                <>
+                                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                    Carregando...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" className="drop-shadow-md"><path d="M8 5v14l11-7z"></path></svg>
+                                                    Começar Agora
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                                    {/* Body Status Card */}
+                                    <div className="bg-[#1e293b]/40 backdrop-blur-md border border-white/5 rounded-[28px] p-6 flex flex-col shadow-xl">
+                                        <div className="flex justify-between items-start mb-6">
+                                            <div>
+                                                <h3 className="text-xs text-slate-400 font-black uppercase tracking-widest mb-1">Status de Recuperação</h3>
+                                                <p className={`text-[10px] font-bold uppercase tracking-widest ${recovery.superior >= 80 && recovery.inferior >= 80 ? 'text-green-500' : 'text-orange-500'}`}>
+                                                    {recovery.superior >= 80 && recovery.inferior >= 80 ? 'Pronto para treinar' : 'Em recuperação'}
+                                                </p>
+                                            </div>
+                                            <span className="text-xl">🧬</span>
+                                        </div>
+                                        
+                                        <div className="flex gap-6 items-center">
+                                            <div className="w-20 h-32 relative opacity-80">
+                                                <svg viewBox="0 0 100 200" className="w-full h-full">
+                                                    {/* Head */}
+                                                    <circle cx="50" cy="20" r="15" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)" strokeWidth="1"/>
+                                                    {/* Torso - Dinâmico baseado em Superior */}
+                                                    <rect x="35" y="40" width="30" height="50" rx="5" 
+                                                        fill={recovery.superior < 50 ? "rgba(239, 68, 68, 0.4)" : recovery.superior < 90 ? "rgba(249, 115, 22, 0.4)" : "rgba(34, 197, 94, 0.3)"} 
+                                                        stroke={recovery.superior < 50 ? "#ef4444" : recovery.superior < 90 ? "#f97316" : "#22c55e"} 
+                                                        strokeWidth="1"/>
+                                                    {/* Arms - Dinâmico */}
+                                                    <rect x="20" y="40" width="12" height="60" rx="4" 
+                                                        fill={recovery.superior < 50 ? "rgba(239, 68, 68, 0.2)" : "rgba(34, 197, 94, 0.15)"} 
+                                                        stroke={recovery.superior < 50 ? "#ef4444" : "#22c55e"} 
+                                                        strokeWidth="1"/>
+                                                    <rect x="68" y="40" width="12" height="60" rx="4" 
+                                                        fill={recovery.superior < 50 ? "rgba(239, 68, 68, 0.2)" : "rgba(34, 197, 94, 0.15)"} 
+                                                        stroke={recovery.superior < 50 ? "#ef4444" : "#22c55e"} 
+                                                        strokeWidth="1"/>
+                                                    {/* Legs - Dinâmico baseado em Inferior */}
+                                                    <rect x="36" y="95" width="13" height="80" rx="4" 
+                                                        fill={recovery.inferior < 50 ? "rgba(239, 68, 68, 0.4)" : recovery.inferior < 90 ? "rgba(249, 115, 22, 0.4)" : "rgba(34, 197, 94, 0.3)"} 
+                                                        stroke={recovery.inferior < 50 ? "#ef4444" : recovery.inferior < 90 ? "#f97316" : "#22c55e"} 
+                                                        strokeWidth="1"/>
+                                                    <rect x="51" y="95" width="13" height="80" rx="4" 
+                                                        fill={recovery.inferior < 50 ? "rgba(239, 68, 68, 0.4)" : recovery.inferior < 90 ? "rgba(249, 115, 22, 0.4)" : "rgba(34, 197, 94, 0.3)"} 
+                                                        stroke={recovery.inferior < 50 ? "#ef4444" : recovery.inferior < 90 ? "#f97316" : "#22c55e"} 
+                                                        strokeWidth="1"/>
+                                                </svg>
+                                            </div>
+                                            <div className="flex-1">
+                                                <div className="space-y-3">
+                                                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
+                                                        <span className="text-slate-400">Superior / Braços</span>
+                                                        <span className={recovery.superior < 50 ? "text-red-500" : recovery.superior < 90 ? "text-orange-500" : "text-green-500"}>{recovery.superior}%</span>
+                                                    </div>
+                                                    <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                                                        <div className="h-full transition-all duration-1000" style={{ width: `${recovery.superior}%`, backgroundColor: recovery.superior < 50 ? '#ef4444' : recovery.superior < 90 ? '#f97316' : '#22c55e' }}></div>
+                                                    </div>
+                                                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
+                                                        <span className="text-slate-400">Core (Abdominais)</span>
+                                                        <span className={recovery.core < 50 ? "text-red-500" : recovery.core < 90 ? "text-orange-500" : "text-green-500"}>{recovery.core}%</span>
+                                                    </div>
+                                                    <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                                                        <div className="h-full transition-all duration-1000" style={{ width: `${recovery.core}%`, backgroundColor: recovery.core < 50 ? '#ef4444' : recovery.core < 90 ? '#f97316' : '#22c55e' }}></div>
+                                                    </div>
+                                                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
+                                                        <span className="text-slate-400">Membros Inferiores</span>
+                                                        <span className={recovery.inferior < 50 ? "text-red-500" : recovery.inferior < 90 ? "text-orange-500" : "text-green-500"}>{recovery.inferior}%</span>
+                                                    </div>
+                                                    <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                                                        <div className="h-full transition-all duration-1000" style={{ width: `${recovery.inferior}%`, backgroundColor: recovery.inferior < 50 ? '#ef4444' : recovery.inferior < 90 ? '#f97316' : '#22c55e' }}></div>
+                                                    </div>
+                                                </div>
+                                                <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-4 italic">
+                                                    {recovery.inferior === 100 && recovery.superior === 100 
+                                                        ? "\"Energia total detetada. Momento ideal para quebrar recordes.\""
+                                                        : recovery.inferior > recovery.superior 
+                                                        ? "\"Foco em Membros Inferiores hoje. Superior em recuperação.\""
+                                                        : "\"Foco em Superior hoje. Pernas em recuperação.\""}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <HydrationSection session={ud.session} userProfile={ud.userProfile} />
+                                </div>
+
+                                {/* 6. Seu Progresso (Móvel) */}
+                                <div className="bg-slate-800/40 backdrop-blur-md border border-white/5 rounded-[28px] p-6 flex flex-col shadow-xl relative overflow-hidden mb-8">
+                                    <h3 className="text-xs text-slate-400 font-black uppercase tracking-widest mb-4">Seu Progresso Geral</h3>
+
+                                    <div className="flex items-center justify-between gap-6">
+                                        <div className="flex-1">
+                                            <div className="text-4xl font-black text-white leading-none mb-1">{totalCompleted.toLocaleString()}</div>
+                                            <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Exercícios concluídos</div>
+                                        </div>
+                                        
+                                        <div className="h-12 w-px bg-white/10"></div>
+
+                                        <div className="flex-1">
+                                            <div className="text-4xl font-black text-white leading-none mb-1">{homeStreak}</div>
+                                            <div className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Dias seguidos</div>
+                                        </div>
+
+                                        <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-400/30 rounded-2xl px-3 py-3 shadow-[0_0_20px_rgba(251,191,36,0.1)]">
+                                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400">
+                                                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
+
+
+                                {/* Footer (Landing) */}
+                                <div className="mt-10 pt-8 border-t border-white/5">
+                                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                                        <div>
+                                            <div className="text-xs font-black text-white/90">Plataforma Premium de Treino</div>
+                                            <div className="text-[11px] text-slate-400 mt-1">Foco em consistência, precisão e resultados.</div>
+                                        </div>
+                                        <div className="flex gap-4">
+                                            <a href="#termos" className="text-[11px] text-slate-400 hover:text-white transition-colors">Termos</a>
+                                            <a href="#privacidade" className="text-[11px] text-slate-400 hover:text-white transition-colors">Privacidade</a>
+                                        </div>
+                                    </div>
+                                    <div id="termos" className="mt-4 text-[11px] text-slate-600">
+                                        Ao continuar, confirmas que aceitas os termos de uso da plataforma.
+                                    </div>
+                                    <div id="privacidade" className="mt-2 text-[11px] text-slate-600">
+                                        A sua privacidade é prioridade: coleta e tratamento de dados apenas para melhorar a experiência.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                    }
+                    case 'treinos': {
+                        return (
+                            <TreinoModuleLive 
+                                setSel={setSel} 
+                                hasAccess={temAcessoPremium} 
+                                onGoToExtras={() => setPage('extras')} 
+                            />
+                        );
+                    }
+
+                    case 'arsenal-vip': {
+                        return (
+                            <ArsenalVIP 
+                                ud={ud} 
+                                onNav={setPage} 
+                                temAcessoNutriScan={temAcessoNutriScan} 
+                                hasDesafio={hasDesafio} 
+                                hasSono={hasSono}
+                                temAcessoPremium={temAcessoPremium} 
+                                setSel={setSel}
+                                isVipUser={temAcessoTotalVIP}
+                            />
+                        );
+                    }
+
+                    case 'evolucao': {
+                        return <EvolucaoCorporal session={ud.session} userProfile={ud.userProfile} />;
+                    }
+
+                    case 'extras': {
+                        return <ExtrasHub 
+                            ud={ud}
+                            onNav={setPage}
+                            onAccessModule={handleAccessModule} 
+                            onScannerUnlock={handleScannerUnlock}
+                        />;
+                    }
+
+                    case 'ranking': {
+                        return <RankingTab session={ud.session} userProfile={ud.userProfile} currentXP={homeXP} />;
+                    }
+
+                    case 'ajuda': {
+                        return <HelpDashboard />;
+                    }
+
+                    case 'progresso': {
+                        if (isLoadingExercises) {
+                            return (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', background: 'rgba(255,255,255,0.02)', margin: '20px', borderRadius: '32px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                    <div style={{ width: '40px', height: '40px', border: '3px solid rgba(249,115,22,0.1)', borderTopColor: '#f97316', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                                    <p style={{ marginTop: '20px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '600', letterSpacing: '1px' }}>A SINCRONIZAR DADOS...</p>
+                                </div>
+                            );
+                        }
+
+                        const progressXP = (totalCompleted * 100) + (ud.xpBonus || 0);
+                        const progressLevel = Math.floor(progressXP / 1000) + 1;
+                        const xpNextLevel = progressLevel * 1000;
+                        const xpCurrentLevelProgress = progressXP % 1000;
+                        const progressPct = (xpCurrentLevelProgress / 1000) * 100;
+                        const progressStreak = streakCount || 0;
+
+                        return (
+                            <div className="progress-dashboard">
+                                <div className="page-header"><h1>📊 O Seu Progresso</h1></div>
+                                <div className="progress-level-card">
+                                    <div className="level-info">
+                                        <div>
+                                            <h2 style={{ fontSize: '28px', fontWeight: '900', color: 'var(--accent)' }}>Nível {progressLevel}</h2>
+                                            <p style={{ color: 'var(--text-secondary)' }}>{progressXP} XP Total</p>
+                                        </div>
+                                        <div style={{ textAlign: 'right' }}>
+                                            <h3 style={{ fontSize: '18px', fontWeight: '700' }}>{Math.round(progressPct)}%</h3>
+                                            <p style={{ color: 'var(--text-secondary)' }}>Faltam {xpNextLevel - progressXP} XP</p>
+                                        </div>
+                                    </div>
+                                    <div style={{ marginTop: '16px', padding: '12px 16px', background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.18)', borderRadius: '12px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                                        <span style={{ fontSize: '20px', flexShrink: 0 }}>🧠</span>
+                                        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', margin: 0 }}>
+                                            {progressStreak === 0 && 'O descanso é parte do treino! Amanhã voltamos à carga com tudo. 💪'}
+                                            {progressStreak >= 1 && `Streak de ${progressStreak} dias! A consistência é o segredo.`}
+                                        </p>
+                                    </div>
+                                </div>
+                                <MetabolismCard metaProfile={ud.metaProfile} saveMetaProfile={ud.saveMetaProfile} completedExList={completedExList} />
+                            </div>
+                        );
+                    }
+
+                    case 'guardados': {
+                        if (!temAcessoPremium) return <TeaserArsenalPage onGoToExtras={() => setPage('extras')} />;
+                        const favs = EXERCISES.filter(e => ud.favoritedIds.includes(e.id));
+                        return (
+                            <div>
+                                <div className="page-header">
+                                    <h1 className="text-4xl font-black italic tracking-tighter mb-2">❤️ Guardados</h1>
+                                </div>
+                                {favs.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {favs.map(ex => (
+                                            <ExerciseCard 
+                                                key={ex.id} 
+                                                exercise={ex} 
+                                                isCompleted={ud.isCompleted(ex.id)} 
+                                                isFavorited={true} 
+                                                onClick={setSel} 
+                                                onFav={ud.toggleFavorite} 
+                                            />
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="bg-white/5 p-12 rounded-[32px] text-center border border-dashed border-white/10">
+                                        <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Nenhum exercício guardado.</p>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    }
+                }
+            };
+
+            return (
+                <div className="app-layout">
+
+                    <Sidebar page={page} onNav={(p) => {
+                        if (p === 'explorar_senior') {
+                            setModFilter('senior');
+                            setCat('Idosos');
+                            setPage('treinos');
+                        } else if (p === 'explorar_pilates') {
+                            setModFilter('pilates');
+                            setCat('Pilates');
+                            setPage('treinos');
+                        } else if (p === 'explorar_gymnastics') {
+                            setModFilter('gymnastics');
+                            setCat('Ginástica');
+                            setPage('treinos');
+                        } else {
+                            if (p === 'explorar') setModFilter('base');
+                            setPage(p);
+                        }
+                    }} userProfile={ud.userProfile} />
+                    <div className="app-content" style={{ position: 'relative', zIndex: 1 }}>
+                        <main className="main" style={{ minHeight: '100vh' }}>{renderPage()}</main>
+                    </div>
+                    <div className="bottom-nav" style={{ bottom: '0px' }}>
+                        {NAV.map(n => (
+                            <button 
+                                key={n.id} 
+                                className={`bottom-nav-item ${page === n.id ? 'active' : ''}`} 
+                                onClick={() => {
+                                    if (n.id === 'treinos') setModFilter('base');
+                                    setPage(n.id);
+                                }}
+                            >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                    <path d={n.d} strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                                {n.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {sel && <VideoModal exercise={sel} isCompleted={ud.isCompleted(sel.id)} onClose={() => setSel(null)} onToggle={ud.toggleComplete} />}
+
+                    {createPortal(
+                        <button className={`back-to-top ${showBackToTop ? 'show' : ''}`} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '20px', height: '20px' }}><path d="M12 19V5M5 12l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        </button>,
+                        document.getElementById('portal-root')
+                    )}
+
+                    {trackEx && <TrackSetsModal ex={trackEx} onClose={() => setTrackEx(null)} onShowTimer={setRestTimer} onUpdateStreak={fetchUserStreaks} />}
+                    {restTimer > 0 && <SmartRestTimer timeSeconds={restTimer} onComplete={() => setRestTimer(0)} onSkip={() => setRestTimer(0)} />}
+
+                    {notifOpen && (
+                        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setNotifOpen(false)} style={{ zIndex: 11000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div className="password-modal-content" style={{ width: '90%', maxWidth: '400px', padding: '24px' }}>
+                                <button onClick={() => setNotifOpen(false)} style={{ position: 'absolute', top: '16px', right: '16px', color: 'var(--text-muted)', fontSize: '24px', background: 'none', border: 'none' }}>&times;</button>
+                                <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#fff', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '10px' }}>🔔 Notificações</h2>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    
+                                    {/* Notificação 1: FOMO Ranking & XP */}
+                                    <div 
+                                        className="cursor-pointer transition-transform hover:scale-[1.02]"
+                                        style={{ background: 'linear-gradient(90deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)', borderLeft: '4px solid #ef4444', padding: '16px', borderRadius: '0 8px 8px 0' }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <h4 style={{ color: '#fff', marginBottom: '6px', fontSize: '15px', fontWeight: '800' }}>⚠️ Alerta de Ranking</h4>
+                                            <span style={{ fontSize: '10px', color: '#ef4444', fontWeight: '900', background: 'rgba(239,68,68,0.2)', padding: '2px 6px', borderRadius: '4px' }}>AGORA</span>
+                                        </div>
+                                        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', lineHeight: '1.4' }}>
+                                            Você foi ultrapassado! Vários guerreiros ativaram o <strong style={{ color: '#fff' }}>Nutri-Scan IA</strong> (+1500 XP Diários) e subiram na tabela. Não fique para trás na corrida pelos $100!
+                                        </p>
+                                    </div>
+
+                                    {/* Notificação 2: Social Proof & Combo */}
+                                    <div 
+                                        className="cursor-pointer transition-transform hover:scale-[1.02]"
+                                        style={{ background: 'linear-gradient(90deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%)', borderLeft: '4px solid #f59e0b', padding: '16px', borderRadius: '0 8px 8px 0' }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <h4 style={{ color: '#fff', marginBottom: '6px', fontSize: '15px', fontWeight: '800' }}>💎 Desbloqueios em Massa</h4>
+                                            <span style={{ fontSize: '10px', color: '#f59e0b', fontWeight: '900', background: 'rgba(245,158,11,0.2)', padding: '2px 6px', borderRadius: '4px' }}>HÁ 1 HORA</span>
+                                        </div>
+                                        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', lineHeight: '1.4' }}>
+                                            Mais de <strong style={{ color: '#fff' }}>142 pessoas</strong> garantiram o <strong style={{ color: '#f59e0b' }}>Combo de Ouro</strong> hoje. O acesso vitalício aos módulos de Elite pode esgotar em breve.
+                                        </p>
+                                    </div>
+
+                                    {/* Notificação 3: Resultados & Elite */}
+                                    <div 
+                                        className="cursor-pointer transition-transform hover:scale-[1.02]"
+                                        style={{ background: 'linear-gradient(90deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.05) 100%)', borderLeft: '4px solid #10b981', padding: '16px', borderRadius: '0 8px 8px 0' }}
+                                    >
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <h4 style={{ color: '#fff', marginBottom: '6px', fontSize: '15px', fontWeight: '800' }}>🚀 Evolução Extrema</h4>
+                                        </div>
+                                        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', lineHeight: '1.4' }}>
+                                            Os membros com <strong style={{ color: '#10b981' }}>Acesso Total VIP</strong> estão relatando 3x mais resultados este mês. Eleve seu nível hoje.
+                                        </p>
+                                    </div>
+                                    
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {showXpModal && (
+                        <div className="fixed inset-0 z-[12000] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
+                            <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md" onClick={() => setShowXpModal(false)}></div>
+                            
+                            <div className="relative w-full max-w-md bg-gradient-to-b from-slate-900 to-[#0a0a0c] border border-white/10 rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+                                {/* Header / Banner Modal */}
+                                <div className="relative h-40 bg-gradient-to-br from-yellow-600 to-amber-700 flex flex-col items-center justify-center text-center p-6 border-b border-yellow-500/30 overflow-hidden">
+                                    <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZmZmIiBmaWxsLW9wYWNpdHk9IjAuMDUiLz4KPC9zdmc+')] opacity-20"></div>
+                                    <button 
+                                        onClick={() => setShowXpModal(false)}
+                                        className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-black/20 hover:bg-black/40 text-white backdrop-blur-sm transition-colors z-20"
+                                    >
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                    </button>
+                                    
+                                    <div className="w-16 h-16 bg-gradient-to-b from-yellow-300 to-yellow-500 rounded-full flex items-center justify-center text-3xl shadow-[0_0_30px_rgba(253,224,71,0.6)] mb-3 relative z-10 border-2 border-white/20">
+                                        💰
+                                    </div>
+                                    <h2 className="text-2xl font-black text-white italic tracking-tighter drop-shadow-lg relative z-10">O Top 1 Leva Tudo!</h2>
+                                </div>
+
+                                {/* Body Modal */}
+                                <div className="p-6">
+                                    <div className="bg-gradient-to-r from-orange-500/20 to-transparent border-l-4 border-orange-500 p-4 mb-6 rounded-r-xl shadow-lg">
+                                        <h4 className="text-[10px] text-orange-400 font-black uppercase tracking-widest mb-1">O Seu Objetivo</h4>
+                                        <p className="text-sm text-slate-200 font-medium leading-relaxed">
+                                            Faltam <strong className="text-yellow-400 font-black text-lg">{(top1Xp - homeXP).toLocaleString()} XP</strong> para você alcançar o Top 1!
+                                        </p>
+                                    </div>
+
+                                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6">
+                                        <div className="flex items-start gap-3">
+                                            <div className="text-xl">🏆</div>
+                                            <div>
+                                                <h4 className="text-[11px] text-yellow-500 font-black uppercase tracking-widest mb-1">O Prêmio</h4>
+                                                <p className="text-sm text-slate-200 font-medium leading-relaxed">
+                                                    Todos os meses, o <strong className="text-white font-bold">número 1 do Ranking Mundial</strong> e o <strong className="text-white font-bold">número 1 do Ranking por Estado</strong> ganham <strong className="text-yellow-400 font-black text-base">100 Dólares</strong>.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <h3 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                                        <span className="text-yellow-500">⚡</span> Como ganhar XP?
+                                    </h3>
+
+                                    <div className="space-y-3 mb-6">
+                                        <div className="bg-slate-800/50 border border-white/5 rounded-2xl p-4 flex gap-4 items-center">
+                                            <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-xl shrink-0">🏋️‍♂️</div>
+                                            <div>
+                                                <h4 className="text-sm font-black text-white mb-0.5">Treinar</h4>
+                                                <p className="text-[11px] text-slate-400 font-medium leading-tight">
+                                                    Você ganha <span className="text-blue-400 font-bold">10 XP</span> por cada exercício concluído.
+                                                </p>
+                                                <p className="text-[9px] text-slate-500 mt-1 uppercase tracking-wider font-bold">Limite: 250 XP / dia</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-gradient-to-r from-amber-500/10 to-yellow-600/10 border border-amber-500/30 rounded-2xl p-4 flex gap-4 items-center relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 bg-amber-500 text-black text-[8px] font-black uppercase px-2 py-0.5 rounded-bl-lg">O Segredo</div>
+                                            <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-xl shrink-0">💎</div>
+                                            <div>
+                                                <h4 className="text-sm font-black text-amber-400 mb-0.5">Boost de Extras</h4>
+                                                <div className="text-[11px] text-slate-300 font-medium leading-tight mt-1 space-y-0.5">
+                                                    <span className="block">Ganhe XP passivo TODOS OS DIAS por cada Extra:</span>
+                                                    <span className="block"><span className="text-amber-400 font-black">Nutri-Scan:</span> +1500 XP/dia</span>
+                                                    <span className="block"><span className="text-amber-400 font-black">Restantes Extras (cada):</span> +1000 XP/dia</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <button 
+                                        onClick={() => setShowXpModal(false)}
+                                        className="w-full bg-slate-100 hover:bg-white text-slate-900 font-black py-4 rounded-xl text-sm uppercase tracking-[0.15em] transition-all active:scale-[0.98]"
+                                    >
+                                        Entendido, Vamos Lutar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {safeVideoModalOpen && (
+                        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSafeVideoModalOpen(false)} style={{ zIndex: 11000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div className="password-modal-content" style={{ width: '90%', maxWidth: '400px', padding: '32px', textAlign: 'center' }}>
+                                <button onClick={() => setSafeVideoModalOpen(false)} style={{ position: 'absolute', top: '16px', right: '16px', color: 'var(--text-muted)', fontSize: '24px', background: 'none', border: 'none' }}>&times;</button>
+                                <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚧</div>
+                                <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#fff', marginBottom: '12px' }}>Vídeo em Construção</h2>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.6' }}>Estamos gravando este vídeo em resolução 4K com a nossa equipe para garantir a melhor qualidade para você. Em breve estará disponível!</p>
+                                <button className="btn-primary" onClick={() => setSafeVideoModalOpen(false)} style={{ marginTop: '24px', width: '100%' }}>Compreendido</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {dailyWorkoutOpen && dailyWorkout.length > 0 && (
+                        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDailyWorkoutOpen(false)} style={{ zIndex: 12000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <div className="password-modal-content" style={{ width: '95%', maxWidth: '860px', padding: '16px', maxHeight: '95vh', overflowY: 'auto' }}>
+                                <button onClick={() => setDailyWorkoutOpen(false)} style={{ position: 'absolute', top: '10px', right: '14px', color: 'var(--text-muted)', fontSize: '24px', background: 'none', border: 'none', zIndex: 10 }}>&times;</button>
+
+                                <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#fff', marginBottom: '4px', textAlign: 'left' }}>Treino do Dia</h2>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '20px', textAlign: 'left' }}>
+                                    Treino montado profissionalmente com foco no corpo inteiro para os máximos resultados.
+                                </p>
+
+                                <div className="full-body-workout-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                    {dailyWorkout.map((ex, idx) => {
+                                        const embedUrl = getBunnyEmbedUrl(ex);
+                                        const isActive = dailyWorkoutIndex === idx;
+                                        const isDone = completedDailyIds.includes(ex.id);
+                                        const categoryLabel = getCategoryLabel(ex.title);
+
+                                        // Extract GUID for native video player if possible
+                                        const guidMatch = embedUrl?.match(/embed\/630822\/([a-f0-9-]+)/i);
+                                        const videoSrc = guidMatch ? `https://vz-f56588b2-589.b-cdn.net/${guidMatch[1]}/play_720p.mp4` : null;
+                                        const posterUrl = guidMatch ? `https://vz-f56588b2-589.b-cdn.net/${guidMatch[1]}/thumbnail.jpg` : null;
+
+                                        const toggleDone = (e) => {
+                                            e.stopPropagation();
+                                            setCompletedDailyIds(prev =>
+                                                prev.includes(ex.id) ? prev.filter(id => id !== ex.id) : [...prev, ex.id]
+                                            );
+                                        };
+
+                                        return (
+                                            <div key={`${ex.id}-${idx}`} className={`full-body-item ${isActive ? 'active' : ''} ${isDone ? 'completed' : ''}`} style={{
+                                                padding: '0',
+                                                border: isActive ? '2px solid #22d3ee' : '1px solid rgba(255,255,255,0.05)',
+                                                borderRadius: '20px',
+                                                overflow: 'hidden',
+                                                background: isDone ? 'rgba(34,211,238,0.03)' : 'rgba(255,255,255,0.02)',
+                                                opacity: isDone && !isActive ? '0.6' : '1',
+                                                transition: 'all 0.3s ease'
+                                            }}>
+                                                <div className="full-body-item-header" onClick={() => setDailyWorkoutIndex(idx)} style={{ padding: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isActive ? 'rgba(34,211,238,0.05)' : 'transparent' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                        <div onClick={toggleDone} style={{
+                                                            width: '24px', height: '24px', borderRadius: '50%',
+                                                            border: `2px solid ${isDone ? '#22d3ee' : 'rgba(255,255,255,0.2)'}`,
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            background: isDone ? '#22d3ee' : 'transparent',
+                                                            transition: 'all 0.2s'
+                                                        }}>
+                                                            {isDone && <svg viewBox="0 0 24 24" width="14" height="14" stroke="#000" strokeWidth="4" fill="none"><path d="M20 6L9 17L4 12" /></svg>}
+                                                        </div>
+                                                        <div>
+                                                            <span style={{ fontSize: '12px', fontWeight: '900', color: isDone ? '#22d3ee' : '#22d3ee', letterSpacing: '1px' }}>{categoryLabel}</span>
+                                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px', fontWeight: '700' }}>3 SÉRIES • REPS ATÉ À FALHA</div>
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ color: isActive ? '#22d3ee' : 'rgba(255,255,255,0.2)' }}>
+                                                        {isActive ? (
+                                                            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" /></svg>
+                                                        ) : (
+                                                            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {isActive && (
+                                                    <div style={{ animation: 'fade-in 0.3s ease-out', padding: '0 12px 20px 12px' }}>
+                                                        <div className="full-body-video-wrapper" style={{ aspectRatio: '16/9', background: '#000', borderRadius: '12px', overflow: 'hidden', position: 'relative' }}>
+                                                            {videoSrc ? (
+                                                                <video
+                                                                    src={videoSrc}
+                                                                    poster={posterUrl}
+                                                                    controls
+                                                                    playsInline
+                                                                    preload="none"
+                                                                    style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'pointer' }}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const v = e.target;
+                                                                        v.paused ? v.play() : v.pause();
+                                                                    }}
+                                                                />
+                                                            ) : (
+                                                                <iframe
+                                                                    src={embedUrl}
+                                                                    title="Bunny Player"
+                                                                    style={{ width: '100%', height: '100%', border: 'none' }}
+                                                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                                                    allowFullScreen
+                                                                />
+                                                            )}
+                                                        </div>
+
+                                                        <div style={{ marginTop: '16px', padding: '0 4px' }}>
+                                                            <h4 style={{ color: '#fff', fontSize: '14px', fontWeight: '800', marginBottom: '8px' }}>Execução Correta:</h4>
+                                                            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', lineHeight: '1.6' }}>
+                                                                {ex.description || "Siga o movimento do vídeo com técnica apurada. Expire no esforço e mantenha o core contraído."}
+                                                            </div>
+
+                                                            <button
+                                                                onClick={toggleDone}
+                                                                style={{
+                                                                    marginTop: '16px', width: '100%', padding: '12px',
+                                                                    borderRadius: '12px', background: isDone ? 'rgba(34,211,238,0.1)' : '#fff',
+                                                                    color: isDone ? '#22d3ee' : '#000', fontWeight: '900', fontSize: '12px',
+                                                                    textTransform: 'uppercase', letterSpacing: '1px', border: isDone ? '1px solid #22d3ee' : 'none',
+                                                                    transition: 'all 0.2s'
+                                                                }}
+                                                            >
+                                                                {isDone ? '✓ BLOCO CONCLUÍDO' : 'MARCAR COMO FEITO'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                <button
+                                    className="btn-conclude-workout"
+                                    style={{
+                                        marginTop: '24px',
+                                        width: '100%',
+                                        padding: '18px',
+                                        borderRadius: '16px',
+                                        background: 'linear-gradient(135deg, #14b8a6, #0f766e)',
+                                        color: '#fff',
+                                        fontWeight: '900',
+                                        fontSize: '16px',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '1px',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        boxShadow: '0 8px 24px rgba(20, 184, 166, 0.2)'
+                                    }}
+                                    onClick={concludeDailyWorkout}
+                                >
+                                    Concluir Treino de Hoje
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                </div>);
+        }
+
+        createRoot(document.getElementById('root')).render(<App />);
+
+        // Registro do Service Worker para Otimização e Cache de Vídeo
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('✓ Video Optimizer SW registrado!', reg.scope))
+                    .catch(err => console.warn('✗ Falha ao registar SW:', err));
+            });
+        }
+    
