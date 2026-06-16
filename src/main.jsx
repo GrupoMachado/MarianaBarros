@@ -1745,8 +1745,14 @@ import { createClient } from '@supabase/supabase-js';
                 }
             };
 
-            const ExtraCard = ({ title, desc, price, oldPrice, badge, ribbon, icon, unlocked, isMonthly, onAction, subPrice, pdfs, glow }) => (
-                <div className={`p-6 rounded-[24px] bg-[#1e2330] flex flex-col relative overflow-hidden transition-all duration-300 ${glow ? 'shadow-[0_0_40px_-5px_rgba(249,115,22,0.4)] border border-orange-500/50 animate-[pulse_2s_ease-in-out_infinite]' : 'border border-white/5 hover:bg-[#252b3a]'}`}>
+            const ExtraCard = ({ title, desc, price, oldPrice, badge, ribbon, icon, unlocked, isMonthly, onAction, subPrice, pdfs, glow, glowColor = 'orange' }) => {
+                const isGreen = glowColor === 'green';
+                const glowClass = isGreen 
+                    ? 'shadow-[0_0_40px_-5px_rgba(16,185,129,0.4)] border border-emerald-500/50 animate-[pulse_2s_ease-in-out_infinite]' 
+                    : 'shadow-[0_0_40px_-5px_rgba(249,115,22,0.4)] border border-orange-500/50 animate-[pulse_2s_ease-in-out_infinite]';
+
+                return (
+                <div className={`p-6 rounded-[24px] bg-[#1e2330] flex flex-col relative overflow-hidden transition-all duration-300 ${glow ? glowClass : 'border border-white/5 hover:bg-[#252b3a]'}`}>
                     {ribbon && (
                         <div className="absolute top-0 right-0 w-28 h-28 overflow-hidden pointer-events-none z-20">
                             <div className="absolute top-4 -right-8 w-36 bg-gradient-to-r from-red-600 to-red-500 text-white text-center font-black text-[8px] py-1.5 rotate-45 shadow-2xl uppercase tracking-[0.2em] border-y border-white/10">
@@ -1755,7 +1761,7 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
                     )}
                     {badge && (
-                        <div className="absolute top-5 right-5 bg-orange-600 text-white text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-wider z-10">
+                        <div className={`absolute top-12 right-5 ${isGreen ? 'bg-emerald-600' : 'bg-orange-600'} text-white text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-wider z-10`}>
                             {badge}
                         </div>
                     )}
@@ -1821,13 +1827,14 @@ import { createClient } from '@supabase/supabase-js';
 
                         <button 
                             onClick={onAction}
-                            className={`w-full py-4 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 ${unlocked ? 'bg-white/10 text-white' : 'bg-orange-600 text-white hover:bg-orange-700 shadow-lg shadow-orange-600/10'}`}
+                            className={`w-full py-4 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 ${unlocked ? 'bg-white/10 text-white' : (isGreen ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-600/10' : 'bg-orange-600 text-white hover:bg-orange-700 shadow-lg shadow-orange-600/10')}`}
                         >
                             {unlocked ? 'Acessar Agora' : 'Quero Acesso'}
                         </button>
                     </div>
                 </div>
             );
+            }
 
             return (
                 <div id="extras-page" className="extras-hub p-5 pb-32 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-700">
@@ -1936,6 +1943,7 @@ import { createClient } from '@supabase/supabase-js';
                                     icon="💪"
                                     badge="GUIA VIP"
                                     glow={true}
+                                    glowColor="green"
                                     unlocked={hasMusculacao}
                                     pdfs={[{ title: "Musculação em Casa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" }]}
                                     onAction={() => hasMusculacao ? window.open('https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf', '_blank') : window.open('https://pay.hotmart.com/N105939399C?checkoutMode=10', '_blank')}
