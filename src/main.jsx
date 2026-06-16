@@ -1878,7 +1878,7 @@ import { createClient } from '@supabase/supabase-js';
                                 price="24,90"
                                 oldPrice="119,40"
                                 icon="🥇"
-                                badge="RECOMENDADO"
+                                badge="O MAIS POPULAR"
                                 unlocked={hasGold}
                                 pdfs={[
                                     { title: "Musculação em Casa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" },
