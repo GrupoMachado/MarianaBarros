@@ -426,11 +426,13 @@ import { createClient } from '@supabase/supabase-js';
                     return added ? newLogs : p;
                 });
                 setXp(x => x + 500);
+                window.dispatchEvent(new CustomEvent('triggerNutriScanUpsell'));
             }, []);
 
             const completeChallengeDay = useCallback((day) => {
                 setChallengeLog(p => p.includes(day) ? p : [...p, day]);
                 setXp(x => x + 1000);
+                window.dispatchEvent(new CustomEvent('triggerNutriScanUpsell'));
             }, []);
 
             const toggleFavorite = useCallback(async (id) => {
@@ -6563,6 +6565,40 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
+        function NutriScanUpsellModal({ isOpen, onClose }) {
+            if (!isOpen) return null;
+
+            return (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 100000, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                    <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px', width: '100%', maxWidth: '400px', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+                        <div style={{ width: '100%', height: '180px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div style={{ fontSize: '64px', animation: 'pulse 2s infinite' }}>📸</div>
+                        </div>
+                        <div style={{ padding: '24px' }}>
+                            <h2 style={{ fontSize: '22px', fontWeight: '900', marginBottom: '12px', color: 'var(--text-primary)', lineHeight: '1.2' }}>Pare de tentar adivinhar a sua dieta.</h2>
+                            <p style={{ fontSize: '15px', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '24px' }}>
+                                O treino de hoje está pago, mas o verdadeiro inferno começa na cozinha. Ficar pesquisando alimentos e pesando comida suga a sua motivação. Com o Nutri-Scan, você tira uma foto do seu prato e a nossa Inteligência Artificial calcula as suas calorias e macros na hora. Sem balanças, sem ansiedade. Libere a função Premium hoje e ganhe 7 Dias Totalmente Grátis. Depois, apenas R$ 9,90/mês. Cancele quando quiser, sem burocracias.
+                            </p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <button 
+                                    onClick={() => window.open('https://pay.hotmart.com/H106107115U?checkoutMode=10&bid=1784830143838', '_blank')}
+                                    style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', borderRadius: '16px', fontWeight: '900', fontSize: '16px', border: 'none', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)' }}
+                                >
+                                    👉 Quero meus 7 Dias Grátis!
+                                </button>
+                                <button 
+                                    onClick={onClose}
+                                    style={{ width: '100%', padding: '12px', background: 'transparent', color: 'var(--text-muted)', border: 'none', fontWeight: '500', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline' }}
+                                >
+                                    Não, prefiro continuar contando calorias à mão.
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         function App() {
 
             const ud = useUserData();
@@ -6605,6 +6641,18 @@ import { createClient } from '@supabase/supabase-js';
                 };
                 checkAccess();
             }, [ud.userProfile]);
+
+            const [showNutriScanUpsell, setShowNutriScanUpsell] = useState(false);
+            
+            useEffect(() => {
+                const handleShowModal = () => {
+                    if (!temAcessoNutriScan) {
+                        setShowNutriScanUpsell(true);
+                    }
+                };
+                window.addEventListener('triggerNutriScanUpsell', handleShowModal);
+                return () => window.removeEventListener('triggerNutriScanUpsell', handleShowModal);
+            }, [temAcessoNutriScan]);
 
             const [selectedGroup, setSelectedGroup] = useState(null);
             const [selectedMuscle, setSelectedMuscle] = useState(null);
@@ -6913,6 +6961,7 @@ import { createClient } from '@supabase/supabase-js';
                 } finally {
                     setDailyWorkoutOpen(false);
                     fetchUserStreaks();
+                    window.dispatchEvent(new CustomEvent('triggerNutriScanUpsell'));
                 }
             }, [dailyWorkout.length, fetchUserStreaks]);
 
@@ -8009,6 +8058,7 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
                     )}
 
+                    <NutriScanUpsellModal isOpen={showNutriScanUpsell} onClose={() => setShowNutriScanUpsell(false)} />
                 </div>);
         }
 
