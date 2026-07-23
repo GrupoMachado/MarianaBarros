@@ -6565,32 +6565,49 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function NutriScanUpsellModal({ isOpen, onClose }) {
+        function NutriScanUpsellModal({ isOpen, onClose, onTrackEvent }) {
             if (!isOpen) return null;
 
             return (
                 <div style={{ position: 'fixed', inset: 0, zIndex: 100000, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-                    <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px', width: '100%', maxWidth: '400px', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-                        <div style={{ width: '100%', height: '180px', background: 'linear-gradient(135deg, #1e293b, #0f172a)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                            <div style={{ fontSize: '64px', animation: 'pulse 2s infinite' }}>📸</div>
+                    <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px', width: '100%', maxWidth: '400px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+                        <div style={{ width: '100%', height: '120px', flexShrink: 0, background: 'linear-gradient(135deg, #1e293b, #0f172a)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+                            <img src="/nutri_scan_illustration.png" alt="Nutri Scan" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.9, animation: 'pulse 2s infinite' }} />
                         </div>
-                        <div style={{ padding: '24px' }}>
-                            <h2 style={{ fontSize: '22px', fontWeight: '900', marginBottom: '12px', color: 'var(--text-primary)', lineHeight: '1.2' }}>Pare de tentar adivinhar a sua dieta.</h2>
-                            <p style={{ fontSize: '15px', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '24px' }}>
-                                O treino de hoje está pago, mas o verdadeiro inferno começa na cozinha. Ficar pesquisando alimentos e pesando comida suga a sua motivação. Com o Nutri-Scan, você tira uma foto do seu prato e a nossa Inteligência Artificial calcula as suas calorias e macros na hora. Sem balanças, sem ansiedade. Libere a função Premium hoje e ganhe 7 Dias Totalmente Grátis. Depois, apenas R$ 9,90/mês. Cancele quando quiser, sem burocracias.
-                            </p>
+                        <div style={{ padding: '24px', overflowY: 'auto' }}>
+                            <h2 style={{ fontSize: '22px', fontWeight: '900', marginBottom: '16px', color: 'var(--text-primary)', lineHeight: '1.2' }}>🚀 Pare de adivinhar o que comer (e de pesar a sua comida).</h2>
+                            
+                            <div style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '24px' }}>
+                                <p style={{ marginBottom: '12px' }}>Sabia que uma consulta com um bom nutricionista no Brasil custa entre R$ 200 e R$ 400 por mês?</p>
+                                <p style={{ marginBottom: '16px' }}>Desenvolvido por engenheiros de IA e nutricionistas de ponta, o Nutri-Scan coloca um especialista no seu bolso 24h por dia, por menos do que um café: apenas <strong>R$ 9,90/mês</strong>.</p>
+                                
+                                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 16px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <li><span style={{color: 'var(--accent)'}}>✅</span> <strong>Tire uma foto:</strong> A IA identifica a comida e calcula a sua meta diária automaticamente.</li>
+                                    <li><span style={{color: 'var(--accent)'}}>✅</span> <strong>Fim das dúvidas:</strong> O aplicativo diz exatamente o que você deve comer para emagrecer ou ganhar massa.</li>
+                                    <li><span style={{color: 'var(--accent)'}}>✅</span> <strong>Sem stress:</strong> Escreva o que comeu e deixe o sistema fazer a matemática chata por você.</li>
+                                </ul>
+
+                                <p style={{ color: 'var(--text-primary)', fontWeight: '600' }}>🎁 Libere agora 7 Dias Totalmente Grátis. Só pague se amar. Cancele com 1 clique a qualquer momento.</p>
+                            </div>
+
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 <button 
-                                    onClick={() => window.open('https://pay.hotmart.com/H106107115U?checkoutMode=10&bid=1784830143838', '_blank')}
+                                    onClick={() => {
+                                        if(onTrackEvent) onTrackEvent('yes');
+                                        window.open('https://pay.hotmart.com/H106107115U?checkoutMode=10&bid=1784830143838', '_blank');
+                                    }}
                                     style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', borderRadius: '16px', fontWeight: '900', fontSize: '16px', border: 'none', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)' }}
                                 >
-                                    👉 Quero meus 7 Dias Grátis!
+                                    👉 Liberar Meus 7 Dias Grátis
                                 </button>
                                 <button 
-                                    onClick={onClose}
+                                    onClick={() => {
+                                        if(onTrackEvent) onTrackEvent('no');
+                                        onClose();
+                                    }}
                                     style={{ width: '100%', padding: '12px', background: 'transparent', color: 'var(--text-muted)', border: 'none', fontWeight: '500', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline' }}
                                 >
-                                    Não, prefiro continuar contando calorias à mão.
+                                    Não, obrigado. Prefiro continuar adivinhando o peso da comida e contando calorias à mão.
                                 </button>
                             </div>
                         </div>
@@ -6643,6 +6660,7 @@ import { createClient } from '@supabase/supabase-js';
             }, [ud.userProfile]);
 
             const [showNutriScanUpsell, setShowNutriScanUpsell] = useState(false);
+            const [hasShownUpsellOnLoad, setHasShownUpsellOnLoad] = useState(false);
             
             useEffect(() => {
                 const handleShowModal = () => {
@@ -6653,6 +6671,29 @@ import { createClient } from '@supabase/supabase-js';
                 window.addEventListener('triggerNutriScanUpsell', handleShowModal);
                 return () => window.removeEventListener('triggerNutriScanUpsell', handleShowModal);
             }, [temAcessoNutriScan]);
+
+            useEffect(() => {
+                if (ud.userProfile && !temAcessoNutriScan && !hasShownUpsellOnLoad) {
+                    const timer = setTimeout(() => {
+                        setShowNutriScanUpsell(true);
+                        setHasShownUpsellOnLoad(true);
+                    }, 2500); // Small delay to let the app load properly
+                    return () => clearTimeout(timer);
+                }
+            }, [ud.userProfile, temAcessoNutriScan, hasShownUpsellOnLoad]);
+
+            const handleTrackUpsell = async (action) => {
+                if (ud.userProfile?.id && window.supabase) {
+                    try {
+                        await window.supabase.from('nutriscan_upsell_events').insert({
+                            user_id: ud.userProfile.id,
+                            action: action
+                        });
+                    } catch (e) {
+                        console.error('Tracking erro:', e);
+                    }
+                }
+            };
 
             const [selectedGroup, setSelectedGroup] = useState(null);
             const [selectedMuscle, setSelectedMuscle] = useState(null);
@@ -8058,7 +8099,11 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
                     )}
 
-                    <NutriScanUpsellModal isOpen={showNutriScanUpsell} onClose={() => setShowNutriScanUpsell(false)} />
+                    <NutriScanUpsellModal 
+                        isOpen={showNutriScanUpsell} 
+                        onClose={() => setShowNutriScanUpsell(false)} 
+                        onTrackEvent={handleTrackUpsell} 
+                    />
                 </div>);
         }
 

@@ -27,3 +27,20 @@ CREATE TABLE exercises (
     thumbnail_url TEXT,
     is_enabled BOOLEAN DEFAULT true
 );
+
+
+CREATE TABLE nutriscan_upsell_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+    action TEXT NOT NULL CHECK (action IN ('yes', 'no')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE nutriscan_upsell_events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can insert their own events" ON nutriscan_upsell_events
+FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can view their own events" ON nutriscan_upsell_events
+FOR SELECT USING (auth.uid() = user_id);
+
