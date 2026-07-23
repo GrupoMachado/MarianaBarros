@@ -6570,11 +6570,11 @@ import { createClient } from '@supabase/supabase-js';
 
             return (
                 <div style={{ position: 'fixed', inset: 0, zIndex: 100000, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-                    <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px', width: '100%', maxWidth: '400px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+                    <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px', width: '100%', maxWidth: '400px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}>
                         <div style={{ width: '100%', height: '120px', flexShrink: 0, background: 'linear-gradient(135deg, #1e293b, #0f172a)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden' }}>
                             <img src="/nutri_scan_illustration.png" alt="Nutri Scan" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.9, animation: 'pulse 2s infinite' }} />
                         </div>
-                        <div style={{ padding: '24px', overflowY: 'auto' }}>
+                        <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
                             <h2 style={{ fontSize: '22px', fontWeight: '900', marginBottom: '16px', color: 'var(--text-primary)', lineHeight: '1.2' }}>🚀 Pare de adivinhar o que comer (e de pesar a sua comida).</h2>
                             
                             <div style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '24px' }}>
