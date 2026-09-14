@@ -35,6 +35,11 @@ function App() {
   const currentMessages = chats[selectedCoachId] || [];
 
   const navigateTo = (view: string, props: any = {}) => {
+    if (view === 'coach-intro' && !isNutriScanUnlocked) {
+      setCurrentView('nutri-scan');
+      setCurrentProps({ source: 'profile' });
+      return;
+    }
     setCurrentView(view);
     setCurrentProps(props);
   };
