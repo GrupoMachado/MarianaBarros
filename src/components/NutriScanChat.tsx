@@ -54,7 +54,7 @@ export default function NutriScanChat({ onNavigate }: { onNavigate: (page: strin
     setIsTyping(true);
 
     try {
-      const response = await fetch('http://localhost:3001/api/chat', {
+      const response = await fetch('https://wutjxjubudszwgvxedgm.supabase.co/functions/v1/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
