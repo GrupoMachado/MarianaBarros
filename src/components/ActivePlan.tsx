@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, CheckCircle2, Dumbbell, Flame, Trophy, PlayCircle, X } from 'lucide-react';
+import { ChevronLeft, CheckCircle2, Dumbbell, Flame, Trophy, PlayCircle, X, MessageCircle } from 'lucide-react';
 import { supabase } from '../supabase';
 
 interface ActivePlanProps {
@@ -144,14 +144,23 @@ export default function ActivePlan({ onNavigate, planData }: ActivePlanProps) {
 
       {/* Header */}
       <div className="px-6 pt-10 pb-6 shrink-0 bg-white z-10 shadow-sm rounded-b-[32px]">
-        <div className="flex items-center mb-6">
-          <button 
-            onClick={() => onNavigate('home')}
-            className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center shadow-sm"
-          >
-            <ChevronLeft className="w-6 h-6 text-black" />
-          </button>
-          <h1 className="text-xl font-extrabold tracking-tight text-black ml-4 flex-1 truncate">{title}</h1>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => onNavigate('home')}
+              className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center shadow-sm"
+            >
+              <ChevronLeft className="w-6 h-6 text-black" />
+            </button>
+            <h1 className="text-xl font-extrabold tracking-tight text-black truncate">{title}</h1>
+          </div>
+          
+          <div className="relative cursor-pointer" onClick={() => onNavigate('coach-intro')}>
+            <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+              <MessageCircle size={20} className="text-gray-700" />
+            </div>
+            <div className="absolute top-0 right-0 w-3.5 h-3.5 bg-red-500 rounded-full border-2 border-[#F9F9F9] flex items-center justify-center text-[8px] text-white font-bold">1</div>
+          </div>
         </div>
 
         <div className="flex gap-3 overflow-x-auto hide-scrollbar pb-2 snap-x">
