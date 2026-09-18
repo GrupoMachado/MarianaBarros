@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle2, Lock, Camera, Zap, Dumbbell, User } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Lock, Camera, Zap, Dumbbell, User, Moon } from 'lucide-react';
 import { supabase } from '../supabase';
 
 interface NutriScanWizardProps {
   onNavigate: (page: string) => void;
   isUnlocked: boolean;
   onUnlock: () => void;
-  source?: 'nutrition' | 'workouts' | 'profile';
+  source?: 'nutrition' | 'workouts' | 'profile' | 'mind';
 }
 
 export default function NutriScanWizard({ onNavigate, isUnlocked, onUnlock, source = 'profile' }: NutriScanWizardProps) {
@@ -53,6 +53,18 @@ export default function NutriScanWizard({ onNavigate, isUnlocked, onUnlock, sour
         subtitle: 'A IA acompanha você em cada passo, ajustando treinos e refeições todos os dias.',
         btn: 'Descobrir IA',
         icon: <Zap className="w-6 h-6 text-yellow-500" />
+      }
+    },
+    mind: {
+      step1: { title: 'Qual é o seu maior desafio na hora de dormir?', options: ['Adormecer rápido', 'Acordar no meio da noite', 'Acordar muito cansado', 'Mente acelerada'] },
+      step2: { title: 'Quantas horas você costuma dormir por noite?', options: ['Menos de 6h', '6 a 7h', '7 a 8h', 'Mais de 8h'] },
+      step3: { title: 'O que costuma te ajudar a relaxar?', options: ['Ler um livro', 'Ouvir ruído/música', 'Meditar', 'Nada parece funcionar'] },
+      step4: 'Preparando o seu protocolo militar de sono...',
+      step5: {
+        title: 'Recuperação & Foco Neural',
+        subtitle: 'Acesse a ferramenta secreta para adormecer em 2 minutos e otimizar seu sistema nervoso.',
+        btn: 'Desbloquear Mente',
+        icon: <Lock className="w-6 h-6 text-[#84D82C]" />
       }
     }
   }[source] || {
@@ -225,6 +237,17 @@ export default function NutriScanWizard({ onNavigate, isUnlocked, onUnlock, sour
             </div>
           )}
 
+          {source === 'mind' && (
+            <div className="relative w-full max-w-[300px] mx-auto mb-auto mt-8">
+               <div className="w-32 h-32 bg-black rounded-full mx-auto flex items-center justify-center shadow-lg mb-6 animate-pulse">
+                 <Moon className="w-12 h-12 text-[#84D82C]" />
+               </div>
+               <div className="bg-gray-100 p-4 rounded-2xl text-left border-l-4 border-black">
+                 <p className="text-sm font-bold text-black">"Analisei seus hábitos. O ruído castanho e o protocolo militar vão te ajudar a reparar o seu sistema nervoso em poucos dias."</p>
+               </div>
+            </div>
+          )}
+
           <button onClick={nextStep} className="w-full bg-[#84D82C] text-black font-extrabold text-lg py-4 rounded-xl mt-24 shadow-sm hover:bg-[#75C825] transition-colors flex items-center justify-center gap-2">
             {config.step5.icon} {config.step5.btn}
           </button>
@@ -241,6 +264,7 @@ export default function NutriScanWizard({ onNavigate, isUnlocked, onUnlock, sour
           <div className="bg-gray-50 rounded-xl p-4 mb-4 border border-gray-100 shadow-sm">
             <h3 className="font-extrabold text-black mb-2 text-sm">O que está incluído:</h3>
             <ul className="space-y-1.5 text-[11px] font-semibold text-gray-600">
+              <li className="flex items-start gap-2 leading-tight"><span className="text-[#84D82C] text-[10px]">✅</span> <span><strong>Mente & Recuperação:</strong> Ferramentas militares para adormecer rápido.</span></li>
               <li className="flex items-start gap-2 leading-tight"><span className="text-[#84D82C] text-[10px]">✅</span> <span><strong>Nutri-Scan:</strong> A IA diz o que está no prato e o que comer a seguir.</span></li>
               <li className="flex items-start gap-2 leading-tight"><span className="text-[#84D82C] text-[10px]">✅</span> <span><strong>+100 Receitas PRO:</strong> Acesso a refeições exclusivas e macros.</span></li>
               <li className="flex items-start gap-2 leading-tight"><span className="text-[#84D82C] text-[10px]">✅</span> <span><strong>AI Body Scan:</strong> Lê o seu corpo e recomenda o caminho certo.</span></li>

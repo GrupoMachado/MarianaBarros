@@ -6,6 +6,7 @@ import Nutrition from './components/Nutrition';
 import NutriScanWizard from './components/NutriScanWizard';
 import NutriScanChat from './components/NutriScanChat';
 import Workouts from './components/Workouts';
+import Mind from './components/Mind';
 import MuscleGroup from './components/MuscleGroup';
 import RecipeDetail from './components/RecipeDetail';
 import AIBodyScan from './components/AIBodyScan';
@@ -119,6 +120,7 @@ function App() {
       {currentView === 'nutri-scan-intro' && <NutriScanWizard onNavigate={navigateTo} onUnlock={() => { setIsNutriScanUnlocked(true); localStorage.setItem('nutriScanUnlocked_v2', 'true'); }} isUnlocked={isNutriScanUnlocked} source={currentProps?.source || 'profile'} />}
       {currentView === 'nutri-scan-chat' && <NutriScanChat onNavigate={navigateTo} />}
       {currentView === 'workouts' && <Workouts onNavigate={navigateTo} />}
+      {currentView === 'mind' && <Mind onNavigate={navigateTo} />}
       {currentView === 'muscle-group' && <MuscleGroup onNavigate={navigateTo} muscleData={{ id: currentProps.muscleId, title: currentProps.title, img: currentProps.img }} />}
       {currentView === 'recipe-detail' && <RecipeDetail onNavigate={navigateTo} recipe={currentProps.recipe} />}
       {currentView === 'ai-body-scan' && <AIBodyScan onNavigate={navigateTo} isNutriScanUnlocked={isNutriScanUnlocked} />} 

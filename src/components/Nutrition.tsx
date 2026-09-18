@@ -197,7 +197,7 @@ export default function Nutrition({ onNavigate, isNutriScanUnlocked }: { onNavig
           <Utensils className="w-6 h-6 text-blue-500" />
           <span className="text-[10px] font-extrabold text-blue-500">Alimentos</span>
         </button>
-        <button className="flex flex-col items-center gap-1 group hover:-translate-y-1 transition-transform">
+        <button onClick={() => onNavigate('mind')} className="flex flex-col items-center gap-1 group hover:-translate-y-1 transition-transform">
           <Flower2 className="w-6 h-6 text-gray-400 group-hover:text-gray-900 transition-colors" />
           <span className="text-[10px] font-bold text-gray-400 group-hover:text-gray-900 transition-colors">Mente</span>
         </button>
