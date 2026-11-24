@@ -4737,690 +4737,392 @@ import { createClient } from '@supabase/supabase-js';
 
         function EvolucaoCorporal({ session, userProfile, onOpenNutriScan }) {
             const [history, setHistory] = useState([]);
-            const [genero, setGenero] = useState('');
             const [abaGrafico, setAbaGrafico] = useState('peso');
             const [loading, setLoading] = useState(true);
             const [saving, setSaving] = useState(false);
             const [formError, setFormError] = useState('');
             const [saveSuccess, setSaveSuccess] = useState(false);
-            const [sortField, setSortField] = useState('data');
-            const [sortDir, setSortDir] = useState('desc');
-            const [tooltip, setTooltip] = useState(null);
+            const [showMoreMeasures, setShowMoreMeasures] = useState(false);
 
             const [form, setForm] = useState({
-                peso: '', altura: '', peito: '', pescoco: '', cintura: '',
-                quadril: '', braco_esq: '', braco_dir: '',
-                perna_esq: '', perna_dir: '', panturrilha: ''
+                peso: '', altura: '', cintura: '',
+                quadril: '', braco_dir: '', perna_dir: ''
             });
 
+            const inferredGender = React.useMemo(() => {
+                const raw = String(userProfile?.gender || userProfile?.genero || '').toLowerCase();
+                if (raw.startsWith('m')) return 'm';
+                return 'f';
+            }, [userProfile?.gender, userProfile?.genero]);
+
             useEffect(() => {
-                if (session) {
-                    window.supabase.from('evolucao_corporal').select('*').eq('user_id', session.user.id).order('data', { ascending: true })
-                        .then(({ data }) => {
-                            if (data && data.length > 0) {
-                                setHistory(data);
-                                try { localStorage.setItem('lastEvolucao', JSON.stringify(data[data.length - 1])); } catch {}
-                                const lastG = data.slice().reverse().find(h => h.genero)?.genero;
-                                if (lastG) setGenero(lastG);
-                                const lastH = data.slice().reverse().find(h => h.altura_cm)?.altura_cm;
-                                if (lastH) setForm(prev => ({ ...prev, altura: prev.altura || String(lastH) }));
-                            } else if (userProfile && userProfile.gender) {
-                                const g = userProfile.gender.toLowerCase();
-                                if (g.startsWith('m')) setGenero('m');
-                                else if (g.startsWith('f')) setGenero('f');
-                            }
-                            setLoading(false);
-                        });
-                }
-            }, [session, userProfile]);
+                if (!session) { setLoading(false); return; }
+                window.supabase
+                    .from('evolucao_corporal')
+                    .select('*')
+                    .eq('user_id', session.user.id)
+                    .order('data', { ascending: true })
+                    .then(({ data }) => {
+                        if (data && data.length > 0) {
+                            setHistory(data);
+                            try { localStorage.setItem('lastEvolucao', JSON.stringify(data[data.length - 1])); } catch {}
+                            const lastH = data.slice().reverse().find(h => h.altura_cm)?.altura_cm;
+                            if (lastH) setForm(prev => ({ ...prev, altura: prev.altura || String(lastH) }));
+                        }
+                        setLoading(false);
+                    });
+            }, [session]);
 
             const handleChange = (e) => setForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
 
-            const calcBF = (g, pesc, cint, quad, alt) => {
-                if (!g || !pesc || !cint || !alt) return null;
-                const p = parseFloat(pesc);
-                const c = parseFloat(cint);
-                const a = parseFloat(alt);
-                if (g === 'm') {
-                    if (c - p <= 0) return null;
-                    const logW = Math.log10(c - p);
-                    const logH = Math.log10(a);
-                    const bf = 495 / (1.0324 - 0.19077 * logW + 0.15456 * logH) - 450;
-                    return Math.max(0, bf);
-                } else {
-                    const q = parseFloat(quad);
-                    if (!q || (c + q - p) <= 0) return null;
-                    const logW = Math.log10(c + q - p);
-                    const logH = Math.log10(a);
-                    const bf = 495 / (1.29579 - 0.35004 * logW + 0.22100 * logH) - 450;
-                    return Math.max(0, bf);
-                }
-            };
-
-            const handleGravar = async () => {
+            const handleGravar = async (e) => {
+                if (e && e.preventDefault) e.preventDefault();
                 setFormError('');
                 setSaveSuccess(false);
-                const p = parseFloat(form.peso);
-                const h_cm = parseFloat(form.altura);
+                const p = parseFloat(String(form.peso).replace(',', '.'));
+                const h_cm = form.altura ? parseFloat(String(form.altura).replace(',', '.')) : null;
+                const cint = form.cintura ? parseFloat(String(form.cintura).replace(',', '.')) : null;
+                const quad = form.quadril ? parseFloat(String(form.quadril).replace(',', '.')) : null;
+                const braco = form.braco_dir ? parseFloat(String(form.braco_dir).replace(',', '.')) : null;
+                const perna = form.perna_dir ? parseFloat(String(form.perna_dir).replace(',', '.')) : null;
 
                 if (!p || p < 30 || p > 350) {
-                    setFormError('Informe um peso válido entre 30 e 350 kg.');
+                    setFormError('Informe um peso válido entre 30 e 350 kg (ex: 68.5).');
                     return;
                 }
-                if (form.altura && (h_cm < 100 || h_cm > 240)) {
-                    setFormError('Informe uma altura válida em cm (ex: 165).');
+                if (h_cm !== null && (isNaN(h_cm) || h_cm < 100 || h_cm > 240)) {
+                    setFormError('Informe uma altura válida em cm (ex: 162).');
                     return;
-                }
-
-                const bf = calcBF(genero, form.pescoco, form.cintura, form.quadril, form.altura);
-
-                // Só exige quadril se a usuária estiver tentando calcular BF (preencheu pescoço ou cintura)
-                if (bf === null && (form.pescoco || form.cintura)) {
-                    if (genero === 'f' && !form.quadril) {
-                        setFormError('Para calcular o % de Gordura feminino com pescoço/cintura, informe também o Quadril (ou deixe pescoço e cintura em branco para salvar apenas Peso e Altura).');
-                        return;
-                    }
                 }
 
                 setSaving(true);
                 const record = {
                     user_id: session.user.id,
-                    genero: genero,
+                    genero: inferredGender,
                     peso: p,
-                    altura_cm: h_cm || null,
-                    peito_cm: parseFloat(form.peito) || null,
-                    pescoco_cm: parseFloat(form.pescoco) || null,
-                    cintura_cm: parseFloat(form.cintura) || null,
-                    quadril_cm: parseFloat(form.quadril) || null,
-                    braco_esq_cm: parseFloat(form.braco_esq) || null,
-                    braco_dir_cm: parseFloat(form.braco_dir) || null,
-                    perna_esq_cm: parseFloat(form.perna_esq) || null,
-                    perna_dir_cm: parseFloat(form.perna_dir) || null,
-                    panturrilha_cm: parseFloat(form.panturrilha) || null,
-                    bf_percentagem: (bf !== null && !isNaN(bf)) ? bf : null
+                    altura_cm: h_cm,
+                    cintura_cm: cint && !isNaN(cint) ? cint : null,
+                    quadril_cm: quad && !isNaN(quad) ? quad : null,
+                    braco_dir_cm: braco && !isNaN(braco) ? braco : null,
+                    perna_dir_cm: perna && !isNaN(perna) ? perna : null
                 };
 
                 try {
-                    const { data, error } = await window.supabase.from('evolucao_corporal').insert(record).select().single();
+                    const { data, error } = await window.supabase
+                        .from('evolucao_corporal')
+                        .insert(record)
+                        .select()
+                        .single();
                     if (data) {
                         setHistory(prev => [...prev, data]);
                         try { localStorage.setItem('lastEvolucao', JSON.stringify(data)); } catch {}
-                        setForm({ peso: '', altura: form.altura, peito: '', pescoco: '', cintura: '', quadril: '', braco_esq: '', braco_dir: '', perna_esq: '', perna_dir: '', panturrilha: '' });
+                        setForm(prev => ({ ...prev, peso: '', cintura: '', quadril: '', braco_dir: '', perna_dir: '' }));
                         setSaveSuccess(true);
+                        window.dispatchEvent(new CustomEvent('nutrition-updated'));
                     } else {
-                        console.error("Erro Supabase:", error);
-                        setFormError('Erro ao salvar. Verifique sua conexão e tente novamente.');
+                        console.error('Erro Supabase:', error);
+                        setFormError('Não foi possível salvar agora. Verifique sua conexão e tente novamente.');
                     }
                 } finally {
                     setSaving(false);
                 }
             };
 
-            const currentBFPreview = calcBF(genero, form.pescoco, form.cintura, form.quadril, form.altura);
-
-            const [metaBF, setMetaBF] = useState(15);
-            const [selectedRegion, setSelectedRegion] = useState(null);
-
             const handleEliminar = async (id) => {
-                if (window.confirm('Excluir este registro?')) {
-                    const { error } = await window.supabase.from('evolucao_corporal').delete().eq('id', id);
-                    if (!error) {
-                        setHistory(prev => {
-                            const next = prev.filter(h => h.id !== id);
-                            try {
-                                if (next.length > 0) localStorage.setItem('lastEvolucao', JSON.stringify(next[next.length - 1]));
-                                else localStorage.removeItem('lastEvolucao');
-                            } catch {}
-                            return next;
-                        });
-                    }
+                if (!window.confirm('Excluir este registro do seu histórico?')) return;
+                const { error } = await window.supabase.from('evolucao_corporal').delete().eq('id', id);
+                if (!error) {
+                    setHistory(prev => {
+                        const next = prev.filter(h => h.id !== id);
+                        try {
+                            if (next.length > 0) localStorage.setItem('lastEvolucao', JSON.stringify(next[next.length - 1]));
+                            else localStorage.removeItem('lastEvolucao');
+                        } catch {}
+                        return next;
+                    });
                 }
             };
-
-            const sortedHistory = [...history].sort((a, b) => {
-                let valA = a[sortField];
-                let valB = b[sortField];
-                if (sortField === 'data') {
-                    valA = new Date(a.data).getTime();
-                    valB = new Date(b.data).getTime();
-                }
-                return sortDir === 'asc' ? valA - valB : valB - valA;
-            });
 
             const lastLog = history.length > 0 ? history[history.length - 1] : null;
-            const prevLog = history.length > 1 ? history[history.length - 2] : null;
             const startLog = history.length > 0 ? history[0] : null;
+            const deltaPeso = lastLog && startLog && history.length > 1 ? (Number(lastLog.peso) - Number(startLog.peso)) : 0;
 
-            const deltaPeso = lastLog && startLog ? (lastLog.peso - startLog.peso) : 0;
-            const deltaBF = lastLog && startLog && lastLog.bf_percentagem !== null && startLog.bf_percentagem !== null ? (lastLog.bf_percentagem - startLog.bf_percentagem) : 0;
+            const cinturaLogs = history.filter(h => h.cintura_cm != null && Number(h.cintura_cm) > 0);
+            const lastCintura = cinturaLogs.length > 0 ? Number(cinturaLogs[cinturaLogs.length - 1].cintura_cm) : null;
+            const deltaCintura = cinturaLogs.length > 1 ? (lastCintura - Number(cinturaLogs[0].cintura_cm)) : 0;
 
-            const isRecomp = lastLog && prevLog && lastLog.peso >= prevLog.peso && lastLog.bf_percentagem != null && prevLog.bf_percentagem != null && (lastLog.bf_percentagem < prevLog.bf_percentagem - 0.3);
+            const goalStr = String(userProfile?.goal || userProfile?.objetivo_principal || 'Perder Peso').toLowerCase();
+            const kcalMult = (goalStr.includes('perder') || goalStr.includes('emagrecer') || goalStr.includes('seca')) ? 24 : goalStr.includes('massa') ? 34 : 28;
+            const estimatedMetaKcal = lastLog?.peso ? Math.round(Number(lastLog.peso) * kcalMult) : null;
 
-            const massaGorda = (lastLog && lastLog.bf_percentagem) ? (lastLog.peso * (lastLog.bf_percentagem / 100)) : 0;
-            const massaMagra = lastLog ? (lastLog.peso - massaGorda) : 0;
-            const waistToHeight = lastLog && lastLog.cintura_cm && lastLog.altura_cm ? (lastLog.cintura_cm / lastLog.altura_cm) : 0;
+            const chartData = (abaGrafico === 'cintura' ? cinturaLogs : history.filter(h => h.peso != null))
+                .slice(-10)
+                .map((h, i) => ({
+                    x: i,
+                    y: abaGrafico === 'cintura' ? Number(h.cintura_cm) : Number(h.peso),
+                    date: new Date(h.data)
+                }));
 
-            const getRegDiff = (field) => {
-                const vLast = lastLog ? parseFloat(lastLog[field]) : NaN;
-                const vStart = startLog ? parseFloat(startLog[field]) : NaN;
-                if (isNaN(vLast) || isNaN(vStart)) return "0.0cm";
-                const d = vLast - vStart;
-                if (Math.abs(d) < 0.01) return "0.0cm";
-                return (d > 0 ? "+" : "") + d.toFixed(1) + "cm";
-            };
-
-            const regions = [
-                { id: 'chest', label: 'Peito', cx: 50, cy: 30, diff: getRegDiff('peito_cm') },
-                { id: 'arm', label: 'Braço', cx: 30, cy: 38, diff: getRegDiff('braco_dir_cm') },
-                { id: 'waist', label: 'Cintura', cx: 50, cy: 45, diff: getRegDiff('cintura_cm') },
-                { id: 'thigh', label: 'Coxa', cx: 42, cy: 70, diff: getRegDiff('perna_dir_cm') },
-                { id: 'calf', label: 'Panturrilha', cx: 42, cy: 88, diff: getRegDiff('panturrilha_cm') }
-            ];
+            const reversedHistory = [...history].reverse();
 
             return (
-                <div className="progress-dashboard animate-in fade-in duration-700" style={{ paddingBottom: '100px', maxWidth: '1000px', margin: '0 auto' }}>
-                    
-                    {/* Header */}
-                    <div style={{ textAlign: 'center', marginBottom: '40px', marginTop: '20px' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '15px', background: 'rgba(249, 115, 22, 0.05)', padding: '12px 24px', borderRadius: '20px', border: '1px solid rgba(249, 115, 22, 0.1)', marginBottom: '16px' }}>
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5"><path d="M12 2v20M2 12h20M12 12l7.07-7.07M4.93 19.07L12 12" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', color: '#fff' }}>Evolução <span style={{ color: 'var(--accent)' }}>Corporal</span></h2>
-                        </div>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '500' }}>Registre seu peso, altura e medidas para acompanhar seus resultados e calibrar o Nutri-Scan IA.</p>
+                <div className="p-4 sm:p-6 pb-32 max-w-2xl mx-auto animate-in fade-in duration-500">
+                    <div className="mb-5">
+                        <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight mb-1">⚖️ Minha Evolução</h1>
+                        <p className="text-xs sm:text-sm text-slate-400 font-medium">
+                            Anote seu peso de vez em quando para ver seu progresso e ajustar suas calorias no Nutri-Scan.
+                        </p>
                     </div>
 
-                    {isRecomp && (
-                        <div className="mb-8 p-6 bg-gradient-to-r from-green-500/20 via-green-500/5 to-transparent border border-green-500/30 rounded-[32px] flex items-center gap-6 shadow-[0_0_50px_rgba(34,197,94,0.15)] animate-bounce-subtle">
-                            <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(34,197,94,0.4)] flex-shrink-0">
-                                <span className="text-3xl">✨</span>
-                            </div>
+                    {/* 1. REGISTRO RÁPIDO NO TOPO (10 SEGUNDOS) */}
+                    <form onSubmit={handleGravar} className="bg-gradient-to-b from-slate-800/80 to-slate-900/90 border border-white/10 rounded-[28px] p-5 sm:p-6 mb-6 shadow-xl">
+                        <div className="flex items-center justify-between gap-2 mb-4">
                             <div>
-                                <div className="text-[10px] text-green-500 font-black uppercase tracking-[3px] mb-1">Bio-Insight Detectado</div>
-                                <h3 className="text-white text-lg font-black m-0 uppercase italic">Recomposição Corporal!</h3>
-                                <p className="text-slate-300 text-sm font-medium m-0 leading-relaxed">Você está trocando gordura por músculo real. Seu corpo está ficando mais firme e definido.</p>
+                                <h2 className="text-base font-black text-white leading-tight">Anotar peso de hoje</h2>
+                                <p className="text-[11px] text-slate-400">Simples e rápido — só o peso já basta</p>
+                            </div>
+                            <span className="text-2xl">📝</span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[11px] text-slate-300 font-bold">Peso (kg) *</label>
+                                <input
+                                    type="number"
+                                    inputMode="decimal"
+                                    step="0.1"
+                                    name="peso"
+                                    value={form.peso}
+                                    onChange={handleChange}
+                                    placeholder={lastLog?.peso ? `Último: ${lastLog.peso}` : 'Ex: 68,5'}
+                                    className="bg-black/40 border border-white/15 rounded-2xl px-4 py-3.5 text-white text-base font-black focus:border-orange-500 outline-none transition-all placeholder:text-slate-500"
+                                />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label className="text-[11px] text-slate-300 font-bold">Altura (cm)</label>
+                                <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    name="altura"
+                                    value={form.altura}
+                                    onChange={handleChange}
+                                    placeholder="Ex: 162"
+                                    className="bg-black/40 border border-white/15 rounded-2xl px-4 py-3.5 text-white text-base font-black focus:border-orange-500 outline-none transition-all placeholder:text-slate-500"
+                                />
                             </div>
                         </div>
-                    )}
 
-                    {/* Dashboard Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                        <MetricCard title="Peso Corporal" value={lastLog?.peso} delta={deltaPeso} suffix=" kg" icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L3.41 13.41a2 2 0 0 1 0-2.83L10.59 3.41a2 2 0 0 1 2.83 0l7.17 7.17a2 2 0 0 1 0 2.83z"/><path d="m9 15 6-6"/></svg>} />
-                        <MetricCard title="Gordura Corporal" value={lastLog?.bf_percentagem} delta={deltaBF} suffix="%" icon={<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2c4.5 0 8.5 3.5 8.5 8.5 0 4.5-3.5 8.5-8.5 8.5s-8.5-4-8.5-8.5c0-5 4-8.5 8.5-8.5z"/><path d="M12 12v.01"/><path d="M12 7v.01"/><path d="M12 17v.01"/></svg>} />
-                        
-                        {/* Previsão AI Card */}
-                        <div className="stat-premium-card md:col-span-2 bg-gradient-to-br from-orange-600/20 to-transparent border border-orange-500/30 p-6 rounded-[24px] relative overflow-hidden group">
-                            <div className="flex justify-between items-center mb-4">
-                                <div className="text-[10px] text-orange-500 font-black uppercase tracking-widest flex items-center gap-2">
-                                    <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
-                                    Previsão AI: Destino
-                                </div>
-                                <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/10">
-                                    <span className="text-[9px] text-slate-400 font-bold uppercase">Meta:</span>
-                                    <input 
-                                        type="number" 
-                                        min="5"
-                                        max="50"
-                                        value={metaBF} 
-                                        onChange={(e) => {
-                                            const v = parseFloat(e.target.value);
-                                            setMetaBF(Number.isFinite(v) ? Math.max(5, Math.min(50, v)) : 15);
-                                        }}
-                                        className="bg-transparent border-none text-white text-[10px] font-black w-8 focus:outline-none"
-                                    />
-                                    <span className="text-[9px] text-white">%</span>
-                                </div>
-                            </div>
-                            <div className="flex flex-col">
-                                {(() => {
-                                    if (!lastLog || history.length < 2) return (
-                                        <div className="text-white text-lg font-black uppercase tracking-tight leading-tight">
-                                            Aguardando mais dados...
-                                            <p className="text-[10px] text-slate-400 font-bold mt-1">Registre seu progresso pelo menos 2 vezes para ativar a previsão.</p>
-                                        </div>
-                                    );
-
-                                    const hValid = [...history].filter(h => h.bf_percentagem !== null && h.bf_percentagem > 0).sort((a,b) => new Date(a.data) - new Date(b.data));
-                                    if (hValid.length < 2) {
-                                        return (
-                                            <div className="text-white text-lg font-black uppercase tracking-tight leading-tight">
-                                                Registros incompletos para BF%
-                                                <p className="text-[10px] text-orange-400 font-bold mt-1">
-                                                    Preencha Pescoço e Cintura (e Quadril para mulheres) em 2 registros para calcular a data estimada.
-                                                </p>
-                                            </div>
-                                        );
-                                    }
-
-                                    const oldest = hValid[0];
-                                    const newest = hValid[hValid.length - 1];
-                                    if (newest.bf_percentagem <= metaBF) return <div className="text-green-500 text-2xl font-black italic uppercase tracking-tighter">Meta Atingida! 🔥</div>;
-
-                                    const diffBF = newest.bf_percentagem - oldest.bf_percentagem;
-                                    const weeks = Math.max(0.1, (new Date(newest.data) - new Date(oldest.data)) / (1000*60*60*24*7));
-                                    const bfRate = diffBF / weeks;
-
-                                    if (bfRate >= 0) return (
-                                        <div className="text-white text-lg font-black uppercase tracking-tight leading-tight">
-                                            Ritmo Estável / Subida
-                                            <p className="text-[10px] text-slate-400 font-bold mt-1">Sua gordura ainda não reduziu entre o 1º e o último registro.</p>
-                                        </div>
-                                    );
-
-                                    const weeksLeft = (newest.bf_percentagem - metaBF) / Math.abs(bfRate);
-                                    const date = new Date(Date.now() + weeksLeft * 7 * 24 * 60 * 60 * 1000);
-                                    const dateStr = date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
-                                    
-                                    return (
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] text-slate-400 font-bold uppercase mb-1">Chegada prevista para:</span>
-                                            <div className="text-white text-xl font-black italic tracking-tighter uppercase leading-none">
-                                                {dateStr}
-                                            </div>
-                                        </div>
-                                    );
-                                })()}
-                            </div>
-                            <div className="text-slate-500 text-[10px] font-bold mt-4 max-w-[200px] leading-snug">Estimativa baseada no seu ritmo real entre o primeiro e o último registro completo.</div>
+                        <div className="mb-3">
+                            <label className="text-[11px] text-slate-400 font-bold block mb-1.5">Cintura em cm <span className="text-slate-500 font-normal">(opcional — mostra a roupa folgando)</span></label>
+                            <input
+                                type="number"
+                                inputMode="decimal"
+                                step="0.1"
+                                name="cintura"
+                                value={form.cintura}
+                                onChange={handleChange}
+                                placeholder={lastCintura ? `Última: ${lastCintura} cm` : 'Opcional (ex: 82)'}
+                                className="w-full bg-black/30 border border-white/10 rounded-2xl px-4 py-3 text-white text-sm font-bold focus:border-orange-500 outline-none transition-all placeholder:text-slate-500"
+                            />
                         </div>
-                    </div>
 
-                    {/* Seção de Mapeamento Antropométrico */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                        <div className="progress-section-card bg-[#0f172a]/60 border border-white/5 rounded-[32px] p-8">
-                            <div className="flex justify-between items-center mb-8">
+                        <button
+                            type="button"
+                            onClick={() => setShowMoreMeasures(v => !v)}
+                            className="text-[11px] text-slate-400 hover:text-orange-400 font-bold mb-4 inline-flex items-center gap-1 transition-colors"
+                        >
+                            {showMoreMeasures ? '− Ocultar outras medidas' : '＋ Quero anotar quadril, braço ou coxa (opcional)'}
+                        </button>
+
+                        {showMoreMeasures && (
+                            <div className="grid grid-cols-3 gap-2.5 mb-4 p-3 rounded-2xl bg-black/25 border border-white/5">
                                 <div>
-                                    <h3 className="text-white text-lg font-black uppercase tracking-wider">Mapeamento Corporal</h3>
-                                    <p className="text-slate-500 text-[11px] font-bold">Toque nas zonas para ver a evolução local (cm)</p>
+                                    <label className="text-[10px] text-slate-400 font-bold block mb-1">Quadril (cm)</label>
+                                    <input type="number" inputMode="decimal" step="0.1" name="quadril" value={form.quadril} onChange={handleChange} placeholder="Opcional" className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-white text-xs font-bold outline-none focus:border-orange-500" />
                                 </div>
-                                <div className="p-2 bg-orange-500/10 rounded-xl">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                                <div>
+                                    <label className="text-[10px] text-slate-400 font-bold block mb-1">Braço (cm)</label>
+                                    <input type="number" inputMode="decimal" step="0.1" name="braco_dir" value={form.braco_dir} onChange={handleChange} placeholder="Opcional" className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-white text-xs font-bold outline-none focus:border-orange-500" />
                                 </div>
-                            </div>
-                            
-                            <div className="relative flex justify-center py-6">
-                                <svg viewBox="0 0 100 100" className="w-full h-auto max-w-[280px] overflow-visible">
-                                    <defs>
-                                        <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                                            <stop offset="0%" stopColor="rgba(255,255,255,0.08)" />
-                                            <stop offset="100%" stopColor="rgba(255,255,255,0.02)" />
-                                        </linearGradient>
-                                    </defs>
-                                    <path d="M50 5 Q55 5 55 12 L55 18 L68 28 L66 48 L56 58 L60 95 L52 95 L50 75 L48 95 L40 95 L44 58 L34 48 L32 28 L45 18 L45 12 Q45 5 50 5 Z" fill="url(#bodyGrad)" stroke="rgba(249,115,22,0.15)" strokeWidth="0.5" />
-                                    {regions.map(r => (
-                                        <g key={r.id} onClick={() => setSelectedRegion(r)} className="cursor-pointer group">
-                                            <circle cx={r.cx} cy={r.cy} r="2.5" fill={selectedRegion?.id === r.id ? '#f97316' : 'rgba(255,255,255,0.2)'} className="transition-all duration-300" />
-                                            <circle cx={r.cx} cy={r.cy} r="6" fill="transparent" stroke="#f97316" strokeWidth="0.5" className="opacity-0 group-hover:opacity-100 animate-pulse" />
-                                            {selectedRegion?.id === r.id && (
-                                                <g>
-                                                    <line x1={r.cx} y1={r.cy} x2={r.cx + 15} y2={r.cy - 10} stroke="#f97316" strokeWidth="0.5" />
-                                                    <rect x={r.cx + 15} y={r.cy - 18} width="35" height="16" rx="4" fill="#000" stroke="#f97316" strokeWidth="0.5" />
-                                                    <text x={r.cx + 32} y={r.cy - 7} textAnchor="middle" fill="#fff" fontSize="5" fontWeight="bold">{r.diff}</text>
-                                                </g>
-                                            )}
-                                        </g>
-                                    ))}
-                                </svg>
-                            </div>
-                        </div>
-
-                        <div className="flex flex-col gap-6">
-                            <div className="bg-gradient-to-br from-orange-500/10 to-transparent border border-orange-500/20 rounded-[32px] p-8 flex-1">
-                                <div className="text-[10px] text-orange-500 font-black uppercase tracking-widest mb-4">Análise de Zona: {selectedRegion?.label || "Selecione"}</div>
-                                {selectedRegion ? (
-                                    <>
-                                        <div className="flex items-end gap-3 mb-6">
-                                            <div className="text-4xl font-technical text-white">{selectedRegion.diff}</div>
-                                            <div className="text-xs text-slate-500 mb-2 uppercase font-black tracking-tighter">vs Início</div>
-                                        </div>
-                                        <p className="text-slate-400 text-xs leading-relaxed font-medium">A variação de {selectedRegion.diff} nesta região acompanha a evolução entre sua primeira e última medição registrada.</p>
-                                    </>
-                                ) : (
-                                    <div className="h-full flex items-center justify-center text-slate-600 text-xs font-bold italic uppercase tracking-widest">Toque no mapa para analisar medidas</div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Marcos e Conquistas */}
-                    <div className="mb-8 p-6 bg-gradient-to-r from-orange-500/10 via-transparent to-transparent border border-orange-500/20 rounded-[32px] flex flex-col sm:flex-row items-center gap-6 shadow-[0_10px_40px_rgba(0,0,0,0.3)] animate-in slide-in-from-left duration-500">
-                        <div className="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center shadow-[0_0_25px_rgba(249,115,22,0.4)] flex-shrink-0">
-                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-2.34c3.37-.3 6-3.14 6-6.66H4c0 3.52 2.63 6.36 6 6.66z"/></svg>
-                        </div>
-                        <div className="text-center sm:text-left flex-1">
-                            <div className="text-[10px] text-orange-500 font-black uppercase tracking-[3px] mb-1">Resumo da sua Jornada</div>
-                            <p className="text-white text-sm font-bold m-0 leading-relaxed">
-                                {history.length >= 2
-                                    ? `Você já acumula ${history.length} avaliações registradas (variação total de ${deltaPeso > 0 ? '+' : ''}${deltaPeso.toFixed(1)}kg). Continue registrando semanalmente!`
-                                    : lastLog
-                                    ? `Primeiro registro salvo (${lastLog.peso}kg)! Faça um novo registro em 7 dias para acompanhar sua curva real de resultados.`
-                                    : "Faça seu primeiro registro de peso e altura abaixo para personalizar suas metas no app e no Nutri-Scan IA."}
-                            </p>
-                        </div>
-                        <div className="w-full sm:w-auto flex flex-col items-center gap-2">
-                            <button type="button" onClick={() => alert('🔥 COMPARTILHE SUA EVOLUÇÃO!\n\n1. Tire um print desta tela.\n2. Poste nos seus Stories.\n3. Marque @_.mariana_barros_\n\nAdoramos acompanhar os resultados da nossa comunidade! 🚀')} className="w-full sm:w-auto bg-white/5 hover:bg-white/10 p-3 rounded-xl border border-white/10 text-white transition-all flex items-center justify-center gap-2 group">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="group-hover:rotate-12 transition-transform"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
-                                <span className="text-[11px] font-black uppercase tracking-wider">Compartilhar</span>
-                            </button>
-                            <div className="text-[8px] text-orange-500/60 font-black uppercase tracking-tighter">Marque a gente e seja repostado 📸</div>
-                        </div>
-                    </div>
-
-                    {/* Gráfico de Tendência */}
-                    <div className="progress-section-card relative" style={{ background: 'linear-gradient(180deg, #111827 0%, #0a0a0c 100%)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '32px', padding: '24px', marginBottom: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-10">
-                            <div>
-                                <h3 className="ps-title" style={{ margin: 0, fontSize: '18px' }}>Análise de Tendência</h3>
-                                <div className="mt-2 flex items-center gap-3">
-                                    <div className="px-2.5 py-1 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
-                                        {(() => {
-                                            const h30 = history.filter(h => (new Date() - new Date(h.data)) / (1000*60*60*24) <= 30).sort((a,b) => new Date(a.data) - new Date(b.data));
-                                            if (h30.length < 2) return <span className="text-[10px] text-slate-500 font-bold uppercase">Tendência: Aguardando 2º registro...</span>;
-                                            const diff = h30[h30.length-1].peso - h30[0].peso;
-                                            const weeks = Math.max(1, (new Date(h30[h30.length-1].data) - new Date(h30[0].data)) / (1000*60*60*24*7));
-                                            const rate = diff / weeks;
-                                            return (
-                                                <>
-                                                    <span className="text-lg">{rate > 0.05 ? '📈' : rate < -0.05 ? '📉' : '➖'}</span>
-                                                    <span className="text-[10px] text-white font-black uppercase tracking-wider">
-                                                        Velocidade: {rate > 0.05 ? `Ganho médio de ${rate.toFixed(2)}kg/semana` : rate < -0.05 ? `Perda média de ${Math.abs(rate).toFixed(2)}kg/semana` : 'Peso Estável'}
-                                                    </span>
-                                                </>
-                                            );
-                                        })()}
-                                    </div>
+                                <div>
+                                    <label className="text-[10px] text-slate-400 font-bold block mb-1">Coxa (cm)</label>
+                                    <input type="number" inputMode="decimal" step="0.1" name="perna_dir" value={form.perna_dir} onChange={handleChange} placeholder="Opcional" className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-white text-xs font-bold outline-none focus:border-orange-500" />
                                 </div>
                             </div>
-                            <div className="flex p-1 bg-black/40 rounded-xl border border-white/5">
-                                <button type="button" onClick={() => setAbaGrafico('peso')} style={{ padding: '8px 20px', borderRadius: '10px', fontSize: '11px', fontWeight: '900', transition: 'all 0.3s', background: abaGrafico === 'peso' ? 'var(--accent)' : 'transparent', color: '#fff', textTransform: 'uppercase' }}>Peso</button>
-                                <button type="button" onClick={() => setAbaGrafico('bf')} style={{ padding: '8px 20px', borderRadius: '10px', fontSize: '11px', fontWeight: '900', transition: 'all 0.3s', background: abaGrafico === 'bf' ? '#06b6d4' : 'transparent', color: '#fff', textTransform: 'uppercase' }}>Gordura%</button>
+                        )}
+
+                        {formError && (
+                            <div className="mb-3 p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs font-bold text-center">
+                                {formError}
                             </div>
-                        </div>
-
-                        <div className="relative h-[250px] w-full mt-4">
-                            {(() => {
-                                const currentChartData = history
-                                    .filter(h => abaGrafico === 'peso' ? h.peso != null : (h.bf_percentagem != null && h.bf_percentagem > 0))
-                                    .slice(-10)
-                                    .map((h, i) => ({
-                                        x: i,
-                                        y: abaGrafico === 'peso' ? Number(h.peso) : Number(h.bf_percentagem),
-                                        raw: h
-                                    }));
-
-                                if (currentChartData.length === 0) return (
-                                    <div className="h-full flex items-center justify-center text-slate-500 font-bold text-[10px] uppercase tracking-widest">
-                                        Aguardando primeiro registro de {abaGrafico === 'peso' ? 'peso' : 'gordura corporal'}...
-                                    </div>
-                                );
-
-                                const chartColor = abaGrafico === 'peso' ? 'var(--accent)' : '#06b6d4';
-                                const vals = currentChartData.map(d => d.y);
-                                const minVal = Math.min(...vals);
-                                const maxVal = Math.max(...vals);
-                                const buffer = ((maxVal - minVal) * 0.25) || Math.max(1, maxVal * 0.05);
-                                const min = Math.max(0, minVal - buffer);
-                                const max = maxVal + buffer;
-                                const range = (max - min) || 1;
-
-                                // Alinhamento exato com o eixo Y (yPos = 40 - step * 40)
-                                const pts = currentChartData.map((d, i) => ({
-                                    x: currentChartData.length > 1 ? (i / (currentChartData.length - 1)) * 100 : 50,
-                                    y: 40 - ((d.y - min) / range) * 40
-                                }));
-
-                                const getSpline = (p) => {
-                                    if (p.length < 2) return "";
-                                    let d = `M ${p[0].x},${p[0].y}`;
-                                    for (let i = 0; i < p.length - 1; i++) {
-                                        const cp1x = p[i].x + (p[i + 1].x - p[i].x) * 0.5;
-                                        d += ` C ${cp1x},${p[i].y} ${cp1x},${p[i + 1].y} ${p[i + 1].x},${p[i + 1].y}`;
-                                    }
-                                    return d;
-                                };
-
-                                const pathD = getSpline(pts);
-                                const areaD = pathD ? `${pathD} L ${pts[pts.length - 1].x},40 L ${pts[0].x},40 Z` : "";
-                                const gridSteps = [0, 0.25, 0.5, 0.75, 1];
-
-                                return (
-                                    <svg viewBox="-15 -5 125 55" preserveAspectRatio="none" className="w-full h-full overflow-visible">
-                                        <defs>
-                                            <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="0%" stopColor={chartColor} stopOpacity="0.3" />
-                                                <stop offset="100%" stopColor={chartColor} stopOpacity="0" />
-                                            </linearGradient>
-                                        </defs>
-                                        {gridSteps.map(step => {
-                                            const yPos = 40 - step * 40;
-                                            return <line key={step} x1="0" y1={yPos} x2="100" y2={yPos} stroke="rgba(255,255,255,0.06)" strokeWidth="0.15" strokeDasharray="1 1" />;
-                                        })}
-                                        {gridSteps.map(step => {
-                                            const yPos = 40 - step * 40;
-                                            const val = min + step * range;
-                                            return <text key={step} x="-2" y={yPos + 1} fill="rgba(255,255,255,0.35)" fontSize="2.5" textAnchor="end" className="font-mono">{val.toFixed(1)}</text>;
-                                        })}
-                                        {pts.map((p, i) => {
-                                            const date = new Date(currentChartData[i].raw.data);
-                                            return <text key={i} x={p.x} y="46" fill="rgba(255,255,255,0.35)" fontSize="2.2" textAnchor="middle" className="font-mono">{`${date.getDate()}/${date.getMonth() + 1}`}</text>;
-                                        })}
-                                        {areaD && <path d={areaD} fill="url(#chartGradient)" />}
-                                        {pathD && <path d={pathD} fill="none" stroke={chartColor} strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" />}
-                                        {pts.map((p, i) => (
-                                            <g key={i}>
-                                                <circle cx={p.x} cy={p.y} r="1.4" fill={chartColor} fillOpacity="0.25" />
-                                                <circle cx={p.x} cy={p.y} r="0.8" fill="#0f172a" stroke={chartColor} strokeWidth="0.45" 
-                                                    onMouseEnter={(e) => setTooltip({ x: e.clientX, y: e.clientY, data: currentChartData[i].raw })}
-                                                    onMouseLeave={() => setTooltip(null)}
-                                                    className="cursor-pointer transition-all"
-                                                />
-                                            </g>
-                                        ))}
-                                    </svg>
-                                );
-                            })()}
-                            
-                            {tooltip && (
-                                <div className="fixed z-[1000] bg-slate-900 border border-white/10 p-3 rounded-xl shadow-2xl pointer-events-none" style={{ left: tooltip.x, top: tooltip.y - 70, transform: 'translateX(-50%)' }}>
-                                    <div className="text-[10px] text-slate-500 font-bold uppercase mb-1">{new Date(tooltip.data.data).toLocaleDateString('pt-BR')}</div>
-                                    <div className="text-sm font-black text-white">{abaGrafico === 'peso' ? tooltip.data.peso + 'kg' : tooltip.data.bf_percentagem?.toFixed(1) + '%'}</div>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Raio-X Estrutural */}
-                    <div className="mb-8">
-                        <div className="progress-section-card overflow-hidden" style={{ background: '#0a0a0c', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '28px', padding: '0' }}>
-                            <div style={{ padding: '24px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div className="w-2 h-6 bg-cyan-500 rounded-full shadow-[0_0_10px_#06b6d4]"></div>
-                                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px' }}>Diagnóstico Estrutural</h3>
-                            </div>
-                            <div style={{ padding: '24px' }}>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="p-5 bg-white/5 rounded-2xl border border-white/5 relative group">
-                                        <div className="absolute top-2 right-2 w-1.5 h-1.5 bg-cyan-500 rounded-full animate-pulse"></div>
-                                        <div className="text-[10px] text-cyan-500 font-black uppercase mb-2">Massa Magra</div>
-                                        <div className="text-2xl font-technical text-white mb-1"><Counter value={massaMagra} suffix="kg" /></div>
-                                        <div className="w-full h-1 bg-white/5 rounded-full mt-3 overflow-hidden">
-                                            <div className="h-full bg-cyan-500" style={{ width: `${Math.min(100, (massaMagra / 100) * 100)}%` }}></div>
-                                        </div>
-                                    </div>
-                                    <div className="p-5 bg-white/5 rounded-2xl border border-white/5 relative group">
-                                        <div className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full"></div>
-                                        <div className="text-[10px] text-red-500 font-black uppercase mb-2">Massa Gorda</div>
-                                        <div className="text-2xl font-technical text-white mb-1"><Counter value={massaGorda} suffix="kg" /></div>
-                                        <div className="w-full h-1 bg-white/5 rounded-full mt-3 overflow-hidden">
-                                            <div className="h-full bg-red-500" style={{ width: `${Math.min(100, (massaGorda / 50) * 100)}%` }}></div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="mt-6 p-6 bg-gradient-to-br from-orange-500/10 to-transparent rounded-2xl border border-orange-500/20 text-center relative overflow-hidden">
-                                    {(() => {
-                                        if (!waistToHeight) {
-                                            return (
-                                                <>
-                                                    <div className="text-[11px] text-orange-500 font-black uppercase mb-2 tracking-widest">Proporção Cintura / Altura</div>
-                                                    <div className="text-3xl font-technical text-slate-500 mb-2">--</div>
-                                                    <div className="text-[11px] text-slate-400 font-bold">Informe Cintura e Altura abaixo para calcular seu índice metabólico.</div>
-                                                </>
-                                            );
-                                        }
-                                        const status = waistToHeight < 0.50 ? { color: '#22c55e', text: 'SAUDÁVEL', desc: 'Risco metabólico baixo. Excelentes níveis.' } :
-                                                       waistToHeight <= 0.55 ? { color: '#eab308', text: 'ATENÇÃO', desc: 'Risco moderado. Considere ajustes.' } :
-                                                       { color: '#ef4444', text: 'ALERTA', desc: 'Risco elevado. Foco na gordura visceral.' };
-                                        return (
-                                            <>
-                                                <div className="text-[11px] text-orange-500 font-black uppercase mb-2 tracking-widest">Proporção Cintura / Altura</div>
-                                                <div className="text-4xl font-technical text-white mb-2" style={{ textShadow: `0 0 20px ${status.color}44` }}>{waistToHeight.toFixed(2)}</div>
-                                                <div className="text-[11px] text-slate-400 font-bold mb-3">{status.desc}</div>
-                                                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black tracking-widest mx-auto" style={{ borderColor: `${status.color}44`, color: status.color, background: `${status.color}11` }}>
-                                                    <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: status.color }}></div>
-                                                    {status.text}
-                                                </div>
-                                            </>
-                                        );
-                                    })()}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Histórico */}
-                    <div className="progress-section-card mb-8" style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '28px', padding: '24px' }}>
-                         <div className="flex justify-between items-center mb-6">
-                            <h3 className="ps-title" style={{ margin: 0 }}>Histórico de Avaliações</h3>
-                            <div className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Total: {history.length} registros</div>
-                         </div>
-                         <div className="overflow-x-auto">
-                            <table className="w-full text-left border-separate border-spacing-y-2">
-                                <thead>
-                                    <tr className="text-[11px] text-slate-500 font-black uppercase tracking-widest">
-                                        <th className="pb-4 px-4 cursor-pointer hover:text-white transition-colors" onClick={() => { setSortField('data'); setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); }}>Data {sortField === 'data' && (sortDir === 'asc' ? '↑' : '↓')}</th>
-                                        <th className="pb-4 px-4 cursor-pointer hover:text-white transition-colors" onClick={() => { setSortField('peso'); setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); }}>Peso {sortField === 'peso' && (sortDir === 'asc' ? '↑' : '↓')}</th>
-                                        <th className="pb-4 px-4">BF%</th>
-                                        <th className="pb-4 px-4">Pescoço / Cintura</th>
-                                        <th className="pb-4 px-4">Músculo (kg)</th>
-                                        <th className="pb-4 px-4 text-right">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {sortedHistory.map((row) => (
-                                        <tr key={row.id} className="group hover:scale-[1.01] transition-transform duration-200">
-                                            <td className="py-4 px-4 bg-white/[0.03] rounded-l-2xl border-y border-l border-white/5 text-sm text-white font-bold">{new Date(row.data).toLocaleDateString('pt-BR')}</td>
-                                            <td className="py-4 px-4 bg-white/[0.03] border-y border-white/5 font-technical text-orange-500 text-lg">{row.peso}kg</td>
-                                            <td className="py-4 px-4 bg-white/[0.03] border-y border-white/5 font-technical text-cyan-400 font-black">{row.bf_percentagem ? row.bf_percentagem.toFixed(1) + '%' : <span className="text-slate-600 opacity-50 italic">N/A</span>}</td>
-                                            <td className="py-4 px-4 bg-white/[0.03] border-y border-white/5 text-xs text-slate-400 font-bold uppercase">{row.pescoco_cm || '--'} / {row.cintura_cm || '--'}cm</td>
-                                            <td className="py-4 px-4 bg-white/[0.03] border-y border-white/5 text-sm text-white font-bold">{(row.peso * (1 - (row.bf_percentagem || 0)/100)).toFixed(1)}kg</td>
-                                            <td className="py-4 px-4 bg-white/[0.03] rounded-r-2xl border-y border-r border-white/5 text-right">
-                                                <button type="button" onClick={() => handleEliminar(row.id)} className="p-2.5 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all" aria-label="Excluir registro">
-                                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                         </div>
-                    </div>
-
-                    {/* Formulário */}
-                    <div className="progress-section-card bg-gradient-to-b from-[#1e293b] to-[#0f172a] border border-white/10" style={{ borderRadius: '32px', padding: '28px' }}>
-                        <div className="flex items-center gap-4 mb-8">
-                            <div className="w-12 h-12 rounded-2xl bg-orange-500 flex items-center justify-center shadow-[0_0_20px_rgba(249,115,22,0.4)]">
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            </div>
-                            <div>
-                                <h3 className="text-2xl font-black text-white m-0">Novo Registro</h3>
-                                <p className="text-slate-400 text-sm font-medium">Preencha Peso e Altura (as demais medidas são opcionais)</p>
-                            </div>
-                        </div>
-
-                        <div className="space-y-8">
-                            <div>
-                                <div className="text-[10px] text-orange-500 font-black uppercase tracking-[3px] mb-5 flex items-center gap-3">
-                                    <span className="flex-grow h-px bg-orange-500/20"></span>
-                                    Métricas Base
-                                    <span className="flex-grow h-px bg-orange-500/20"></span>
-                                </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                    <div className="flex flex-col gap-2">
-                                        <label className="text-[11px] text-slate-400 font-black uppercase ml-1">Gênero (Obrigatório)</label>
-                                        <div className="flex bg-black/40 rounded-2xl p-1 border border-white/10">
-                                            <button type="button" onClick={() => setGenero('m')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${genero === 'm' ? 'bg-orange-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}>Masc.</button>
-                                            <button type="button" onClick={() => setGenero('f')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${genero === 'f' ? 'bg-orange-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}>Fem.</button>
-                                        </div>
-                                    </div>
-                                    <div className="flex flex-col gap-2">
-                                        <label className="text-[11px] text-slate-400 font-black uppercase ml-1">Peso (kg)</label>
-                                        <input type="number" step="0.1" name="peso" value={form.peso} onChange={handleChange} placeholder="Ex: 68.5" className="bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all outline-none" />
-                                    </div>
-                                    <div className="flex flex-col gap-2">
-                                        <label className="text-[11px] text-slate-400 font-black uppercase ml-1">Altura (cm)</label>
-                                        <input type="number" name="altura" value={form.altura} onChange={handleChange} placeholder="Ex: 165" className="bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all outline-none" />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div>
-                                <div className="text-[10px] text-cyan-500 font-black uppercase tracking-[3px] mb-5 flex items-center gap-3">
-                                    <span className="flex-grow h-px bg-cyan-500/20"></span>
-                                    Medidas Opcionais (cm)
-                                    <span className="flex-grow h-px bg-cyan-500/20"></span>
-                                </div>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
-                                    {[
-                                        { label: 'Peito', name: 'peito' },
-                                        { label: 'Pescoço', name: 'pescoco' },
-                                        { label: 'Cintura', name: 'cintura' },
-                                        { label: 'Quadril', name: 'quadril' },
-                                        { label: 'Braço Esq', name: 'braco_esq' },
-                                        { label: 'Braço Dir', name: 'braco_dir' },
-                                        { label: 'Perna Esq', name: 'perna_esq' },
-                                        { label: 'Perna Dir', name: 'perna_dir' },
-                                        { label: 'Panturrilha', name: 'panturrilha' }
-                                    ].map(f => (
-                                        <div key={f.name} className="flex flex-col gap-2">
-                                            <label className="text-[10px] text-slate-400 font-black uppercase ml-1">{f.label}</label>
-                                            <input type="number" step="0.1" name={f.name} value={form[f.name]} onChange={handleChange} placeholder="Opcional" className="bg-black/20 border border-white/5 rounded-xl p-3 text-white text-sm font-bold focus:border-cyan-500 transition-all outline-none" />
-                                        </div>
-                                    ))}
-                                    
-                                    <div className="col-span-2 sm:col-span-1 bg-cyan-500/10 border border-dashed border-cyan-500/30 rounded-xl p-3 flex flex-col justify-center items-center">
-                                        <div className="text-[8px] text-cyan-500 font-black uppercase mb-1">Gordura Estimada</div>
-                                        <div className="text-white text-xl font-black italic">
-                                            {currentBFPreview !== null ? `${currentBFPreview.toFixed(1)}%` : '--.-%'}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {formError && <div className="mt-6 p-4 bg-red-500/15 border border-red-500/30 rounded-2xl text-red-300 text-xs font-bold text-center">{formError}</div>}
+                        )}
 
                         {saveSuccess && (
-                            <div className="mt-6 p-4 bg-emerald-500/15 border border-emerald-500/35 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
-                                <span className="text-emerald-300 text-xs font-bold">✅ Medidas salvas com sucesso! Sua meta calórica já foi atualizada.</span>
+                            <div className="mb-4 p-3.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/35 flex flex-col sm:flex-row items-center justify-between gap-3">
+                                <span className="text-emerald-200 text-xs font-bold">✅ Peso salvo! Sua meta diária já foi atualizada.</span>
                                 {onOpenNutriScan && (
                                     <button
                                         type="button"
                                         onClick={onOpenNutriScan}
                                         className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-[11px] uppercase tracking-wider shrink-0"
                                     >
-                                        📸 Ir para Nutri IA
+                                        📸 Abrir Nutri-Scan →
                                     </button>
                                 )}
                             </div>
                         )}
 
-                        <button 
-                            type="button"
-                            onClick={handleGravar} 
-                            disabled={loading || saving || !genero}
-                            className="mt-8 w-full bg-white text-black font-black py-5 rounded-2xl text-base uppercase tracking-widest hover:bg-orange-500 hover:text-white hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed group flex items-center justify-center gap-3"
+                        <button
+                            type="submit"
+                            disabled={loading || saving}
+                            className="w-full py-4 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white font-black text-sm uppercase tracking-wider shadow-lg shadow-orange-600/25 active:scale-[0.98] transition-all disabled:opacity-50"
                         >
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="group-hover:rotate-12 transition-transform"><path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            {saving ? 'Salvando...' : 'Salvar Avaliação'}
+                            {saving ? 'Salvando...' : '✓ Salvar Meu Peso'}
                         </button>
+                    </form>
+
+                    {/* 2. RESUMO SIMPLES EM 2–3 CARTÕES */}
+                    {lastLog && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+                            <div className="bg-slate-800/50 border border-white/10 rounded-3xl p-4">
+                                <div className="text-[10px] text-slate-400 font-black uppercase tracking-wider mb-1">Peso Atual</div>
+                                <div className="text-2xl font-black text-white">{Number(lastLog.peso).toFixed(1)} <span className="text-xs text-slate-400 font-bold">kg</span></div>
+                                {history.length > 1 ? (
+                                    <div className={`text-[11px] font-bold mt-1 ${deltaPeso <= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
+                                        {deltaPeso === 0 ? 'Estável' : `${deltaPeso > 0 ? '+' : ''}${deltaPeso.toFixed(1)} kg desde o início`}
+                                    </div>
+                                ) : (
+                                    <div className="text-[11px] text-slate-400 font-semibold mt-1">1º registro salvo</div>
+                                )}
+                            </div>
+
+                            {lastCintura ? (
+                                <div className="bg-slate-800/50 border border-white/10 rounded-3xl p-4">
+                                    <div className="text-[10px] text-slate-400 font-black uppercase tracking-wider mb-1">Cintura</div>
+                                    <div className="text-2xl font-black text-white">{lastCintura.toFixed(1)} <span className="text-xs text-slate-400 font-bold">cm</span></div>
+                                    <div className={`text-[11px] font-bold mt-1 ${deltaCintura <= 0 ? 'text-emerald-400' : 'text-orange-400'}`}>
+                                        {cinturaLogs.length > 1
+                                            ? (deltaCintura === 0 ? 'Mesma medida' : `${deltaCintura > 0 ? '+' : ''}${deltaCintura.toFixed(1)} cm`)
+                                            : 'Medida inicial'}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="bg-slate-800/50 border border-white/10 rounded-3xl p-4">
+                                    <div className="text-[10px] text-slate-400 font-black uppercase tracking-wider mb-1">Pesagens</div>
+                                    <div className="text-2xl font-black text-white">{history.length}</div>
+                                    <div className="text-[11px] text-slate-400 font-semibold mt-1">{history.length === 1 ? 'registro feito' : 'registros feitos'}</div>
+                                </div>
+                            )}
+
+                            {estimatedMetaKcal && (
+                                <button
+                                    type="button"
+                                    onClick={() => onOpenNutriScan && onOpenNutriScan()}
+                                    className="col-span-2 sm:col-span-1 text-left bg-emerald-500/10 hover:bg-emerald-500/15 border border-emerald-500/25 rounded-3xl p-4 transition-all"
+                                >
+                                    <div className="text-[10px] text-emerald-300 font-black uppercase tracking-wider mb-1">Meta Diária</div>
+                                    <div className="text-2xl font-black text-white">{estimatedMetaKcal} <span className="text-xs text-emerald-300 font-bold">kcal</span></div>
+                                    <div className="text-[11px] text-emerald-300 font-bold mt-1">Usar no Nutri-Scan →</div>
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {/* 3. GRÁFICO LIMPO (SÓ QUANDO TIVER REGISTROS) */}
+                    {chartData.length >= 2 && (
+                        <div className="bg-slate-900/70 border border-white/10 rounded-[28px] p-5 mb-6 shadow-xl">
+                            <div className="flex items-center justify-between gap-3 mb-4">
+                                <h3 className="text-sm font-black text-white uppercase tracking-wider">Sua Evolução</h3>
+                                {cinturaLogs.length >= 2 && (
+                                    <div className="flex p-1 bg-black/40 rounded-xl border border-white/5">
+                                        <button type="button" onClick={() => setAbaGrafico('peso')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${abaGrafico === 'peso' ? 'bg-orange-500 text-white' : 'text-slate-400'}`}>Peso</button>
+                                        <button type="button" onClick={() => setAbaGrafico('cintura')} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase ${abaGrafico === 'cintura' ? 'bg-emerald-500 text-slate-950' : 'text-slate-400'}`}>Cintura</button>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="h-[180px] w-full">
+                                {(() => {
+                                    const color = abaGrafico === 'cintura' ? '#10b981' : '#f97316';
+                                    const vals = chartData.map(d => d.y);
+                                    const minVal = Math.min(...vals);
+                                    const maxVal = Math.max(...vals);
+                                    const pad = Math.max(0.5, (maxVal - minVal) * 0.25);
+                                    const min = Math.max(0, minVal - pad);
+                                    const max = maxVal + pad;
+                                    const range = (max - min) || 1;
+                                    const pts = chartData.map((d, i) => ({
+                                        x: (i / (chartData.length - 1)) * 100,
+                                        y: 40 - ((d.y - min) / range) * 36,
+                                        val: d.y,
+                                        label: `${d.date.getDate()}/${d.date.getMonth() + 1}`
+                                    }));
+                                    const lineD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x},${p.y}`).join(' ');
+                                    const areaD = `${lineD} L 100,42 L 0,42 Z`;
+                                    return (
+                                        <svg viewBox="-12 -4 120 54" className="w-full h-full overflow-visible">
+                                            <defs>
+                                                <linearGradient id="simpleEvoGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+                                                    <stop offset="100%" stopColor={color} stopOpacity="0" />
+                                                </linearGradient>
+                                            </defs>
+                                            <path d={areaD} fill="url(#simpleEvoGrad)" />
+                                            <path d={lineD} fill="none" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                                            {pts.map((p, i) => (
+                                                <g key={i}>
+                                                    <circle cx={p.x} cy={p.y} r="1.6" fill="#0f172a" stroke={color} strokeWidth="0.9" />
+                                                    <text x={p.x} y={p.y - 3.2} textAnchor="middle" fill="#fff" fontSize="2.9" fontWeight="800">{p.val.toFixed(1)}</text>
+                                                    <text x={p.x} y="47" textAnchor="middle" fill="rgba(255,255,255,0.45)" fontSize="2.5">{p.label}</text>
+                                                </g>
+                                            ))}
+                                        </svg>
+                                    );
+                                })()}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 4. HISTÓRICO SIMPLES EM CARTÕES */}
+                    <div className="bg-slate-900/50 border border-white/5 rounded-[28px] p-5">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-sm font-black text-white uppercase tracking-wider">Histórico</h3>
+                            <span className="text-[11px] text-slate-400 font-bold">{history.length} {history.length === 1 ? 'registro' : 'registros'}</span>
+                        </div>
+                        {loading ? (
+                            <div className="py-6 text-center text-xs text-slate-400 font-semibold">Carregando seus registros...</div>
+                        ) : reversedHistory.length === 0 ? (
+                            <div className="py-6 text-center text-xs text-slate-400 leading-relaxed">
+                                Ainda não há registros salvos. Anote seu peso acima para começar a acompanhar sua evolução semana a semana!
+                            </div>
+                        ) : (
+                            <div className="space-y-2.5">
+                                {reversedHistory.map(row => (
+                                    <div key={row.id} className="bg-white/5 border border-white/5 rounded-2xl px-4 py-3.5 flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="flex items-baseline gap-2">
+                                                <span className="text-base font-black text-orange-400">{Number(row.peso).toFixed(1)} kg</span>
+                                                <span className="text-[11px] text-slate-400 font-semibold">{new Date(row.data).toLocaleDateString('pt-BR')}</span>
+                                            </div>
+                                            {(row.cintura_cm || row.quadril_cm) && (
+                                                <div className="text-[11px] text-slate-400 mt-0.5">
+                                                    {row.cintura_cm ? `Cintura: ${row.cintura_cm} cm` : ''}
+                                                    {row.cintura_cm && row.quadril_cm ? ' · ' : ''}
+                                                    {row.quadril_cm ? `Quadril: ${row.quadril_cm} cm` : ''}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleEliminar(row.id)}
+                                            aria-label="Excluir registro"
+                                            className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 flex items-center justify-center text-xs shrink-0 transition-all"
+                                        >
+                                            🗑️
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             );
@@ -6448,73 +6150,15 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function ArsenalVIP({ ud, onNav, temAcessoNutriScan, hasDesafio, hasSono, setSel, activeSubTab = 'nutricao', onChangeSubTab, onOpenNutriUpsell, freeScansRemaining = 0 }) {
-            const SUB_TABS = [
-                {
-                    id: 'nutricao',
-                    label: !temAcessoNutriScan && freeScansRemaining > 0
-                        ? `📸 Nutri-Scan (${freeScansRemaining} grátis)`
-                        : '📸 Nutri-Scan IA'
-                },
-                { id: 'cronograma', label: hasDesafio ? '🔥 Desafio 30D' : '🔒 Desafio 30D' },
-                { id: 'sono', label: hasSono ? '🌙 Sono' : '🔒 Sono' }
-            ];
-
-            const renderSubPage = () => {
-                switch (activeSubTab) {
-                    case 'nutricao':
-                        return (
-                            <NutritionDashboard
-                                ud={ud}
-                                onNav={onNav}
-                                hasNutriScanAccess={temAcessoNutriScan}
-                                onOpenNutriUpsell={onOpenNutriUpsell}
-                            />
-                        );
-                    case 'cronograma':
-                        return hasDesafio ? (
-                            <Cronograma 
-                                challengeLog={ud.challengeLog} 
-                                onCompleteDay={ud.completeChallengeDay} 
-                                onNav={onNav} 
-                                ud={ud} 
-                                onSelect={setSel} 
-                            />
-                        ) : (
-                            <TeaserDesafioPage ud={ud} onGoToExtras={() => onNav('extras')} />
-                        );
-                    case 'sono':
-                        return hasSono ? (
-                            <SonoProfundo ud={ud} />
-                        ) : (
-                            <TeaserSonoPage ud={ud} onGoToExtras={() => onNav('extras')} />
-                        );
-                    default:
-                        return null;
-                }
-            };
-
+        function ArsenalVIP({ ud, onNav, temAcessoNutriScan, onOpenNutriUpsell }) {
             return (
-                <div className="arsenal-vip-container">
-                    <div className="flex gap-2 mb-4 overflow-x-auto pb-2 no-scrollbar px-4 pt-3">
-                        {SUB_TABS.map(tab => (
-                            <button
-                                key={tab.id}
-                                type="button"
-                                onClick={() => onChangeSubTab && onChangeSubTab(tab.id)}
-                                className={`px-4 py-3 rounded-2xl font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${
-                                    activeSubTab === tab.id 
-                                    ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20 scale-[1.02]' 
-                                    : 'bg-white/5 text-slate-300 hover:bg-white/10'
-                                }`}
-                            >
-                                {tab.label}
-                            </button>
-                        ))}
-                    </div>
-                    <div className="animate-in fade-in duration-500">
-                        {renderSubPage()}
-                    </div>
+                <div className="arsenal-vip-container animate-in fade-in duration-500">
+                    <NutritionDashboard
+                        ud={ud}
+                        onNav={onNav}
+                        hasNutriScanAccess={temAcessoNutriScan}
+                        onOpenNutriUpsell={onOpenNutriUpsell}
+                    />
                 </div>
             );
         }
@@ -6649,6 +6293,8 @@ import { createClient } from '@supabase/supabase-js';
             const ud = useUserData();
             const [page, setPage] = useState('inicio');
             const [arsenalSubTab, setArsenalSubTab] = useState('nutricao');
+            const [treinoSubTab, setTreinoSubTab] = useState('exercicios');
+            const [evolucaoSubTab, setEvolucaoSubTab] = useState('peso');
             const [focusRedeemOnExtras, setFocusRedeemOnExtras] = useState(false);
             const [editProfileOpen, setEditProfileOpen] = useState(false);
             const [workoutSwappedMsg, setWorkoutSwappedMsg] = useState('');
@@ -7033,18 +6679,17 @@ import { createClient } from '@supabase/supabase-js';
 
             const handleAccessModule = useCallback((moduleId) => {
                 if (moduleId === 'scanner_ia' || moduleId === 'nutricao') {
-                    setArsenalSubTab('nutricao');
                     setPage('arsenal-vip');
                     return;
                 }
                 if (moduleId === 'desafio30' || moduleId === 'cronograma') {
-                    setArsenalSubTab('cronograma');
-                    setPage('arsenal-vip');
+                    setTreinoSubTab('desafio30');
+                    setPage('treinos');
                     return;
                 }
                 if (moduleId === 'sono') {
-                    setArsenalSubTab('sono');
-                    setPage('arsenal-vip');
+                    setEvolucaoSubTab('sono');
+                    setPage('evolucao');
                     return;
                 }
                 setModFilter(moduleId);
@@ -7054,6 +6699,7 @@ import { createClient } from '@supabase/supabase-js';
                 else setCat('Todos');
                 setDiff('Todos');
                 setSearch('');
+                setTreinoSubTab('exercicios');
                 setPage('treinos');
             }, []);
 
@@ -7553,6 +7199,38 @@ import { createClient } from '@supabase/supabase-js';
                                     </div>
                                 </div>
 
+                                {/* 2.5 ATALHOS VISÍVEIS: DESAFIO 30 DIAS + SONO PROFUNDO */}
+                                <div className="grid grid-cols-2 gap-3 mb-6">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setTreinoSubTab('desafio30'); setPage('treinos'); }}
+                                        className="text-left p-4 rounded-3xl bg-gradient-to-br from-orange-500/15 to-slate-900/90 border border-orange-500/25 hover:border-orange-400/50 transition-all active:scale-[0.98]"
+                                    >
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <span className="text-xl">🔥</span>
+                                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${hasDesafio ? 'bg-emerald-500/20 text-emerald-300' : 'bg-orange-500/20 text-orange-300'}`}>
+                                                {hasDesafio ? 'Liberado' : '🔒 Plano 30D'}
+                                            </span>
+                                        </div>
+                                        <div className="text-sm font-black text-white leading-tight">Desafio 30 Dias</div>
+                                        <div className="text-[11px] text-slate-400 font-medium mt-0.5">Treino pronto dia a dia →</div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setEvolucaoSubTab('sono'); setPage('evolucao'); }}
+                                        className="text-left p-4 rounded-3xl bg-gradient-to-br from-indigo-500/15 to-slate-900/90 border border-indigo-500/25 hover:border-indigo-400/50 transition-all active:scale-[0.98]"
+                                    >
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <span className="text-xl">🌙</span>
+                                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${hasSono ? 'bg-emerald-500/20 text-emerald-300' : 'bg-indigo-500/20 text-indigo-300'}`}>
+                                                {hasSono ? 'Liberado' : '🔒 Áudios'}
+                                            </span>
+                                        </div>
+                                        <div className="text-sm font-black text-white leading-tight">Sono Profundo</div>
+                                        <div className="text-[11px] text-slate-400 font-medium mt-0.5">Dormir melhor & energia →</div>
+                                    </button>
+                                </div>
+
                                 {/* 3. GANCHO DE DEGUSTAÇÃO NUTRI-SCAN (2 TESTES GRÁTIS NO DIA 1!) */}
                                 {!temAcessoNutriScan && (
                                     <div
@@ -7801,16 +7479,48 @@ import { createClient } from '@supabase/supabase-js';
                     }
                     case 'treinos': {
                         return (
-                            <TreinoModuleLive 
-                                ud={ud}
-                                setSel={setSel} 
-                                hasAccess={temAcessoPremium} 
-                                hasDesafio={hasDesafio}
-                                hasMusculacao={hasMusculacao}
-                                hasPilates={hasPilates}
-                                onOpenDesafio={() => { setArsenalSubTab('cronograma'); setPage('arsenal-vip'); }}
-                                onGoToExtras={(scrollToRedeem = false) => navigateTo('extras', { focusRedeem: scrollToRedeem })} 
-                            />
+                            <div className="w-full">
+                                <div className="flex gap-2 px-4 pt-3 pb-2 max-w-4xl mx-auto">
+                                    <button
+                                        type="button"
+                                        onClick={() => setTreinoSubTab('exercicios')}
+                                        className={`flex-1 py-3 px-4 rounded-2xl font-black text-xs sm:text-sm transition-all ${treinoSubTab === 'exercicios' ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/25' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}
+                                    >
+                                        ⚡ +500 Exercícios
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setTreinoSubTab('desafio30')}
+                                        className={`flex-1 py-3 px-4 rounded-2xl font-black text-xs sm:text-sm transition-all ${treinoSubTab === 'desafio30' ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/25' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}
+                                    >
+                                        {hasDesafio ? '🔥 Desafio 30 Dias' : '🔒 Desafio 30 Dias'}
+                                    </button>
+                                </div>
+                                {treinoSubTab === 'desafio30' ? (
+                                    hasDesafio ? (
+                                        <Cronograma
+                                            challengeLog={ud.challengeLog}
+                                            onCompleteDay={ud.completeChallengeDay}
+                                            onNav={navigateTo}
+                                            ud={ud}
+                                            onSelect={setSel}
+                                        />
+                                    ) : (
+                                        <TeaserDesafioPage ud={ud} onGoToExtras={() => navigateTo('extras')} />
+                                    )
+                                ) : (
+                                    <TreinoModuleLive 
+                                        ud={ud}
+                                        setSel={setSel} 
+                                        hasAccess={temAcessoPremium} 
+                                        hasDesafio={hasDesafio}
+                                        hasMusculacao={hasMusculacao}
+                                        hasPilates={hasPilates}
+                                        onOpenDesafio={() => setTreinoSubTab('desafio30')}
+                                        onGoToExtras={(scrollToRedeem = false) => navigateTo('extras', { focusRedeem: scrollToRedeem })} 
+                                    />
+                                )}
+                            </div>
                         );
                     }
 
@@ -7819,25 +7529,45 @@ import { createClient } from '@supabase/supabase-js';
                             <ArsenalVIP 
                                 ud={ud} 
                                 onNav={navigateTo} 
-                                temAcessoNutriScan={temAcessoNutriScan} 
-                                hasDesafio={hasDesafio} 
-                                hasSono={hasSono}
-                                setSel={setSel}
-                                activeSubTab={arsenalSubTab}
-                                onChangeSubTab={setArsenalSubTab}
+                                temAcessoNutriScan={temAcessoNutriScan}
                                 onOpenNutriUpsell={openNutriScanUpsell}
-                                freeScansRemaining={freeScansRemainingGlobal}
                             />
                         );
                     }
 
                     case 'evolucao': {
                         return (
-                            <EvolucaoCorporal
-                                session={ud.session}
-                                userProfile={ud.userProfile}
-                                onOpenNutriScan={() => { setArsenalSubTab('nutricao'); setPage('arsenal-vip'); }}
-                            />
+                            <div className="w-full">
+                                <div className="flex gap-2 px-4 pt-3 pb-2 max-w-2xl mx-auto">
+                                    <button
+                                        type="button"
+                                        onClick={() => setEvolucaoSubTab('peso')}
+                                        className={`flex-1 py-3 px-4 rounded-2xl font-black text-xs sm:text-sm transition-all ${evolucaoSubTab === 'peso' ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/25' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}
+                                    >
+                                        ⚖️ Meu Peso
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEvolucaoSubTab('sono')}
+                                        className={`flex-1 py-3 px-4 rounded-2xl font-black text-xs sm:text-sm transition-all ${evolucaoSubTab === 'sono' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/25' : 'bg-white/5 text-slate-300 hover:bg-white/10'}`}
+                                    >
+                                        {hasSono ? '🌙 Sono Profundo' : '🔒 Sono Profundo'}
+                                    </button>
+                                </div>
+                                {evolucaoSubTab === 'sono' ? (
+                                    hasSono ? (
+                                        <SonoProfundo ud={ud} />
+                                    ) : (
+                                        <TeaserSonoPage ud={ud} onGoToExtras={() => navigateTo('extras')} />
+                                    )
+                                ) : (
+                                    <EvolucaoCorporal
+                                        session={ud.session}
+                                        userProfile={ud.userProfile}
+                                        onOpenNutriScan={() => setPage('arsenal-vip')}
+                                    />
+                                )}
+                            </div>
                         );
                     }
 
@@ -7955,7 +7685,8 @@ import { createClient } from '@supabase/supabase-js';
                             setCat('Ginástica');
                             setPage('treinos');
                         } else {
-                            if (p === 'arsenal-vip') setArsenalSubTab('nutricao');
+                            if (p === 'treinos') setTreinoSubTab('exercicios');
+                            if (p === 'evolucao') setEvolucaoSubTab('peso');
                             if (p === 'explorar') setModFilter('base');
                             setPage(p);
                         }
@@ -7973,8 +7704,8 @@ import { createClient } from '@supabase/supabase-js';
                                     className={`bottom-nav-item ${page === n.id ? 'active' : ''}`} 
                                     style={{ position: 'relative' }}
                                     onClick={() => {
-                                        if (n.id === 'treinos') setModFilter('base');
-                                        if (n.id === 'arsenal-vip') setArsenalSubTab('nutricao');
+                                        if (n.id === 'treinos') { setModFilter('base'); setTreinoSubTab('exercicios'); }
+                                        if (n.id === 'evolucao') setEvolucaoSubTab('peso');
                                         setPage(n.id);
                                     }}
                                 >
