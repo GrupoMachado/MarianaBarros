@@ -44,6 +44,43 @@ import { createClient } from '@supabase/supabase-js';
             window.open(url, '_blank', 'noopener,noreferrer');
         };
 
+        const trackConversionEvent = (eventName, { placement = null, product = null, metadata = {} } = {}) => {
+            try {
+                const sb = window.supabase;
+                if (!sb || !eventName) return;
+                sb.auth.getSession().then(({ data }) => {
+                    const uid = data?.session?.user?.id;
+                    if (!uid) return;
+                    sb.from('app_conversion_events').insert({
+                        user_id: uid,
+                        app: 'br',
+                        event_name: eventName,
+                        placement,
+                        product,
+                        metadata
+                    }).then(() => {}, () => {});
+                }).catch(() => {});
+            } catch {}
+        };
+
+        const openHotmartCheckout = (baseUrl, { placement = 'app_br', product = 'unknown', ud = null } = {}) => {
+            if (!baseUrl || typeof baseUrl !== 'string') return;
+            trackConversionEvent('checkout_click', { placement, product });
+            let finalUrl = baseUrl;
+            try {
+                const parsed = new URL(baseUrl);
+                const email = ud?.session?.user?.email || ud?.userProfile?.email || '';
+                const name = ud?.userProfile?.name || '';
+                const phone = (ud?.userProfile?.whatsapp || '').replace(/\D/g, '');
+                if (email && !parsed.searchParams.has('email')) parsed.searchParams.set('email', email.trim().toLowerCase());
+                if (name && !parsed.searchParams.has('name')) parsed.searchParams.set('name', name.trim());
+                if (phone && phone.length >= 10 && !parsed.searchParams.has('phonenumber')) parsed.searchParams.set('phonenumber', phone);
+                parsed.searchParams.set('src', `app_br_${placement}`);
+                finalUrl = parsed.toString();
+            } catch {}
+            safeOpenExternal(finalUrl);
+        };
+
         const isSafeImageUrl = (url) => {
             if (!url || typeof url !== 'string') return false;
             return /^https:\/\//i.test(url.trim()) || /^\.?\//.test(url.trim());
@@ -493,6 +530,9 @@ import { createClient } from '@supabase/supabase-js';
                     const exists = prev.some(x => x.id === id);
                     const next = exists ? prev.filter(x => x.id !== id) : [...prev, { id, ts: Date.now() }];
                     added = !exists;
+                    if (prev.length === 0 && !exists) {
+                        trackConversionEvent('first_workout_completed', { placement: 'single_exercise', metadata: { exerciseId: id } });
+                    }
                     syncToSupa({ completed_log: next });
                     return next;
                 });
@@ -509,6 +549,9 @@ import { createClient } from '@supabase/supabase-js';
                             changed = true;
                         }
                     });
+                    if (prev.length === 0 && changed) {
+                        trackConversionEvent('first_workout_completed', { placement: 'daily_workout', metadata: { count: (exerciseIds || []).length } });
+                    }
                     if (changed) syncToSupa({ completed_log: next });
                     return changed ? next : prev;
                 });
@@ -950,6 +993,8 @@ import { createClient } from '@supabase/supabase-js';
         }
 
         function Onboarding({ onComplete, initialProfile = null, onCancel = null }) {
+            const isEditMode = Boolean(initialProfile);
+            const [step, setStep] = useState(isEditMode ? 2 : 1);
             const [name, setName] = useState(initialProfile?.name || '');
             const [goal, setGoal] = useState(initialProfile?.goal || initialProfile?.objetivo_principal || '');
             const [age, setAge] = useState(initialProfile?.idade || initialProfile?.age || 38);
@@ -960,7 +1005,12 @@ import { createClient } from '@supabase/supabase-js';
             const [saving, setSaving] = useState(false);
 
             const ESTADOS_BR = ["Acre", "Alagoas", "Amapá", "Amazonas", "Bahia", "Ceará", "Distrito Federal", "Espírito Santo", "Goiás", "Maranhão", "Mato Grosso", "Mato Grosso do Sul", "Minas Gerais", "Pará", "Paraíba", "Paraná", "Pernambuco", "Piauí", "Rio de Janeiro", "Rio Grande do Norte", "Rio Grande do Sul", "Rondônia", "Roraima", "Santa Catarina", "São Paulo", "Sergipe", "Tocantins"];
-            const GOALS = ['Perder Peso', 'Tonificar e Definir', 'Ganhar Massa', 'Saúde e Mobilidade'];
+            const GOAL_OPTIONS = [
+                { value: 'Perder Peso', emoji: '🔥', title: 'Emagrecer & Secar', sub: 'Queimar gordura e desinchar em casa' },
+                { value: 'Tonificar e Definir', emoji: '✨', title: 'Firmar & Tonificar', sub: 'Glúteos, pernas, barriga e braços firmes' },
+                { value: 'Ganhar Massa', emoji: '💪', title: 'Ganhar Força & Massa', sub: 'Músculos mais fortes com elásticos' },
+                { value: 'Saúde e Mobilidade', emoji: '🌿', title: 'Aliviar Dores & Saúde', sub: 'Postura, disposição e baixo impacto' }
+            ];
             const GENDERS = [
                 { id: 'female', label: 'Feminino', emoji: '✨' },
                 { id: 'male', label: 'Masculino', emoji: '💪' },
@@ -982,22 +1032,41 @@ import { createClient } from '@supabase/supabase-js';
                 setWhatsapp(value);
             };
 
-            const handleSubmit = async (e) => {
-                e.preventDefault();
+            const finishOnboarding = async (skipOptional = false) => {
                 setValidationErr('');
-                if (!name.trim()) return setValidationErr('Digite como você gostaria de ser chamado(a).');
-                if (!estado) return setValidationErr('Selecione o seu estado.');
-                if (!selectedGender) return setValidationErr('Escolha seu perfil (Feminino, Masculino ou Outro).');
-                if (!goal) return setValidationErr('Escolha seu objetivo principal.');
+                if (!name.trim()) return setValidationErr('Digite como você gostaria de ser chamada(o).');
+                if (!goal) return setValidationErr('Toque no seu principal objetivo acima.');
                 setSaving(true);
                 try {
-                    await onComplete(name.trim(), goal, selectedGender, age, estado, whatsapp);
+                    const finalGender = skipOptional ? (selectedGender || 'female') : (selectedGender || 'female');
+                    const finalEstado = skipOptional ? (estado || '') : estado;
+                    const finalAge = skipOptional ? (Number(age) || 38) : (Number(age) || 38);
+                    await onComplete(name.trim(), goal, finalGender, finalAge, finalEstado, whatsapp);
+                    if (!isEditMode) {
+                        trackConversionEvent('onboarding_completed', {
+                            placement: skipOptional ? 'step2_skipped' : 'step2_full',
+                            metadata: { goal, has_estado: Boolean(finalEstado) }
+                        });
+                    }
                 } finally {
                     setSaving(false);
                 }
             };
 
-            const isReady = Boolean(name.trim() && goal && selectedGender && estado);
+            const handleStep1Next = (e) => {
+                e.preventDefault();
+                setValidationErr('');
+                if (!goal) return setValidationErr('Escolha seu principal objetivo para montarmos seu treino.');
+                if (!name.trim()) return setValidationErr('Digite seu primeiro nome para personalizar o app.');
+                setStep(2);
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                await finishOnboarding(false);
+            };
+
+            const isStep1Ready = Boolean(name.trim() && goal);
 
             return (
                 <div className="onboarding-overlay" style={{ animation: 'fade-in 0.4s ease-out', overflowY: 'auto', alignItems: 'flex-start', padding: '24px 16px 40px' }}>
@@ -1010,116 +1079,186 @@ import { createClient } from '@supabase/supabase-js';
                                 style={{ position: 'absolute', top: '14px', right: '14px', width: '34px', height: '34px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                             >&times;</button>
                         )}
+
+                        {!isEditMode && (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '14px' }}>
+                                <span style={{ height: '5px', width: '44px', borderRadius: '99px', background: '#f97316' }}></span>
+                                <span style={{ height: '5px', width: '44px', borderRadius: '99px', background: step === 2 ? '#f97316' : 'rgba(255,255,255,0.14)' }}></span>
+                                <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Passo {step} de 2</span>
+                            </div>
+                        )}
+
                         <div className="onboarding-header flex flex-col items-center">
-                            <h1 style={{ fontSize: '24px', fontWeight: '900', marginBottom: '6px', textAlign: 'center' }}>
-                                {initialProfile ? '✏️ Editar Meu Perfil' : <>Bem-vindo(a) ao <span style={{ color: 'var(--accent)' }}>+500 Exercícios</span></>}
+                            <h1 style={{ fontSize: '23px', fontWeight: '900', marginBottom: '6px', textAlign: 'center', lineHeight: 1.2 }}>
+                                {isEditMode
+                                    ? '✏️ Editar Meu Perfil'
+                                    : step === 1
+                                    ? <>Monte seu plano em <span style={{ color: 'var(--accent)' }}>5 segundos</span></>
+                                    : <>Quase lá, <span style={{ color: 'var(--accent)' }}>{name.trim().split(' ')[0]}</span>!</>}
                             </h1>
-                            <p style={{ color: 'var(--text-secondary)', fontSize: '13.5px', marginBottom: '8px', textAlign: 'center' }}>
-                                {initialProfile ? 'Atualize seus dados para manter seus treinos e metas personalizados.' : 'Personalize seu perfil em 20 segundos para adaptarmos seus treinos e suas metas em casa.'}
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '10px', textAlign: 'center' }}>
+                                {isEditMode
+                                    ? 'Atualize seus dados para manter seus treinos e metas personalizados.'
+                                    : step === 1
+                                    ? 'Escolha seu foco para separarmos seu 1º treino rápido de 12 min em casa.'
+                                    : 'Opcional: informe idade e estado para calibrar seu gasto calórico e clima (você pode pular).'}
                             </p>
                         </div>
-                        <form onSubmit={handleSubmit} className="onboarding-form" noValidate>
-                            <div className="input-group">
-                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>COMO VOCÊ GOSTARIA DE SER CHAMADO(A)?</label>
-                                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Ana Paula" required className="ob-input" style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px', transition: 'all 0.3s' }} />
-                            </div>
-                            <div className="mb-4 mt-4">
-                                <label className="block text-xs font-bold text-gray-400 mb-1 uppercase tracking-wider">
-                                    Sua Idade: <span className="text-orange-500 text-base">{age}</span> ANOS
-                                </label>
-                                <input 
-                                    type="range" 
-                                    min="14" 
-                                    max="90" 
-                                    value={age} 
-                                    onChange={(e) => setAge(Number(e.target.value))} 
-                                    className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
-                                />
-                            </div>
-                            <div className="input-group" style={{ marginTop: '16px' }}>
-                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU ESTADO</label>
-                                <select className="ob-input" value={estado} onChange={e => setEstado(e.target.value)} required style={{ width: '100%', background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px', colorScheme: 'dark' }}>
-                                    <option value="" disabled style={{ background: '#0f172a', color: '#94a3b8' }}>Selecione o seu estado...</option>
-                                    {ESTADOS_BR.map(uf => <option key={uf} value={uf} style={{ background: '#0f172a', color: '#fff' }}>{uf}</option>)}
-                                </select>
-                            </div>
-                            <div className="input-group" style={{ marginTop: '16px' }}>
-                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU WHATSAPP <span style={{ opacity: 0.65 }}>(OPCIONAL)</span></label>
-                                <input 
-                                    type="tel" 
-                                    value={whatsapp} 
-                                    onChange={handlePhoneChange} 
-                                    placeholder="Ex: (11) 99999-9999" 
-                                    className="ob-input" 
-                                    style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px' }} 
-                                />
-                            </div>
-                            <div className="input-group" style={{ marginTop: '16px' }}>
-                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU PERFIL</label>
-                                <div className="gender-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '8px' }}>
-                                    {GENDERS.map(g => (
-                                        <button 
-                                            type="button" 
-                                            key={g.id} 
-                                            className={`goal-btn ${selectedGender === g.id ? 'border-orange-500 border-4 shadow-lg' : ''}`} 
-                                            onClick={() => setSelectedGender(g.id)}
-                                            style={{ 
-                                                padding: '10px 4px', 
-                                                display: 'flex', 
-                                                flexDirection: 'column', 
-                                                gap: '4px', 
-                                                alignItems: 'center',
-                                                borderRadius: '12px',
-                                                borderWidth: selectedGender === g.id ? '2px' : '1.5px',
-                                                borderStyle: 'solid',
-                                                borderColor: selectedGender === g.id ? '#f97316' : 'rgba(255,255,255,0.1)',
-                                                background: selectedGender === g.id ? 'rgba(249,115,22,0.18)' : 'rgba(255,255,255,0.03)',
-                                                color: selectedGender === g.id ? '#fff' : 'var(--text-secondary)',
-                                                transition: 'all 0.25s',
-                                                transform: selectedGender === g.id ? 'scale(1.03)' : 'scale(1)'
-                                            }}
-                                        >
-                                            <span style={{ fontSize: '24px', filter: selectedGender === g.id ? 'grayscale(0)' : 'grayscale(1) brightness(0.8)', transition: '0.3s' }}>{g.emoji}</span>
-                                            <span style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', color: selectedGender === g.id ? '#f97316' : 'inherit' }}>{g.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                            <div className="input-group" style={{ marginTop: '16px' }}>
-                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>QUAL É O SEU PRINCIPAL OBJETIVO?</label>
-                                <div className="goal-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '8px' }}>
-                                    {GOALS.map(g => (
-                                        <button 
-                                            type="button" 
-                                            key={g} 
-                                            className={`goal-btn ${goal === g ? 'selected' : ''}`} 
-                                            onClick={() => setGoal(g)}
-                                            style={{
-                                                padding: '10px',
-                                                borderRadius: '12px',
-                                                border: goal === g ? '2px solid #f97316' : '1px solid rgba(255,255,255,0.1)',
-                                                background: goal === g ? 'rgba(249, 115, 22, 0.18)' : 'rgba(255,255,255,0.03)',
-                                                color: goal === g ? '#fff' : 'var(--text-secondary)',
-                                                fontSize: '13px',
-                                                fontWeight: '700'
-                                            }}
-                                        >
-                                            {g}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
 
-                            {validationErr && (
-                                <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(239,68,68,0.14)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5', fontSize: '12px', fontWeight: '700', textAlign: 'center' }}>
-                                    {validationErr}
+                        {!isEditMode && step === 1 ? (
+                            <form onSubmit={handleStep1Next} className="onboarding-form" noValidate>
+                                <div className="input-group">
+                                    <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>1. QUAL É O SEU PRINCIPAL OBJETIVO?</label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                        {GOAL_OPTIONS.map(g => (
+                                            <button
+                                                type="button"
+                                                key={g.value}
+                                                onClick={() => setGoal(g.value)}
+                                                style={{
+                                                    padding: '12px 10px',
+                                                    borderRadius: '14px',
+                                                    border: goal === g.value ? '2px solid #f97316' : '1px solid rgba(255,255,255,0.1)',
+                                                    background: goal === g.value ? 'rgba(249, 115, 22, 0.18)' : 'rgba(255,255,255,0.03)',
+                                                    color: '#fff',
+                                                    textAlign: 'left',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                <div style={{ fontSize: '20px', marginBottom: '4px' }}>{g.emoji}</div>
+                                                <div style={{ fontSize: '12.5px', fontWeight: '800', lineHeight: 1.2 }}>{g.title}</div>
+                                                <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.6)', marginTop: '3px', lineHeight: 1.25 }}>{g.sub}</div>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                            )}
 
-                            <button type="submit" className="ob-submit-btn" disabled={saving} style={{ width: '100%', marginTop: '16px', padding: '14px', background: 'var(--accent)', color: '#fff', borderRadius: '14px', fontWeight: '900', border: 'none', cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: (!isReady || saving) ? 0.65 : 1 }}>
-                                {saving ? 'SALVANDO...' : (initialProfile ? 'SALVAR ALTERAÇÕES' : 'MONTAR MEU PLANO')} <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
-                            </button>
-                        </form>
+                                <div className="input-group" style={{ marginTop: '16px' }}>
+                                    <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>2. COMO VOCÊ GOSTARIA DE SER CHAMADA(O)?</label>
+                                    <input
+                                        type="text"
+                                        value={name}
+                                        onChange={e => setName(e.target.value)}
+                                        placeholder="Ex: Ana Paula"
+                                        required
+                                        className="ob-input"
+                                        style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', padding: '13px', color: '#fff', fontSize: '15px' }}
+                                    />
+                                </div>
+
+                                {validationErr && (
+                                    <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(239,68,68,0.14)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5', fontSize: '12px', fontWeight: '700', textAlign: 'center' }}>
+                                        {validationErr}
+                                    </div>
+                                )}
+
+                                <button type="submit" className="ob-submit-btn" style={{ width: '100%', marginTop: '16px', padding: '15px', background: 'linear-gradient(135deg, #f97316, #ea580c)', color: '#fff', borderRadius: '14px', fontWeight: '900', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: isStep1Ready ? 1 : 0.65 }}>
+                                    CONTINUAR <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                                </button>
+                            </form>
+                        ) : (
+                            <form onSubmit={handleSubmit} className="onboarding-form" noValidate>
+                                {isEditMode && (
+                                    <>
+                                        <div className="input-group">
+                                            <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>COMO VOCÊ GOSTARIA DE SER CHAMADA(O)?</label>
+                                            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Ana Paula" required className="ob-input" style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px' }} />
+                                        </div>
+                                        <div className="input-group" style={{ marginTop: '14px' }}>
+                                            <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU PRINCIPAL OBJETIVO</label>
+                                            <div className="goal-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '6px' }}>
+                                                {GOAL_OPTIONS.map(g => (
+                                                    <button type="button" key={g.value} onClick={() => setGoal(g.value)} style={{ padding: '10px', borderRadius: '12px', border: goal === g.value ? '2px solid #f97316' : '1px solid rgba(255,255,255,0.1)', background: goal === g.value ? 'rgba(249, 115, 22, 0.18)' : 'rgba(255,255,255,0.03)', color: goal === g.value ? '#fff' : 'var(--text-secondary)', fontSize: '12.5px', fontWeight: '700' }}>
+                                                        {g.emoji} {g.title}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                <div className="mb-4 mt-3">
+                                    <label className="block text-xs font-bold text-gray-400 mb-1 uppercase tracking-wider">
+                                        Sua Idade: <span className="text-orange-500 text-base">{age}</span> ANOS
+                                    </label>
+                                    <input
+                                        type="range"
+                                        min="14"
+                                        max="90"
+                                        value={age}
+                                        onChange={(e) => setAge(Number(e.target.value))}
+                                        className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                                    />
+                                </div>
+
+                                <div className="input-group" style={{ marginTop: '14px' }}>
+                                    <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU PERFIL</label>
+                                    <div className="gender-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '6px' }}>
+                                        {GENDERS.map(g => (
+                                            <button
+                                                type="button"
+                                                key={g.id}
+                                                onClick={() => setSelectedGender(g.id)}
+                                                style={{
+                                                    padding: '10px 4px',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    gap: '4px',
+                                                    alignItems: 'center',
+                                                    borderRadius: '12px',
+                                                    borderWidth: selectedGender === g.id ? '2px' : '1.5px',
+                                                    borderStyle: 'solid',
+                                                    borderColor: selectedGender === g.id ? '#f97316' : 'rgba(255,255,255,0.1)',
+                                                    background: selectedGender === g.id ? 'rgba(249,115,22,0.18)' : 'rgba(255,255,255,0.03)',
+                                                    color: selectedGender === g.id ? '#fff' : 'var(--text-secondary)',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                <span style={{ fontSize: '22px' }}>{g.emoji}</span>
+                                                <span style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', color: selectedGender === g.id ? '#f97316' : 'inherit' }}>{g.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="input-group" style={{ marginTop: '14px' }}>
+                                    <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU ESTADO <span style={{ opacity: 0.65 }}>(OPCIONAL)</span></label>
+                                    <select className="ob-input" value={estado} onChange={e => setEstado(e.target.value)} style={{ width: '100%', background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px', colorScheme: 'dark' }}>
+                                        <option value="" style={{ background: '#0f172a', color: '#94a3b8' }}>Selecione o seu estado (opcional)...</option>
+                                        {ESTADOS_BR.map(uf => <option key={uf} value={uf} style={{ background: '#0f172a', color: '#fff' }}>{uf}</option>)}
+                                    </select>
+                                </div>
+
+                                {isEditMode && (
+                                    <div className="input-group" style={{ marginTop: '14px' }}>
+                                        <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>TELEFONE <span style={{ opacity: 0.65 }}>(OPCIONAL)</span></label>
+                                        <input type="tel" value={whatsapp} onChange={handlePhoneChange} placeholder="Ex: (11) 99999-9999" className="ob-input" style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px' }} />
+                                    </div>
+                                )}
+
+                                {validationErr && (
+                                    <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(239,68,68,0.14)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5', fontSize: '12px', fontWeight: '700', textAlign: 'center' }}>
+                                        {validationErr}
+                                    </div>
+                                )}
+
+                                <button type="submit" className="ob-submit-btn" disabled={saving} style={{ width: '100%', marginTop: '16px', padding: '15px', background: 'linear-gradient(135deg, #f97316, #ea580c)', color: '#fff', borderRadius: '14px', fontWeight: '900', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: saving ? 0.65 : 1 }}>
+                                    {saving ? 'SALVANDO...' : (isEditMode ? 'SALVAR ALTERAÇÕES' : 'ENTRAR NO MEU PLANO')} <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                                </button>
+
+                                {!isEditMode && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                                        <button type="button" onClick={() => setStep(1)} disabled={saving} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.55)', fontSize: '12px', cursor: 'pointer' }}>
+                                            ← Voltar
+                                        </button>
+                                        <button type="button" onClick={() => finishOnboarding(true)} disabled={saving} style={{ background: 'none', border: 'none', color: '#fb923c', fontSize: '12.5px', fontWeight: '800', cursor: 'pointer', textDecoration: 'underline' }}>
+                                            Pular e entrar agora →
+                                        </button>
+                                    </div>
+                                )}
+                            </form>
+                        )}
                     </div>
                 </div>
             );
@@ -1153,7 +1292,7 @@ import { createClient } from '@supabase/supabase-js';
             </div>);
         }
 
-        function VideoModal({ exercise: ex, isCompleted, onClose, onToggle }) {
+        function VideoModal({ exercise: ex, isCompleted, onClose, onToggle, hasNutriScanAccess = true, freeScansRemaining = 0, onOpenNutriScan }) {
             const videoRef = React.useRef(null);
             const onCloseRef = React.useRef(onClose);
             const [isPlaying, setIsPlaying] = React.useState(false);
@@ -1394,6 +1533,20 @@ import { createClient } from '@supabase/supabase-js';
                                 <button className={`btn-complete ${isCompleted ? 'done' : 'pending'}`} style={{ marginTop: '24px', fontSize: '16px', padding: '18px' }} onClick={() => onToggle(ex.id)}>
                                     {isCompleted ? '✓ Exercício Concluído' : '✔️ Marcar como Concluído'}
                                 </button>
+                                {isCompleted && !hasNutriScanAccess && freeScansRemaining > 0 && onOpenNutriScan && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            trackConversionEvent('video_post_complete_nutri_click', { placement: 'video_modal' });
+                                            handleClose();
+                                            onOpenNutriScan();
+                                        }}
+                                        style={{ marginTop: '12px', width: '100%', padding: '14px 16px', borderRadius: '14px', background: 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(5,150,105,0.12))', border: '1px solid rgba(16,185,129,0.45)', color: '#d1fae5', fontSize: '13px', fontWeight: '800', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}
+                                    >
+                                        <span>✨ Exercício pago! Use 1 foto grátis no Nutri-Scan IA para calcular seu pós-treino</span>
+                                        <span style={{ color: '#34d399', fontWeight: '900', flexShrink: 0 }}>Testar →</span>
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -1402,7 +1555,7 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function TeaserArsenalPage({ onGoToExtras }) {
+        function TeaserArsenalPage({ onGoToExtras, ud = null }) {
             return (
                 <div className="teaser-container">
                     <div className="teaser-badge">🔒 CONTEÚDO EXCLUSIVO</div>
@@ -1449,16 +1602,16 @@ import { createClient } from '@supabase/supabase-js';
         
                     <div className="fixed-cta-container">
                         <div style={{ width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '8px', margin: '0 auto' }}>
-                            <a 
-                                href="https://pay.hotmart.com/O106106388F?checkoutMode=10"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="w-full text-center font-bold uppercase px-8 py-4 rounded-full bg-orange-600 hover:bg-orange-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] transition-transform duration-300 block no-underline"
+                            <button
+                                type="button"
+                                onClick={() => openHotmartCheckout('https://pay.hotmart.com/O106106388F?checkoutMode=10', { placement: 'teaser_arsenal', product: 'combo_ouro', ud })}
+                                className="w-full text-center font-bold uppercase px-8 py-4 rounded-full bg-orange-600 hover:bg-orange-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] transition-transform duration-300 block cursor-pointer border-none"
                             >
                                 👉 LIBERAR COMBO DE OURO (R$ 24,90 VITALÍCIO)
-                            </a>
+                            </button>
                             {onGoToExtras && (
                                 <button
+                                    type="button"
                                     onClick={onGoToExtras}
                                     className="w-full py-2 text-xs text-slate-300 hover:text-white underline font-semibold"
                                 >
@@ -1471,7 +1624,7 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function TeaserDesafioPage({ onGoToExtras }) {
+        function TeaserDesafioPage({ onGoToExtras, ud = null }) {
             return (
                 <div className="teaser-container">
                     <div className="teaser-badge">🔥 PROGRAMA MAIS VENDIDO</div>
@@ -1522,24 +1675,23 @@ import { createClient } from '@supabase/supabase-js';
         
                     <div className="fixed-cta-container">
                         <div style={{ width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '8px', margin: '0 auto' }}>
-                            <a 
-                                href="https://pay.hotmart.com/O106106388F?checkoutMode=10"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="w-full text-center font-black uppercase px-6 py-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-xl transition-transform duration-200 block no-underline text-xs sm:text-sm"
+                            <button
+                                type="button"
+                                onClick={() => openHotmartCheckout('https://pay.hotmart.com/O106106388F?checkoutMode=10', { placement: 'teaser_desafio_combo', product: 'combo_ouro', ud })}
+                                className="w-full text-center font-black uppercase px-6 py-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-xl transition-transform duration-200 block text-xs sm:text-sm cursor-pointer border-none"
                             >
                                 🥇 LEVAR NO COMBO DE OURO (DESAFIO + 5 GUIAS) — R$ 24,90
-                            </a>
-                            <a 
-                                href="https://pay.hotmart.com/R106106925S?checkoutMode=10"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="w-full text-center font-bold uppercase px-6 py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-white transition-all block no-underline text-xs"
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => openHotmartCheckout('https://pay.hotmart.com/R106106925S?checkoutMode=10', { placement: 'teaser_desafio_single', product: 'desafio_30', ud })}
+                                className="w-full text-center font-bold uppercase px-6 py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-white transition-all block text-xs cursor-pointer"
                             >
                                 Ou desbloquear só o Desafio 30 Dias (R$ 19,90 vitalício)
-                            </a>
+                            </button>
                             {onGoToExtras && (
                                 <button
+                                    type="button"
                                     onClick={onGoToExtras}
                                     className="w-full py-1.5 text-[11px] text-slate-400 hover:text-white underline font-semibold"
                                 >
@@ -1552,7 +1704,7 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function TeaserSonoPage({ onGoToExtras }) {
+        function TeaserSonoPage({ onGoToExtras, ud = null }) {
             return (
                 <div className="teaser-container">
                     <div className="teaser-badge">🌙 SONO & DISPOSIÇÃO</div>
@@ -1599,24 +1751,23 @@ import { createClient } from '@supabase/supabase-js';
         
                     <div className="fixed-cta-container">
                         <div style={{ width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '8px', margin: '0 auto' }}>
-                            <a 
-                                href="https://pay.hotmart.com/O106106388F?checkoutMode=10"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="w-full text-center font-black uppercase px-6 py-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-xl transition-transform duration-200 block no-underline text-xs sm:text-sm"
+                            <button
+                                type="button"
+                                onClick={() => openHotmartCheckout('https://pay.hotmart.com/O106106388F?checkoutMode=10', { placement: 'teaser_sono_combo', product: 'combo_ouro', ud })}
+                                className="w-full text-center font-black uppercase px-6 py-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-xl transition-transform duration-200 block text-xs sm:text-sm cursor-pointer border-none"
                             >
                                 🥇 LEVAR GRÁTIS NO COMBO DE OURO (+5 PROGRAMAS) — R$ 24,90
-                            </a>
-                            <a 
-                                href="https://pay.hotmart.com/Y106107162P?checkoutMode=10"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="w-full text-center font-bold uppercase px-6 py-3 rounded-2xl bg-indigo-600/80 hover:bg-indigo-500 text-white transition-all block no-underline text-xs"
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => openHotmartCheckout('https://pay.hotmart.com/Y106107162P?checkoutMode=10', { placement: 'teaser_sono_single', product: 'sono', ud })}
+                                className="w-full text-center font-bold uppercase px-6 py-3 rounded-2xl bg-indigo-600/80 hover:bg-indigo-500 text-white transition-all block text-xs cursor-pointer border-none"
                             >
                                 Ou liberar apenas o Sono Profundo (R$ 19,90)
-                            </a>
+                            </button>
                             {onGoToExtras && (
                                 <button
+                                    type="button"
                                     onClick={onGoToExtras}
                                     className="w-full py-1.5 text-[11px] text-slate-400 hover:text-white underline font-semibold"
                                 >
@@ -1846,6 +1997,7 @@ import { createClient } from '@supabase/supabase-js';
                                 glowColor="orange"
                                 desc={
                                     <>
+                                        <div className="mb-2.5 text-[10px] font-black text-amber-300 tracking-wide">★ 4,9 · +6.000 alunas treinando em casa</div>
                                         {hasDesafio && !hasGold ? (
                                             <div className="mb-3 p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-[11px] font-bold">
                                                 ✨ Você já tem o Desafio 30D! Complete sua coleção com Musculação em Casa + Pilates + 4 Guias Bônus:
@@ -1870,7 +2022,7 @@ import { createClient } from '@supabase/supabase-js';
                                 unlocked={hasGold}
                                 pdfs={ALL_GUIDES}
                                 onOpenPdf={openPdfViewer}
-                                onAction={() => hasGold ? (onAccessModule ? onAccessModule('desafio30') : onNav('arsenal-vip')) : safeOpenExternal('https://pay.hotmart.com/O106106388F?checkoutMode=10')}
+                                onAction={() => hasGold ? (onAccessModule ? onAccessModule('desafio30') : onNav('arsenal-vip')) : openHotmartCheckout('https://pay.hotmart.com/O106106388F?checkoutMode=10', { placement: 'extras_combo_ouro', product: 'combo_ouro', ud })}
                             />
 
                             <ExtraCard 
@@ -1880,6 +2032,7 @@ import { createClient } from '@supabase/supabase-js';
                                 glowColor="green"
                                 desc={
                                     <>
+                                        <div className="mb-2.5 text-[10px] font-black text-emerald-300 tracking-wide">★ 4,9 · Sem balança, direto pelo celular</div>
                                         Tire uma foto do seu prato ou digite o que comeu e descubra calorias e proteínas em 3 segundos:
                                         <div className="mt-2.5 space-y-1">
                                             <div className="font-bold text-emerald-300">✓ Análises Ilimitadas por Foto e Texto</div>
@@ -1896,7 +2049,7 @@ import { createClient } from '@supabase/supabase-js';
                                 secondaryCta={!hasScannerIA && freeScansRemaining > 0 && onOpenNutriScan ? `🎁 Usar teste grátis no app (${freeScansRemaining} restante)` : null}
                                 onSecondaryAction={onOpenNutriScan}
                                 unlocked={hasScannerIA}
-                                onAction={() => hasScannerIA ? (onOpenNutriScan ? onOpenNutriScan() : onNav('arsenal-vip')) : safeOpenExternal('https://pay.hotmart.com/H106107115U?checkoutMode=10')}
+                                onAction={() => hasScannerIA ? (onOpenNutriScan ? onOpenNutriScan() : onNav('arsenal-vip')) : openHotmartCheckout('https://pay.hotmart.com/H106107115U?checkoutMode=10', { placement: 'extras_nutri_scan', product: 'nutri_scan', ud })}
                             />
 
                             <ExtraCard 
@@ -1904,8 +2057,10 @@ import { createClient } from '@supabase/supabase-js';
                                 badge="💎 SEM MENSALIDADE"
                                 desc={
                                     <>
-                                        Pague uma única vez e nunca mais pague mensalidade! Libera TUDO para sempre:
-                                        <div className="mt-2.5 space-y-1">
+                                        <div className="mb-2.5 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-200 text-[11px] font-bold leading-snug">
+                                            💡 Em 7 meses de Nutri-Scan mensal (R$ 9,90/mês) você pagaria R$ 69,30 — aqui leva o Nutri-Scan + Combo de Ouro PARA SEMPRE sem mensalidade!
+                                        </div>
+                                        <div className="mt-2 space-y-1">
                                             <div className="font-bold text-emerald-300">✓ Tudo do Combo de Ouro (6 Programas)</div>
                                             <div className="font-bold text-emerald-300">✓ Nutri-Scan™ IA Vitalício (sem mensalidade!)</div>
                                             <div className="font-bold text-emerald-300">✓ Comunidade VIP no Telegram</div>
@@ -1922,7 +2077,7 @@ import { createClient } from '@supabase/supabase-js';
                                 unlocked={hasTotalVip}
                                 pdfs={ALL_GUIDES}
                                 onOpenPdf={openPdfViewer}
-                                onAction={() => hasTotalVip ? onNav('inicio') : safeOpenExternal('https://pay.hotmart.com/E105939718I?checkoutMode=10')}
+                                onAction={() => hasTotalVip ? onNav('inicio') : openHotmartCheckout('https://pay.hotmart.com/E105939718I?checkoutMode=10', { placement: 'extras_acesso_total', product: 'acesso_total', ud })}
                             />
                         </div>
                     ) : (
@@ -1949,7 +2104,7 @@ import { createClient } from '@supabase/supabase-js';
                                     unlocked={hasMusculacao}
                                     pdfs={[ALL_GUIDES[0]]}
                                     onOpenPdf={openPdfViewer}
-                                    onAction={() => hasMusculacao ? openPdfViewer(ALL_GUIDES[0]) : safeOpenExternal('https://pay.hotmart.com/N105939399C?checkoutMode=10')}
+                                    onAction={() => hasMusculacao ? openPdfViewer(ALL_GUIDES[0]) : openHotmartCheckout('https://pay.hotmart.com/N105939399C?checkoutMode=10', { placement: 'extras_ind_musculacao', product: 'musculacao', ud })}
                                 />
                                 <ExtraCard 
                                     title="Desafio 30 Dias"
@@ -1958,7 +2113,7 @@ import { createClient } from '@supabase/supabase-js';
                                     icon="🔥"
                                     subPrice="Pagamento único vitalício"
                                     unlocked={hasDesafio}
-                                    onAction={() => hasDesafio ? (onAccessModule ? onAccessModule('desafio30') : onNav('arsenal-vip')) : safeOpenExternal('https://pay.hotmart.com/R106106925S?checkoutMode=10')}
+                                    onAction={() => hasDesafio ? (onAccessModule ? onAccessModule('desafio30') : onNav('arsenal-vip')) : openHotmartCheckout('https://pay.hotmart.com/R106106925S?checkoutMode=10', { placement: 'extras_ind_desafio30', product: 'desafio_30', ud })}
                                 />
                                 <ExtraCard 
                                     title="Nutri-Scan™ IA"
@@ -1968,7 +2123,7 @@ import { createClient } from '@supabase/supabase-js';
                                     subPrice="7 Dias Grátis na Hotmart"
                                     icon="📸"
                                     unlocked={hasScannerIA}
-                                    onAction={() => hasScannerIA ? (onOpenNutriScan ? onOpenNutriScan() : onNav('arsenal-vip')) : safeOpenExternal('https://pay.hotmart.com/H106107115U?checkoutMode=10')}
+                                    onAction={() => hasScannerIA ? (onOpenNutriScan ? onOpenNutriScan() : onNav('arsenal-vip')) : openHotmartCheckout('https://pay.hotmart.com/H106107115U?checkoutMode=10', { placement: 'extras_ind_nutri_scan', product: 'nutri_scan', ud })}
                                 />
                                 <ExtraCard 
                                     title="Pilates Modelador"
@@ -1979,7 +2134,7 @@ import { createClient } from '@supabase/supabase-js';
                                     unlocked={hasPilates}
                                     pdfs={[ALL_GUIDES[1]]}
                                     onOpenPdf={openPdfViewer}
-                                    onAction={() => hasPilates ? openPdfViewer(ALL_GUIDES[1]) : safeOpenExternal('https://pay.hotmart.com/E105938855Y?checkoutMode=10')}
+                                    onAction={() => hasPilates ? openPdfViewer(ALL_GUIDES[1]) : openHotmartCheckout('https://pay.hotmart.com/E105938855Y?checkoutMode=10', { placement: 'extras_ind_pilates', product: 'pilates', ud })}
                                 />
                                 <ExtraCard 
                                     title="Pacote de Elite (IA + Comunidade)"
@@ -1989,7 +2144,7 @@ import { createClient } from '@supabase/supabase-js';
                                     isMonthly={true}
                                     icon="💬"
                                     unlocked={hasScannerIA && hasComunidade}
-                                    onAction={() => (hasScannerIA && hasComunidade) ? openCommunityVip() : safeOpenExternal('https://pay.hotmart.com/I105940414O?checkoutMode=10')}
+                                    onAction={() => (hasScannerIA && hasComunidade) ? openCommunityVip() : openHotmartCheckout('https://pay.hotmart.com/I105940414O?checkoutMode=10', { placement: 'extras_ind_pacote_elite', product: 'pacote_elite', ud })}
                                 />
                             </div>
                         </div>
@@ -2411,7 +2566,10 @@ import { createClient } from '@supabase/supabase-js';
             freeScansRemaining,
             onOpenNutriUpsell,
             onNav,
-            hasCustomProfile
+            hasCustomProfile,
+            ud,
+            lastSavedTrialBanner,
+            onDismissTrialBanner
         }) {
             const [selectedMacro, setSelectedMacro] = React.useState(null);
 
@@ -2429,6 +2587,23 @@ import { createClient } from '@supabase/supabase-js';
                         <div className="mb-5 p-4 rounded-2xl bg-red-500/15 border border-red-500/35 flex items-start justify-between gap-3">
                             <p className="text-xs text-red-200 font-bold leading-relaxed">{scanError}</p>
                             <button type="button" onClick={onDismissScanError} className="text-red-300 font-black text-base leading-none px-1">&times;</button>
+                        </div>
+                    )}
+
+                    {lastSavedTrialBanner && isTrialMode && freeScansRemaining > 0 && (
+                        <div className="mb-5 p-4 rounded-3xl bg-gradient-to-r from-emerald-500/25 via-emerald-600/15 to-teal-500/15 border border-emerald-400/50 shadow-xl animate-in zoom-in-95 duration-300">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <div className="text-[10px] font-black uppercase tracking-widest text-emerald-300 mb-1">🎉 1ª Análise Salva com Sucesso!</div>
+                                    <p className="text-sm text-white font-bold leading-snug">
+                                        Incrível! Você descobriu <span className="text-emerald-300">{lastSavedTrialBanner.calories} kcal</span> ({lastSavedTrialBanner.mealName}) em segundos.
+                                    </p>
+                                    <p className="text-xs text-slate-200 mt-1">
+                                        Faltam <strong className="text-white">{lastSavedTrialBanner.remainingKcal} kcal</strong> para sua meta de hoje — você ainda tem <strong className="text-emerald-300">{freeScansRemaining} teste grátis</strong>!
+                                    </p>
+                                </div>
+                                <button type="button" onClick={onDismissTrialBanner} className="text-emerald-200 font-black text-lg leading-none px-1">&times;</button>
+                            </div>
                         </div>
                     )}
 
@@ -2461,7 +2636,9 @@ import { createClient } from '@supabase/supabase-js';
                                 ✨ Você completou seus 2 testes grátis
                             </div>
                             <h3 className="text-xl font-black text-white leading-tight mb-2">
-                                Gostou de saber as calorias do seu prato em segundos?
+                                {consumedToday > 0
+                                    ? `Você já mapeou ${consumedToday} kcal hoje sem balança!`
+                                    : 'Gostou de saber as calorias do seu prato em segundos?'}
                             </h3>
                             <p className="text-xs text-slate-300 leading-relaxed mb-4">
                                 Libere análises ilimitadas todos os dias com <strong className="text-white">7 Dias Grátis</strong> (depois apenas R$ 9,90/mês — cancele quando quiser na Hotmart).
@@ -2469,7 +2646,7 @@ import { createClient } from '@supabase/supabase-js';
                             <div className="flex flex-col gap-2">
                                 <button
                                     type="button"
-                                    onClick={() => onOpenNutriUpsell && onOpenNutriUpsell('limit_reached')}
+                                    onClick={() => openHotmartCheckout('https://pay.hotmart.com/H106107115U?checkoutMode=10', { placement: 'nutri_limit_card', product: 'nutri_scan', ud })}
                                     className="w-full py-4 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 rounded-2xl text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/25 active:scale-95 transition-all"
                                 >
                                     👉 Liberar Nutri-Scan Ilimitado (7 Dias Grátis)
@@ -2667,8 +2844,10 @@ import { createClient } from '@supabase/supabase-js';
             const [scanError, setScanError] = React.useState('');
             const [aiData, setAiData] = React.useState(null);
             const [aiTextInput, setAiTextInput] = React.useState('');
+            const [lastSavedTrialBanner, setLastSavedTrialBanner] = React.useState(null);
             const isScanningRef = React.useRef(false);
             const scanCancelIdRef = React.useRef(0);
+            const nutritionSummaryRef = React.useRef({ metaKcal: 1632, consumedToday: 0 });
 
             const quota = ud?.nutriQuota || { hasNutriScan: false, freeScansUsed: 0, freeScansRemaining: NUTRISCAN_FREE_LIMIT };
             const isPaid = Boolean(hasNutriScanAccess || quota.hasNutriScan);
@@ -2864,13 +3043,14 @@ import { createClient } from '@supabase/supabase-js';
                     const { data: { user } } = await window.supabase.auth.getUser();
                     if (!user) throw new Error("Sessão expirada. Entre novamente.");
 
+                    const savedCals = Math.max(0, Math.round(Number(totalCalories) || 0));
                     const { error } = await window.supabase
                         .from('nutrition_logs')
                         .insert([{
                             user_id: user.id,
                             meal_name: mealName,
                             description: description,
-                            calories: Math.max(0, Math.round(Number(totalCalories) || 0)),
+                            calories: savedCals,
                             protein: Math.max(0, Math.round(Number(protein) || 0)),
                             carbs: Math.max(0, Math.round(Number(carbs) || 0)),
                             fat: Math.max(0, Math.round(Number(fat) || 0)),
@@ -2881,6 +3061,32 @@ import { createClient } from '@supabase/supabase-js';
 
                     setShowMealDetails(false);
                     window.dispatchEvent(new CustomEvent('nutrition-updated'));
+
+                    const { metaKcal: curMetaKcal, consumedToday: curConsumed } = nutritionSummaryRef.current;
+                    const nextConsumed = curConsumed + savedCals;
+                    const remainingKcal = Math.max(0, curMetaKcal - nextConsumed);
+
+                    trackConversionEvent('nutri_meal_saved', {
+                        placement: isTrialMode ? 'trial' : 'paid',
+                        product: 'nutri_scan',
+                        metadata: { calories: savedCals, freeScansRemaining: isTrialMode ? freeScansRemaining : -1 }
+                    });
+
+                    if (isTrialMode && freeScansRemaining === 1) {
+                        setLastSavedTrialBanner({
+                            mealName: mealName || 'sua refeição',
+                            calories: savedCals,
+                            remainingKcal,
+                            scansLeft: 1
+                        });
+                    } else if (isTrialMode && freeScansRemaining === 0) {
+                        setLastSavedTrialBanner(null);
+                        onOpenNutriUpsell?.('limit_reached', {
+                            caloriesToday: nextConsumed,
+                            lastMealName: mealName || 'sua refeição',
+                            lastMealKcal: savedCals
+                        });
+                    }
                 } catch (err) {
                     console.error("Erro ao gravar refeição:", err);
                     setSaveMealError(err?.message || 'Não foi possível salvar a refeição. Tente novamente.');
@@ -3015,6 +3221,7 @@ import { createClient } from '@supabase/supabase-js';
             const carbsToday = todayLogs.reduce((acc, curr) => acc + (curr.carbs || 0), 0);
             const fatToday = todayLogs.reduce((acc, curr) => acc + (curr.fat || 0), 0);
             const progressPct = Math.min(100, metaKcal > 0 ? Math.round((consumedToday / metaKcal) * 100) : 0);
+            nutritionSummaryRef.current = { metaKcal, consumedToday };
 
             return (
                 <React.Fragment>
@@ -3041,9 +3248,12 @@ import { createClient } from '@supabase/supabase-js';
                         onDeleteMeal={handleDeleteMeal}
                         isTrialMode={isTrialMode}
                         freeScansRemaining={freeScansRemaining}
-                        onOpenNutriUpsell={onOpenNutriUpsell}
+                        onOpenNutriUpsell={(reason) => onOpenNutriUpsell?.(reason, { caloriesToday: consumedToday })}
                         onNav={onNav}
                         hasCustomProfile={hasCustomProfile}
+                        ud={ud}
+                        lastSavedTrialBanner={lastSavedTrialBanner}
+                        onDismissTrialBanner={() => setLastSavedTrialBanner(null)}
                     />
 
                     {isAnalyzing && (
@@ -5216,14 +5426,15 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
         const MOCK_INTL = [
-            "John Smith", "Michael Johnson", "Emily Davis", "David Miller", "James Wilson", "Robert Taylor", "William Brown", "Jean Dupont", "Pierre Lefebvre", "Marie Laurent", "Julien Morel", "Thomas Bernard", "Nicolas Petit", "Alejandro Garcia", "Javier Martinez", "Sofia Hernandez", "Diego Lopez", "Lucia Rodriguez", "Carlos Sanchez", "Marco Rossi", "Giuseppe Conti", "Francesca Marino", "Alessandro De Luca", "Roberto Mancini", "Antonio Ricci", "Chris Evans", "Sarah Parker", "Hans Schmidt", "Luca Ferrari", "Elena Romano", "Sven Larsson", "Oliver Wagner", "Emma Wilson", "Liam Thompson", "Noah Müller", "Mia Dubois", "Lucas Fischer", "Jakob Weber", "Lukas Meyer", "Finn Wagner", "Leon Becker", "Paul Schulz", "Jonas Hoffmann", "Felix Schäfer", "Maximilian Koch", "Tim Bauer", "David Richter", "Jan Wolf", "Lukas Neumann", "Marcel Schwarz"
+            "Emily Davis", "Marie Laurent", "Sofia Hernandez", "Elena Romano", "Sarah Parker", "Emma Wilson", "Lucia Rodriguez", "Francesca Marino", "Mia Dubois", "Hannah Miller", "Claire Bennett", "Laura Rossi", "Camila Navarro", "Anna Schmidt", "Julia Fischer", "Chloe Bernard", "Isabella Conti", "Valeria Morales", "Olivia Brown", "Sophia Taylor", "Marta Lopez", "Beatrice Ricci", "Grace Evans", "Natalie Weber", "Paula Diaz", "Rachel Meyer", "Lisa Wagner", "Audrey Petit", "Daniela Castro", "Chiara Ferrari", "Victoria Clark", "Alicia Gomez", "Charlotte Dubois", "Lina Hoffmann", "Eva Becker", "Sonia Alvarez", "Celine Morel", "Diana Schulz", "Helena Koch", "Nora Bauer", "Michael Johnson", "Carlos Sanchez", "Marco Rossi", "Jean Dupont", "David Miller", "Lucas Fischer", "Diego Lopez", "Thomas Bernard", "Alex Rivera", "Daniel Moore"
         ];
         const MOCK_BR = [
-            "Gabriel Silva", "Lucas Santos", "Matheus Oliveira", "Pedro Costa", "João Pereira", "Rafael Rodrigues", "Guilherme Almeida", "Felipe Nascimento", "Gustavo Lima", "Vitor Araujo", "Ana Beatriz", "Julia Soares", "Beatriz Castro", "Lara Fernandes", "Isabela Martins", "Sophia Lopes", "Manuela Gomes", "Alice Ribeiro", "Helena Carvalho", "Enzo Cardoso", "Nicolas Rocha", "Arthur Mendes", "Davi Barbosa", "Miguel Freitas", "Bernardo Vieira", "Ricardo Alves", "Bruno Souza", "Tiago Ferreira", "Hugo Santos", "Leonardo Lima", "Caio Mello", "Igor Cavalcanti", "Murilo Peixoto", "Renan Correa", "Cauã Silveira", "Breno Fogaça", "Yuri Bernardes", "Ian Gouveia", "Danilo Macedo", "Erick Meireles", "Thales Viana", "Laís Porto", "Raquel Sales", "Talita Guimarães", "Letícia Assis", "Priscila Moura", "Carla Neves", "Amanda Leite", "Fabiana Monteiro", "Patrícia Nogueira"
+            "Carla Mendes", "Patrícia Silva", "Juliana Rocha", "Fernanda Costa", "Renata Almeida", "Ana Beatriz", "Mariana Oliveira", "Cláudia Ferreira", "Vanessa Santos", "Aline Pereira", "Camila Souza", "Priscila Moura", "Fabiana Monteiro", "Letícia Assis", "Amanda Leite", "Simone Ribeiro", "Luciana Carvalho", "Daniela Martins", "Cristiane Gomes", "Tatiane Lima", "Adriana Araujo", "Márcia Nascimento", "Elaine Barbosa", "Sandra Freitas", "Mônica Vieira", "Rosana Alves", "Débora Castro", "Gisele Fernandes", "Raquel Sales", "Talita Guimarães", "Laís Porto", "Beatriz Soares", "Helena Lopes", "Kátia Cardoso", "Silvia Neves", "Viviane Correia", "Michele Mello", "Cíntia Cavalcanti", "Sueli Peixoto", "Regina Silveira", "Denise Fogaça", "Vera Bernardes", "Lúcia Gouveia", "Sônia Macedo", "Rafael Rodrigues", "Bruno Souza", "Ricardo Alves", "Tiago Ferreira", "Leonardo Lima", "Gustavo Lima"
         ];
         
         const generateFakeRanking = (currentXP, filterMode = 'global', estado = 'WW') => {
             const shift = Math.max(0, currentXP - 850);
+            const femAvatars = ['👩🏻', '👩🏽', '👩🏼', '👩🏾', '👩🏻‍🦱'];
             
             // Gerar Ranking Local (Estado)
             let localList = [];
@@ -5246,7 +5457,7 @@ import { createClient } from '@supabase/supabase-js';
                     level: Math.floor(xpFinal / 1000) + 1,
                     estado: estado,
                     isFake: true,
-                    avatar: i === 0 ? '👨‍🦱' : i === 1 ? '🧔' : i === 2 ? '👱‍♂️' : '🧑'
+                    avatar: i >= 44 ? '🧑' : femAvatars[i % femAvatars.length]
                 });
             }
 
@@ -5271,7 +5482,7 @@ import { createClient } from '@supabase/supabase-js';
                     level: Math.floor(xpFinal / 1000) + 1,
                     estado: 'WW',
                     isFake: true,
-                    avatar: i === 0 ? '👲' : i === 1 ? '🧕' : i === 2 ? '👳‍♂️' : '👩'
+                    avatar: i >= 40 ? '🧑' : femAvatars[i % femAvatars.length]
                 });
             }
 
@@ -5888,7 +6099,7 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function TreinoModuleLive({ setSel, hasAccess, hasDesafio = false, hasMusculacao = false, hasPilates = false, onOpenDesafio, onGoToExtras }) {
+        function TreinoModuleLive({ ud = null, setSel, hasAccess, hasDesafio = false, hasMusculacao = false, hasPilates = false, onOpenDesafio, onGoToExtras }) {
             const [viewMode, setViewMode] = useState('categories');
             const [data, setData] = useState([]);
             const [categories, setCategories] = useState([]);
@@ -6207,7 +6418,7 @@ import { createClient } from '@supabase/supabase-js';
                                 <div className="space-y-3">
                                     <button
                                         type="button"
-                                        onClick={() => safeOpenExternal(previewProgram.comboLink)}
+                                        onClick={() => openHotmartCheckout(previewProgram.comboLink, { placement: `treinos_preview_${previewProgram.id}_combo`, product: 'combo_ouro', ud })}
                                         className="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white font-black text-xs uppercase tracking-wider shadow-xl shadow-orange-600/25 active:scale-95 transition-all"
                                     >
                                         🥇 Levar NO COMBO DE OURO (Este + 5 Guias) — R$ 24,90
@@ -6216,7 +6427,7 @@ import { createClient } from '@supabase/supabase-js';
 
                                     <button
                                         type="button"
-                                        onClick={() => safeOpenExternal(previewProgram.singleLink)}
+                                        onClick={() => openHotmartCheckout(previewProgram.singleLink, { placement: `treinos_preview_${previewProgram.id}_single`, product: previewProgram.id, ud })}
                                         className="w-full py-3.5 px-4 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-white font-bold text-xs uppercase tracking-wider transition-all"
                                     >
                                         Desbloquear só {previewProgram.title} — R$ {previewProgram.singlePrice}
@@ -6270,13 +6481,13 @@ import { createClient } from '@supabase/supabase-js';
                                 onSelect={setSel} 
                             />
                         ) : (
-                            <TeaserDesafioPage onGoToExtras={() => onNav('extras')} />
+                            <TeaserDesafioPage ud={ud} onGoToExtras={() => onNav('extras')} />
                         );
                     case 'sono':
                         return hasSono ? (
                             <SonoProfundo ud={ud} />
                         ) : (
-                            <TeaserSonoPage onGoToExtras={() => onNav('extras')} />
+                            <TeaserSonoPage ud={ud} onGoToExtras={() => onNav('extras')} />
                         );
                     default:
                         return null;
@@ -6308,10 +6519,11 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function NutriScanUpsellModal({ isOpen, onClose, onTrackEvent, reason = 'post_workout', freeScansRemaining = 0, onTryFreeNow, onGoToExtras }) {
+        function NutriScanUpsellModal({ isOpen, onClose, onTrackEvent, reason = 'post_workout', freeScansRemaining = 0, onTryFreeNow, onGoToExtras, ud = null, mealContext = null }) {
             if (!isOpen) return null;
 
             const isLimitReached = reason === 'limit_reached' || freeScansRemaining <= 0;
+            const mappedCalories = Number(mealContext?.caloriesToday) || 0;
 
             return (
                 <div style={{ position: 'fixed', inset: 0, zIndex: 100000, background: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={(e) => { if (e.target === e.currentTarget) { if (onTrackEvent) onTrackEvent('no'); onClose(); } }}>
@@ -6328,8 +6540,13 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
 
                         <div style={{ padding: '22px', overflowY: 'auto', flex: 1 }}>
+                            <div style={{ fontSize: '11px', fontWeight: '800', color: '#34d399', marginBottom: '6px' }}>
+                                ★ 4,9 · Mais de 6.000 alunas treinando em casa
+                            </div>
                             <h2 style={{ fontSize: '21px', fontWeight: '900', marginBottom: '12px', color: 'var(--text-primary)', lineHeight: '1.22' }}>
-                                {isLimitReached
+                                {isLimitReached && mappedCalories > 0
+                                    ? `Você acabou de mapear ${mappedCalories} kcal sem balança!`
+                                    : isLimitReached
                                     ? 'Gostou de ver as calorias do seu prato em segundos?'
                                     : 'Treino pago! Agora cuide do que faz 70% do resultado: sua alimentação.'}
                             </h2>
@@ -6369,7 +6586,11 @@ import { createClient } from '@supabase/supabase-js';
                                     type="button"
                                     onClick={() => {
                                         if(onTrackEvent) onTrackEvent('yes');
-                                        safeOpenExternal('https://pay.hotmart.com/H106107115U?checkoutMode=10&bid=1784830143838');
+                                        openHotmartCheckout('https://pay.hotmart.com/H106107115U?checkoutMode=10&bid=1784830143838', {
+                                            placement: isLimitReached ? 'modal_post_scan2' : 'modal_post_workout',
+                                            product: 'nutri_scan',
+                                            ud
+                                        });
                                     }}
                                     style={{ width: '100%', padding: '15px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', borderRadius: '16px', fontWeight: '900', fontSize: '15px', border: 'none', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.35)' }}
                                 >
@@ -6418,7 +6639,7 @@ import { createClient } from '@supabase/supabase-js';
                         <div className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></div>
                         <div className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></div>
                     </div>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.18em]">{count} alunos treinando agora</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.18em]">{count} alunas treinando agora</span>
                 </div>
             );
         }
@@ -6452,12 +6673,35 @@ import { createClient } from '@supabase/supabase-js';
 
             const [showNutriScanUpsell, setShowNutriScanUpsell] = useState(false);
             const [nutriUpsellReason, setNutriUpsellReason] = useState('post_workout');
+            const [nutriUpsellContext, setNutriUpsellContext] = useState(null);
+            const [quickstartDismissed, setQuickstartDismissed] = useState(() => {
+                try { return localStorage.getItem('quickstart_dismissed_v1') === '1'; } catch { return false; }
+            });
 
-            const openNutriScanUpsell = useCallback((reason = 'post_workout') => {
+            const openNutriScanUpsell = useCallback((reason = 'post_workout', context = null) => {
                 if (temAcessoNutriScan) return;
                 setNutriUpsellReason(reason);
+                setNutriUpsellContext(context);
                 setShowNutriScanUpsell(true);
             }, [temAcessoNutriScan]);
+
+            useEffect(() => {
+                if (!ud.session || !ud.userProfile) return;
+                if (typeof window !== 'undefined' && Array.isArray(window.OneSignalDeferred)) {
+                    window.OneSignalDeferred.push(async (OneSignal) => {
+                        try {
+                            await OneSignal.User.addTags({
+                                app: 'br',
+                                goal: String(ud.userProfile?.goal || ud.userProfile?.objetivo_principal || 'geral'),
+                                has_nutriscan: temAcessoNutriScan ? 'true' : 'false',
+                                has_combo_ouro: temAcessoPremium ? 'true' : 'false',
+                                has_desafio: hasDesafio ? 'true' : 'false',
+                                free_scans_left: temAcessoNutriScan ? 'unlimited' : String(freeScansRemainingGlobal)
+                            });
+                        } catch {}
+                    });
+                }
+            }, [ud.session, ud.userProfile, temAcessoNutriScan, temAcessoPremium, hasDesafio, freeScansRemainingGlobal]);
             
             useEffect(() => {
                 const handleShowModal = () => {
@@ -6717,25 +6961,40 @@ import { createClient } from '@supabase/supabase-js';
                 });
                 if (bunnyOnly.length === 0) return [];
                 setCompletedDailyIds([]);
-                const shuffled = [...bunnyOnly];
-                for (let i = shuffled.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-                }
-                const generated = shuffled.slice(0, 7);
+
+                const isNewUser = (ud.completedLog?.length || 0) === 0;
+                const targetCount = isNewUser ? 4 : 6;
+                const goalStr = String(ud.userProfile?.goal || ud.userProfile?.objetivo_principal || '').toLowerCase();
+                let preferredCats = ['pernas', 'abdominais', 'cardio', 'braços'];
+                if (goalStr.includes('massa')) preferredCats = ['pernas', 'braços', 'costas', 'peito'];
+                else if (goalStr.includes('tonificar') || goalStr.includes('definir')) preferredCats = ['pernas', 'abdominais', 'braços', 'costas'];
+                else if (goalStr.includes('saúde') || goalStr.includes('saude') || goalStr.includes('mobilidade')) preferredCats = ['costas', 'pernas', 'ombros', 'abdominais'];
+
+                const shuffleArr = (arr) => {
+                    const copy = [...arr];
+                    for (let i = copy.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [copy[i], copy[j]] = [copy[j], copy[i]];
+                    }
+                    return copy;
+                };
+
+                const prioritized = shuffleArr(bunnyOnly.filter(ex => preferredCats.includes((ex.category || '').toLowerCase().trim())));
+                const others = shuffleArr(bunnyOnly.filter(ex => !preferredCats.includes((ex.category || '').toLowerCase().trim())));
+                const generated = [...prioritized, ...others].slice(0, targetCount);
                 setDailyWorkout(generated);
                 if (showFeedback) {
                     setWorkoutSwappedMsg('✅ Nova sequência montada!');
                     setTimeout(() => setWorkoutSwappedMsg(''), 2500);
                 }
                 return generated;
-            }, [allExercises, getBunnyEmbedUrl]);
+            }, [allExercises, getBunnyEmbedUrl, ud.completedLog?.length, ud.userProfile?.goal, ud.userProfile?.objetivo_principal]);
 
             useEffect(() => {
-                if (allExercises.length > 0 && dailyWorkout.length === 0) {
+                if (ud.localSynced && allExercises.length > 0 && dailyWorkout.length === 0) {
                     generateDailyWorkout(false);
                 }
-            }, [allExercises, dailyWorkout.length, generateDailyWorkout]);
+            }, [ud.localSynced, allExercises, dailyWorkout.length, generateDailyWorkout]);
 
             const startDailyWorkout = useCallback(() => {
                 const queue = dailyWorkout.length ? dailyWorkout : generateDailyWorkout(false);
@@ -6951,12 +7210,12 @@ import { createClient } from '@supabase/supabase-js';
             const top1Xp = homeXP >= 990 ? top1Base + (homeXP - 990) : top1Base;
             
             const sortedRanking = [
-                { id: 'f1', name: 'Lucas S.', xp: top1Xp, isFake: true, avatar: '👨‍🦱' },
-                { id: 'f2', name: 'Mateus M.', xp: 950, isFake: true, avatar: '🧔' },
-                { id: 'f3', name: 'Pedro C.', xp: 780, isFake: true, avatar: '👱‍♂️' },
-                { id: 'f4', name: 'Tiago B.', xp: 600, isFake: true, avatar: '👨‍🦲' },
-                { id: 'f5', name: 'André V.', xp: 300, isFake: true, avatar: '🧑' },
-                { id: 'u1', name: ud.userProfile?.name || 'Tu', xp: homeXP, isFake: false, avatar: '😎' }
+                { id: 'f1', name: 'Carla M.', xp: top1Xp, isFake: true, avatar: '👩🏻' },
+                { id: 'f2', name: 'Patrícia S.', xp: 950, isFake: true, avatar: '👩🏽' },
+                { id: 'f3', name: 'Juliana R.', xp: 780, isFake: true, avatar: '👩🏼' },
+                { id: 'f4', name: 'Fernanda C.', xp: 600, isFake: true, avatar: '👩🏾' },
+                { id: 'f5', name: 'Renata A.', xp: 300, isFake: true, avatar: '👩🏻‍🦱' },
+                { id: 'u1', name: ud.userProfile?.name || 'Você', xp: homeXP, isFake: false, avatar: '✨' }
             ].sort((a, b) => b.xp - a.xp);
             // -----------------------------------
 
@@ -7135,6 +7394,71 @@ import { createClient } from '@supabase/supabase-js';
                                     )}
                                 </div>
 
+                                {/* 1.5 CHECKLIST DE INÍCIO RÁPIDO (ATIVAÇÃO DIA 1) */}
+                                {!quickstartDismissed && (totalCompleted === 0 || (!temAcessoNutriScan && freeScansRemainingGlobal >= NUTRISCAN_FREE_LIMIT)) && (() => {
+                                    const stepWorkoutDone = totalCompleted > 0;
+                                    const stepNutriDone = temAcessoNutriScan || freeScansRemainingGlobal < NUTRISCAN_FREE_LIMIT;
+                                    const doneCount = 1 + (stepWorkoutDone ? 1 : 0) + (stepNutriDone ? 1 : 0);
+                                    return (
+                                        <div className="mb-6 p-5 rounded-[26px] bg-gradient-to-br from-slate-800/80 to-slate-900/90 border border-orange-500/25 shadow-xl">
+                                            <div className="flex items-center justify-between gap-2 mb-3">
+                                                <div>
+                                                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-400">Comece por aqui · {doneCount}/3</span>
+                                                    <h3 className="text-base font-black text-white leading-tight">Seus Primeiros Passos Hoje</h3>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    aria-label="Ocultar checklist"
+                                                    onClick={() => {
+                                                        setQuickstartDismissed(true);
+                                                        try { localStorage.setItem('quickstart_dismissed_v1', '1'); } catch {}
+                                                    }}
+                                                    className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 text-sm flex items-center justify-center"
+                                                >&times;</button>
+                                            </div>
+                                            <div className="space-y-2.5">
+                                                <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <span className="text-sm">✅</span>
+                                                        <span className="text-xs font-bold text-emerald-200 line-through opacity-80">Conta criada & objetivo definido</span>
+                                                    </div>
+                                                    <span className="text-[10px] font-black text-emerald-400 uppercase">Feito</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={startDailyWorkout}
+                                                    className={`w-full flex items-center justify-between gap-3 px-3.5 py-3 rounded-2xl border text-left transition-all ${stepWorkoutDone ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-white/5 hover:bg-white/10 border-orange-500/35'}`}
+                                                >
+                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                        <span className="text-sm">{stepWorkoutDone ? '✅' : '⚡'}</span>
+                                                        <span className={`text-xs font-bold truncate ${stepWorkoutDone ? 'text-emerald-200 line-through opacity-80' : 'text-white'}`}>
+                                                            Fazer seu 1º treino rápido ({Math.max(12, dailyWorkout.length * 3)} min)
+                                                        </span>
+                                                    </div>
+                                                    <span className={`text-[10px] font-black uppercase shrink-0 ${stepWorkoutDone ? 'text-emerald-400' : 'text-orange-400'}`}>
+                                                        {stepWorkoutDone ? 'Feito' : 'Começar →'}
+                                                    </span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setArsenalSubTab('nutricao'); setPage('arsenal-vip'); }}
+                                                    className={`w-full flex items-center justify-between gap-3 px-3.5 py-3 rounded-2xl border text-left transition-all ${stepNutriDone ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-white/5 hover:bg-white/10 border-emerald-500/35'}`}
+                                                >
+                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                        <span className="text-sm">{stepNutriDone ? '✅' : '📸'}</span>
+                                                        <span className={`text-xs font-bold truncate ${stepNutriDone ? 'text-emerald-200 line-through opacity-80' : 'text-white'}`}>
+                                                            Testar 1 foto grátis no Nutri-Scan IA
+                                                        </span>
+                                                    </div>
+                                                    <span className={`text-[10px] font-black uppercase shrink-0 ${stepNutriDone ? 'text-emerald-400' : 'text-emerald-400'}`}>
+                                                        {stepNutriDone ? 'Feito' : 'Testar →'}
+                                                    </span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
                                 {/* 2. TREINO DO DIA NO TOPO */}
                                 <div className="flex items-center justify-between gap-3 mb-3">
                                     <h2 className="text-xs sm:text-sm font-black text-slate-300 uppercase tracking-[0.18em] flex items-center gap-2">
@@ -7165,13 +7489,21 @@ import { createClient } from '@supabase/supabase-js';
 
                                     <div className="absolute top-5 left-5 z-20 bg-black/45 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-2 pointer-events-none">
                                         <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></div>
-                                        <span className="text-[10px] font-black text-white uppercase tracking-widest">Corpo Inteiro com Elásticos</span>
+                                        <span className="text-[10px] font-black text-white uppercase tracking-widest">
+                                            {totalCompleted === 0 ? 'Treino Rápido de Boas-Vindas' : 'Corpo Inteiro com Elásticos'}
+                                        </span>
                                     </div>
 
                                     <div className="relative z-10 p-6 pointer-events-auto flex flex-col gap-4 mt-[115px]">
                                         <div>
                                             <h3 className="text-2xl sm:text-3xl font-black text-white leading-tight mb-1.5 drop-shadow-xl">
-                                                Sequência prática para o corpo inteiro.
+                                                {resolvedUserGoal.toLowerCase().includes('massa')
+                                                    ? '💪 Força & Massa Muscular em Casa'
+                                                    : resolvedUserGoal.toLowerCase().includes('tonificar') || resolvedUserGoal.toLowerCase().includes('definir')
+                                                    ? '✨ Firmeza & Glúteos em Casa'
+                                                    : resolvedUserGoal.toLowerCase().includes('saúde') || resolvedUserGoal.toLowerCase().includes('saude') || resolvedUserGoal.toLowerCase().includes('mobilidade')
+                                                    ? '🌿 Mobilidade & Disposição em Casa'
+                                                    : '🔥 Queima-Gordura Prática em Casa'}
                                             </h3>
                                             <p className="text-[13px] text-slate-300 font-medium leading-relaxed">
                                                 {getMotivationalPhrase(resolvedUserGoal)}
@@ -7184,7 +7516,7 @@ import { createClient } from '@supabase/supabase-js';
                                                 <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Treino pronto</div>
                                             </div>
                                             <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
-                                                <div className="text-sm font-black text-white">{Math.max(15, dailyWorkout.length * 4)} min</div>
+                                                <div className="text-sm font-black text-white">{Math.max(12, dailyWorkout.length * 3)} min</div>
                                                 <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Duração</div>
                                             </div>
                                             <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
@@ -7224,7 +7556,18 @@ import { createClient } from '@supabase/supabase-js';
                                 {/* 3. GANCHO DE DEGUSTAÇÃO NUTRI-SCAN (2 TESTES GRÁTIS NO DIA 1!) */}
                                 {!temAcessoNutriScan && (
                                     <div
-                                        onClick={() => { setArsenalSubTab('nutricao'); setPage('arsenal-vip'); }}
+                                        onClick={() => {
+                                            if (freeScansRemainingGlobal > 0) {
+                                                setArsenalSubTab('nutricao');
+                                                setPage('arsenal-vip');
+                                            } else {
+                                                openHotmartCheckout('https://pay.hotmart.com/H106107115U?checkoutMode=10', {
+                                                    placement: 'home_nutri_exhausted',
+                                                    product: 'nutri_scan',
+                                                    ud
+                                                });
+                                            }
+                                        }}
                                         className="rounded-[28px] p-6 mb-6 relative overflow-hidden cursor-pointer border border-emerald-500/35 transition-all hover:scale-[1.01] active:scale-[0.99] shadow-2xl"
                                         style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(15,23,42,0.96) 75%)' }}
                                     >
@@ -7459,6 +7802,7 @@ import { createClient } from '@supabase/supabase-js';
                     case 'treinos': {
                         return (
                             <TreinoModuleLive 
+                                ud={ud}
                                 setSel={setSel} 
                                 hasAccess={temAcessoPremium} 
                                 hasDesafio={hasDesafio}
@@ -7562,7 +7906,7 @@ import { createClient } from '@supabase/supabase-js';
                     }
 
                     case 'guardados': {
-                        if (!temAcessoPremium) return <TeaserArsenalPage onGoToExtras={() => setPage('extras')} />;
+                        if (!temAcessoPremium) return <TeaserArsenalPage ud={ud} onGoToExtras={() => setPage('extras')} />;
                         const catalog = allExercises.length > 0 ? allExercises : EXERCISES;
                         const favs = catalog.filter(e => ud.favoritedIds.includes(e.id));
                         return (
@@ -7648,7 +7992,17 @@ import { createClient } from '@supabase/supabase-js';
                         })}
                     </div>
 
-                    {sel && <VideoModal exercise={sel} isCompleted={ud.isCompleted(sel.id)} onClose={handleCloseVideo} onToggle={ud.toggleComplete} />}
+                    {sel && (
+                        <VideoModal
+                            exercise={sel}
+                            isCompleted={ud.isCompleted(sel.id)}
+                            onClose={handleCloseVideo}
+                            onToggle={ud.toggleComplete}
+                            hasNutriScanAccess={temAcessoNutriScan}
+                            freeScansRemaining={freeScansRemainingGlobal}
+                            onOpenNutriScan={() => { setArsenalSubTab('nutricao'); setPage('arsenal-vip'); }}
+                        />
+                    )}
 
                     {editProfileOpen && (
                         <Onboarding
@@ -7891,6 +8245,8 @@ import { createClient } from '@supabase/supabase-js';
                         onClose={() => setShowNutriScanUpsell(false)} 
                         onTrackEvent={handleTrackUpsell} 
                         reason={nutriUpsellReason}
+                        mealContext={nutriUpsellContext}
+                        ud={ud}
                         freeScansRemaining={freeScansRemainingGlobal}
                         onTryFreeNow={() => { setArsenalSubTab('nutricao'); setPage('arsenal-vip'); }}
                         onGoToExtras={() => setPage('extras')}

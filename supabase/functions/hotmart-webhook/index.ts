@@ -44,6 +44,52 @@ function constantTimeEquals(a: string, b: string): boolean {
   return diff === 0;
 }
 
+function inferModulesFromProductName(rawName: unknown): { base?: boolean; modules: string[] } | null {
+  if (typeof rawName !== 'string' || !rawName.trim()) return null;
+  const n = rawName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  if (n.includes('acesso total') || n.includes('total vip')) {
+    return DEFAULT_PRODUCT_MAP.E105939718I;
+  }
+  if (n.includes('combo de ouro') || n.includes('combo ouro') || n.includes('combo de oro')) {
+    return DEFAULT_PRODUCT_MAP.O106106388F;
+  }
+  if (n.includes('pacote de elite') || n.includes('paquete de elite') || n.includes('plano pro')) {
+    return DEFAULT_PRODUCT_MAP.I105940414O;
+  }
+  if (n.includes('nutri-scan') || n.includes('nutriscan') || n.includes('scanner')) {
+    return DEFAULT_PRODUCT_MAP.H106107115U;
+  }
+  if (n.includes('desafio 30') || n.includes('desafio30') || n.includes('sfida 30')) {
+    return DEFAULT_PRODUCT_MAP.R106106925S;
+  }
+  if (n.includes('musculacao') || n.includes('musculacion')) {
+    return DEFAULT_PRODUCT_MAP.N105939399C;
+  }
+  if (n.includes('pilates')) {
+    return DEFAULT_PRODUCT_MAP.E105938855Y;
+  }
+  if (n.includes('mini-band') || n.includes('miniband') || n.includes('mini faixa')) {
+    return DEFAULT_PRODUCT_MAP.M105939209K;
+  }
+  if (n.includes('recuperacao ativa') || n.includes('recuperacion activa') || n.includes('senior')) {
+    return DEFAULT_PRODUCT_MAP.D105938993C;
+  }
+  if (n.includes('sono profundo') || n.includes('sueno profundo')) {
+    return DEFAULT_PRODUCT_MAP.Y106107162P;
+  }
+  if (n.includes('comunidade vip') || n.includes('comunidad vip')) {
+    return DEFAULT_PRODUCT_MAP.B105940293A;
+  }
+  if (n.includes('500 exerc') || n.includes('500 ejerc') || n.includes('500 eserc') || n.includes('app personalizada')) {
+    return { base: true, modules: [] };
+  }
+  return null;
+}
+
 function getProductMap(): Record<string, { base?: boolean; modules: string[] }> {
   const raw = Deno.env.get('HOTMART_PRODUCT_MAP');
   if (!raw) return DEFAULT_PRODUCT_MAP;
@@ -132,8 +178,13 @@ Deno.serve(async (req: Request) => {
 
   const productKey = rawProductId != null ? String(rawProductId).trim() : '';
   const offerKey = typeof rawOfferCode === 'string' ? rawOfferCode.trim() : '';
+  const productName = payload?.data?.product?.name;
   const productMap = getProductMap();
-  const mapping = productMap[productKey] || productMap[offerKey] || { base: true, modules: [] };
+  const mapping =
+    productMap[productKey] ||
+    productMap[offerKey] ||
+    inferModulesFromProductName(productName) ||
+    { base: true, modules: [] };
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
