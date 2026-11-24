@@ -7105,6 +7105,38 @@ import { createClient } from '@supabase/supabase-js';
                                     );
                                 })()}
 
+                                {/* 1.8 ATALHOS VISÍVEIS: DESAFIO 30 DIAS + SONO PROFUNDO */}
+                                <div className="grid grid-cols-2 gap-3 mb-6">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setTreinoSubTab('desafio30'); setPage('treinos'); }}
+                                        className="text-left p-4 rounded-3xl bg-gradient-to-br from-orange-500/15 to-slate-900/90 border border-orange-500/25 hover:border-orange-400/50 transition-all active:scale-[0.98]"
+                                    >
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <span className="text-xl">🔥</span>
+                                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${hasDesafio ? 'bg-emerald-500/20 text-emerald-300' : 'bg-orange-500/20 text-orange-300'}`}>
+                                                {hasDesafio ? 'Liberado' : '🔒 Plano 30D'}
+                                            </span>
+                                        </div>
+                                        <div className="text-sm font-black text-white leading-tight">Desafio 30 Dias</div>
+                                        <div className="text-[11px] text-slate-400 font-medium mt-0.5">Treino pronto dia a dia →</div>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setEvolucaoSubTab('sono'); setPage('evolucao'); }}
+                                        className="text-left p-4 rounded-3xl bg-gradient-to-br from-indigo-500/15 to-slate-900/90 border border-indigo-500/25 hover:border-indigo-400/50 transition-all active:scale-[0.98]"
+                                    >
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <span className="text-xl">🌙</span>
+                                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${hasSono ? 'bg-emerald-500/20 text-emerald-300' : 'bg-indigo-500/20 text-indigo-300'}`}>
+                                                {hasSono ? 'Liberado' : '🔒 Áudios'}
+                                            </span>
+                                        </div>
+                                        <div className="text-sm font-black text-white leading-tight">Sono Profundo</div>
+                                        <div className="text-[11px] text-slate-400 font-medium mt-0.5">Dormir melhor & energia →</div>
+                                    </button>
+                                </div>
+
                                 {/* 2. TREINO DO DIA NO TOPO */}
                                 <div className="flex items-center justify-between gap-3 mb-3">
                                     <h2 className="text-xs sm:text-sm font-black text-slate-300 uppercase tracking-[0.18em] flex items-center gap-2">
@@ -7197,38 +7229,6 @@ import { createClient } from '@supabase/supabase-js';
                                             </button>
                                         </div>
                                     </div>
-                                </div>
-
-                                {/* 2.5 ATALHOS VISÍVEIS: DESAFIO 30 DIAS + SONO PROFUNDO */}
-                                <div className="grid grid-cols-2 gap-3 mb-6">
-                                    <button
-                                        type="button"
-                                        onClick={() => { setTreinoSubTab('desafio30'); setPage('treinos'); }}
-                                        className="text-left p-4 rounded-3xl bg-gradient-to-br from-orange-500/15 to-slate-900/90 border border-orange-500/25 hover:border-orange-400/50 transition-all active:scale-[0.98]"
-                                    >
-                                        <div className="flex items-center justify-between mb-1.5">
-                                            <span className="text-xl">🔥</span>
-                                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${hasDesafio ? 'bg-emerald-500/20 text-emerald-300' : 'bg-orange-500/20 text-orange-300'}`}>
-                                                {hasDesafio ? 'Liberado' : '🔒 Plano 30D'}
-                                            </span>
-                                        </div>
-                                        <div className="text-sm font-black text-white leading-tight">Desafio 30 Dias</div>
-                                        <div className="text-[11px] text-slate-400 font-medium mt-0.5">Treino pronto dia a dia →</div>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setEvolucaoSubTab('sono'); setPage('evolucao'); }}
-                                        className="text-left p-4 rounded-3xl bg-gradient-to-br from-indigo-500/15 to-slate-900/90 border border-indigo-500/25 hover:border-indigo-400/50 transition-all active:scale-[0.98]"
-                                    >
-                                        <div className="flex items-center justify-between mb-1.5">
-                                            <span className="text-xl">🌙</span>
-                                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${hasSono ? 'bg-emerald-500/20 text-emerald-300' : 'bg-indigo-500/20 text-indigo-300'}`}>
-                                                {hasSono ? 'Liberado' : '🔒 Áudios'}
-                                            </span>
-                                        </div>
-                                        <div className="text-sm font-black text-white leading-tight">Sono Profundo</div>
-                                        <div className="text-[11px] text-slate-400 font-medium mt-0.5">Dormir melhor & energia →</div>
-                                    </button>
                                 </div>
 
                                 {/* 3. GANCHO DE DEGUSTAÇÃO NUTRI-SCAN (2 TESTES GRÁTIS NO DIA 1!) */}
