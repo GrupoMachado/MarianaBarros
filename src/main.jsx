@@ -5628,21 +5628,38 @@ import { createClient } from '@supabase/supabase-js';
                         ))}
                     </div>
 
-                    <h3 className="ps-title" style={{ marginTop: '32px' }}>Suporte & Compras Hotmart</h3>
+                    <h3 className="ps-title" style={{ marginTop: '32px' }}>Suporte & Atendimento</h3>
                     <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.5), rgba(15,23,42,0.8))', padding: '24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', marginBottom: '32px', textAlign: 'center' }}>
                         <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '18px', lineHeight: '1.55' }}>
-                            Precisa de ajuda com seu acesso, código ou assinatura? Você pode responder diretamente ao e-mail de confirmação da compra ou acessar a Central do Comprador Hotmart:
+                            Precisa de ajuda com seu acesso, código ou assinatura? Fale com a nossa equipe pelo Instagram ou por e-mail:
                         </p>
                         <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
                             <a
-                                href="https://atendimento.hotmart.com.br/"
+                                href="https://www.instagram.com/__mariana_barros_/"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                style={{ display: 'inline-block', background: 'var(--accent)', color: '#fff', padding: '12px 24px', borderRadius: '10px', fontWeight: '800', textDecoration: 'none', boxShadow: '0 4px 12px rgba(249,115,22,0.3)', flex: 1, maxWidth: '300px' }}
+                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'linear-gradient(135deg, #f97316, #ec4899)', color: '#fff', padding: '12px 20px', borderRadius: '10px', fontWeight: '800', fontSize: '14px', textDecoration: 'none', boxShadow: '0 4px 14px rgba(236,72,153,0.3)', flex: '1 1 220px', maxWidth: '280px' }}
                             >
-                                🛟 Central de Atendimento Hotmart
+                                📸 Instagram @__mariana_barros_
+                            </a>
+                            <a
+                                href="mailto:grupomachado171@gmail.com?subject=Suporte%20App%20%2B500%20Exerc%C3%ADcios"
+                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)', color: '#fff', padding: '12px 20px', borderRadius: '10px', fontWeight: '800', fontSize: '14px', textDecoration: 'none', flex: '1 1 220px', maxWidth: '280px' }}
+                            >
+                                ✉️ Enviar E-mail de Suporte
                             </a>
                         </div>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '14px', marginBottom: '6px' }}>
+                            E-mail direto: <strong style={{ color: 'var(--text-primary)', userSelect: 'all' }}>grupomachado171@gmail.com</strong>
+                        </p>
+                        <a
+                            href="https://atendimento.hotmart.com.br/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: 'var(--text-muted)', fontSize: '12px', textDecoration: 'underline' }}
+                        >
+                            Central de Compras & Assinaturas Hotmart
+                        </a>
                     </div>
 
                     <h3 className="ps-title" style={{ marginTop: '32px', color: 'var(--red)' }}>Conta & Cache</h3>
@@ -5686,7 +5703,7 @@ import { createClient } from '@supabase/supabase-js';
                                         <>
                                             <p>Seus dados cadastrais (e-mail, nome, objetivo, medidas corporais, registros de hidratação, sono e refeições) são armazenados de forma privada e utilizados exclusivamente para personalizar sua experiência no aplicativo.</p>
                                             <p>Não vendemos seus dados a terceiros. Fotos enviadas ao Nutri-Scan IA são processadas apenas para estimar calorias e macronutrientes no momento da análise.</p>
-                                            <p>Você pode atualizar seus dados em Editar Perfil ou solicitar exclusão da sua conta a qualquer momento.</p>
+                                            <p>Você pode atualizar seus dados em Editar Perfil ou solicitar exclusão da sua conta a qualquer momento pelo e-mail <strong>grupomachado171@gmail.com</strong>.</p>
                                         </>
                                     )}
                                 </div>
