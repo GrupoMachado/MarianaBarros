@@ -42,10 +42,28 @@ import { createClient } from '@supabase/supabase-js';
 
         const CATEGORIES = ['Todos', 'Membros Inferiores', 'Membros Superiores', 'Braços', 'Cardio', 'Mobilidade'];
         const DIFFICULTIES = ['Todos', 'Iniciante', 'Intermediário', 'Avançado'];
+        const NUTRISCAN_FREE_LIMIT = 2;
+        const getFreeScanStorageKey = (userId) => `nutriscan_free_uses_${userId || 'guest'}`;
+        const getFreeScansUsed = (userId) => {
+            try {
+                return parseInt(localStorage.getItem(getFreeScanStorageKey(userId)) || '0', 10) || 0;
+            } catch {
+                return 0;
+            }
+        };
+        const incrementFreeScansUsed = (userId) => {
+            const next = getFreeScansUsed(userId) + 1;
+            try {
+                localStorage.setItem(getFreeScanStorageKey(userId), String(next));
+            } catch {}
+            window.dispatchEvent(new CustomEvent('nutriscan-free-uses-updated'));
+            return next;
+        };
+
         const NAV = [
             { id: 'inicio', label: 'Início', d: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4' },
             { id: 'treinos', label: 'Treinos', d: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z' },
-            { id: 'arsenal-vip', label: 'Arsenal VIP', d: 'M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5' },
+            { id: 'arsenal-vip', label: 'Nutri IA', d: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
             { id: 'evolucao', label: 'Evolução', d: 'M23 6l-9.5 9.5-5-5L1 18' },
             { id: 'ranking', label: 'Ranking', d: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
             { id: 'extras', label: 'Extras', d: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z' },
@@ -372,13 +390,16 @@ import { createClient } from '@supabase/supabase-js';
                 if (userProfile) {
                     localStorage.setItem('userProfile', JSON.stringify(userProfile));
                     if (localSynced) {
+                        const resolvedGoal = userProfile.goal || userProfile.objetivo_principal || null;
+                        const resolvedAge = userProfile.age || userProfile.idade || null;
                         syncToSupa({ 
-                            name: userProfile.name, 
-                            objetivo_principal: userProfile.goal, 
-                            gender: userProfile.gender,
-                            idade: userProfile.age,
-                            estado: userProfile.estado,
-                            whatsapp: userProfile.whatsapp,
+                            name: userProfile.name || null, 
+                            objetivo_principal: resolvedGoal,
+                            goal: resolvedGoal,
+                            gender: userProfile.gender || null,
+                            idade: resolvedAge ? parseInt(resolvedAge, 10) : null,
+                            estado: userProfile.estado || null,
+                            whatsapp: userProfile.whatsapp || null,
                             has_base_access: userProfile.has_base_access,
                             premium_features: userProfile.premium_features
                         });
@@ -449,20 +470,35 @@ import { createClient } from '@supabase/supabase-js';
 
                 return !isFav;
             }, [favoritedIds, session]);
-            const saveProfile = useCallback((name, goal, gender, age, estado, whatsapp) => {
+            const saveProfile = useCallback(async (name, goal, gender, age, estado, whatsapp) => {
+                const parsedAge = age ? parseInt(age, 10) : null;
                 setP(prev => ({
                     ...prev,
                     name,
                     goal,
+                    objetivo_principal: goal,
                     gender,
-                    age,
+                    age: parsedAge,
+                    idade: parsedAge,
                     estado,
                     whatsapp,
-                    has_base_access: prev?.has_base_access ?? true, // Default true for legacy
+                    has_base_access: prev?.has_base_access ?? true,
                     premium_features: prev?.premium_features ?? [],
                     permissions: prev?.permissions || { base: true, senior: false, pilates: false, gymnastics: false, desafio30: false }
                 }));
-            }, []);
+                if (session) {
+                    await supabase.from('user_profiles').upsert({
+                        id: session.user.id,
+                        name,
+                        goal,
+                        objetivo_principal: goal,
+                        gender,
+                        idade: parsedAge,
+                        estado,
+                        whatsapp
+                    }, { onConflict: 'id' });
+                }
+            }, [session]);
 
             const unlockModule = useCallback(async (moduleName) => {
                 setP(prev => {
@@ -549,13 +585,13 @@ import { createClient } from '@supabase/supabase-js';
 
             return React.useMemo(() => ({
                 recoveryMode, setRecoveryMode,
-                session, authLoading, logout,
+                session, authLoading, localSynced, logout,
                 completedLog, favoritedIds, userProfile, challengeLog, xpBonus,
                 metaProfile, saveMetaProfile,
                 isCompleted, toggleComplete, completeWorkout, completeChallengeDay,
                 toggleFavorite, saveProfile, unlockModule, unlockAll,
                 currentAudioId, playAudio, stopAudio
-            }), [session, authLoading, recoveryMode, completedLog, favoritedIds, userProfile, challengeLog, xpBonus, metaProfile, saveMetaProfile, isCompleted, toggleComplete, completeWorkout, completeChallengeDay, toggleFavorite, saveProfile, unlockModule, unlockAll, currentAudioId, playAudio, stopAudio]);
+            }), [session, authLoading, localSynced, recoveryMode, completedLog, favoritedIds, userProfile, challengeLog, xpBonus, metaProfile, saveMetaProfile, isCompleted, toggleComplete, completeWorkout, completeChallengeDay, toggleFavorite, saveProfile, unlockModule, unlockAll, currentAudioId, playAudio, stopAudio]);
         }
 
 
@@ -817,13 +853,13 @@ import { createClient } from '@supabase/supabase-js';
 
                     <button className={`sidebar-link ${page === 'guardados' ? 'active' : ''}`} onClick={() => onNav('guardados')}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                        Guardados
+                        Salvos
                     </button>
 
                     {hasAnyPremium && (
                         <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--border)' }}>
                             <div style={{ padding: '0 20px', fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
-                                Os Meus Módulos
+                                Meus Módulos
                             </div>
                             {hasAccess('senior') && (
                                 <button className={`sidebar-link ${page === 'treinos_senior' ? 'active' : ''}`} onClick={() => onNav('explorar_senior')} style={{ color: 'var(--accent)' }}>
@@ -846,7 +882,7 @@ import { createClient } from '@supabase/supabase-js';
                     <div style={{ marginTop: 'auto', paddingTop: '24px' }}>
                         <button className="sidebar-link" onClick={window.supabase.auth.signOut.bind(window.supabase.auth)} style={{ color: 'var(--text-muted)' }}>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                            Terminar Sessão
+                            Sair da Conta
                         </button>
                     </div>
                 </nav>
@@ -888,19 +924,16 @@ import { createClient } from '@supabase/supabase-js';
         function Onboarding({ onComplete }) {
             const [name, setName] = useState('');
             const [goal, setGoal] = useState('');
-            const [age, setAge] = useState(20);
+            const [age, setAge] = useState(38);
             const [selectedGender, setSelectedGender] = useState('');
             const [estado, setEstado] = useState('');
             const [whatsapp, setWhatsapp] = useState('');
             const ESTADOS_BR = ["Acre", "Alagoas", "Amapá", "Amazonas", "Bahia", "Ceará", "Distrito Federal", "Espírito Santo", "Goiás", "Maranhão", "Mato Grosso", "Mato Grosso do Sul", "Minas Gerais", "Pará", "Paraíba", "Paraná", "Pernambuco", "Piauí", "Rio de Janeiro", "Rio Grande do Norte", "Rio Grande do Sul", "Rondônia", "Roraima", "Santa Catarina", "São Paulo", "Sergipe", "Tocantins"];
-            const isMale = selectedGender === 'male' || selectedGender === 'Masculino';
-            const isFemale = selectedGender === 'female' || selectedGender === 'Feminino';
-            const ALIEN_SPRITESHEET = "./image_11.png";
-            const GOALS = ['Perder Peso', 'Ganhar Massa', 'Tonificar e Definir', 'Saúde e Mobilidade'];
+            const GOALS = ['Perder Peso', 'Tonificar e Definir', 'Ganhar Massa', 'Saúde e Mobilidade'];
             const GENDERS = [
-                { id: 'male', label: 'Masculino', emoji: '🦾' },
-                { id: 'female', label: 'Feminino', emoji: '⚡' },
-                { id: 'other', label: 'Outro', emoji: '✨' }
+                { id: 'female', label: 'Feminino', emoji: '✨' },
+                { id: 'male', label: 'Masculino', emoji: '💪' },
+                { id: 'other', label: 'Outro', emoji: '⚡' }
             ];
 
             const handlePhoneChange = (e) => {
@@ -931,14 +964,13 @@ import { createClient } from '@supabase/supabase-js';
                 <div className="onboarding-overlay" style={{ animation: 'fade-in 0.4s ease-out' }}>
                     <div className="onboarding-card">
                         <div className="onboarding-header flex flex-col items-center">
-                            {/* UI do Avatar Central Blindada - Sprite-Sheet image_11.png */}
-                            <h1 style={{ fontSize: '28px', fontWeight: '900', marginBottom: '4px' }}>Junta-te à <span style={{ color: 'var(--accent)' }}>Elite +500</span></h1>
-                            <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '8px' }}>Configure o seu perfil para forjarmos a sua matriz de treino e nutrição.</p>
+                            <h1 style={{ fontSize: '26px', fontWeight: '900', marginBottom: '6px', textAlign: 'center' }}>Bem-vindo(a) ao <span style={{ color: 'var(--accent)' }}>+500 Exercícios</span></h1>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '13.5px', marginBottom: '8px', textAlign: 'center' }}>Personalize seu perfil em 20 segundos para adaptarmos seus treinos e suas metas em casa.</p>
                         </div>
                         <form onSubmit={handleSubmit} className="onboarding-form">
                             <div className="input-group">
-                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU NOME DE GUERREIRO</label>
-                                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Rafael" required className="ob-input" style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px', transition: 'all 0.3s' }} />
+                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>COMO VOCÊ GOSTARIA DE SER CHAMADO(A)?</label>
+                                <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Ana Paula" required className="ob-input" style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px', transition: 'all 0.3s' }} />
                             </div>
                             <div className="mb-4 mt-4">
                                 <label className="block text-xs font-bold text-gray-400 mb-1 uppercase tracking-wider">
@@ -946,24 +978,24 @@ import { createClient } from '@supabase/supabase-js';
                                 </label>
                                 <input 
                                     type="range" 
-                                    min="1" 
-                                    max="99" 
+                                    min="14" 
+                                    max="90" 
                                     value={age} 
                                     onChange={(e) => setAge(e.target.value)} 
                                     className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
                                 />
                             </div>
                             <div className="input-group" style={{ marginTop: '16px' }}>
-                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU ESTADO (LOCALIZAÇÃO)</label>
+                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU ESTADO</label>
                                 <select className="ob-input" value={estado} onChange={e => setEstado(e.target.value)} required style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px' }}>
                                     <option value="" disabled>Selecione o seu estado...</option>
                                     {ESTADOS_BR.map(uf => <option key={uf} value={uf}>{uf}</option>)}
                                 </select>
                             </div>
                             <div className="input-group" style={{ marginTop: '16px' }}>
-                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU WHATSAPP (COM DDD)</label>
+                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU WHATSAPP (PARA DICAS E SUPORTE)</label>
                                 <input 
-                                    type="text" 
+                                    type="tel" 
                                     value={whatsapp} 
                                     onChange={handlePhoneChange} 
                                     placeholder="Ex: (11) 99999-9999" 
@@ -972,7 +1004,7 @@ import { createClient } from '@supabase/supabase-js';
                                 />
                             </div>
                             <div className="input-group" style={{ marginTop: '16px' }}>
-                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>ESCOLHA SUA SKIN (AVATAR)</label>
+                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU PERFIL</label>
                                 <div className="gender-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '8px' }}>
                                     {GENDERS.map(g => (
                                         <button 
@@ -1003,7 +1035,7 @@ import { createClient } from '@supabase/supabase-js';
                                 </div>
                             </div>
                             <div className="input-group" style={{ marginTop: '16px' }}>
-                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SUA MISSÃO PRINCIPAL</label>
+                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>QUAL É O SEU PRINCIPAL OBJETIVO?</label>
                                 <div className="goal-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '8px' }}>
                                     {GOALS.map(g => (
                                         <button 
@@ -1027,8 +1059,8 @@ import { createClient } from '@supabase/supabase-js';
                                     ))}
                                 </div>
                             </div>
-                            <button type="submit" className="ob-submit-btn" disabled={!name.trim() || !goal || !selectedGender || !estado} style={{ width: '100%', marginTop: '16px', padding: '14px', background: 'var(--accent)', color: '#000', borderRadius: '14px', fontWeight: '900', border: 'none', cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: (!name.trim() || !goal || !selectedGender || !estado) ? 0.5 : 1 }}>
-                                ENTRAR NA ARENA <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+                            <button type="submit" className="ob-submit-btn" disabled={!name.trim() || !goal || !selectedGender || !estado} style={{ width: '100%', marginTop: '16px', padding: '14px', background: 'var(--accent)', color: '#fff', borderRadius: '14px', fontWeight: '900', border: 'none', cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: (!name.trim() || !goal || !selectedGender || !estado) ? 0.5 : 1 }}>
+                                MONTAR MEU PLANO <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
                             </button>
                         </form>
                     </div>
@@ -1395,41 +1427,42 @@ import { createClient } from '@supabase/supabase-js';
         function TeaserScannerPage({ onGoToExtras }) {
             return (
                 <div className="teaser-container">
-                    <div className="teaser-badge">⚡ OFERTA ESPECIAL</div>
+                    <div className="teaser-badge">⚡ 7 DIAS GRÁTIS</div>
                     
                     <div className="teaser-ia-icon-wrapper">
                         <div className="teaser-ia-icon-bg"></div>
-                        <div className="teaser-ia-icon">🤖📸</div>
+                        <div className="teaser-ia-icon">📸🥗</div>
                     </div>
                     
                     <h1 className="teaser-title">
-                        O SEU PRATO SOB <span className="highlight">RAIO-X.</span>
+                        DESCUBRA AS CALORIAS DO SEU PRATO <span className="highlight">EM 3 SEGUNDOS.</span>
                     </h1>
                     
                     <p className="teaser-subtitle">
-                        Não precisas de uma balança quando tens um satélite no bolso. O Nutri-Scan™ usa visão computacional avançada para identificar macros e calorias em segundos.
+                        Você não precisa mais de balança de cozinha nem de ficar pesquisando alimentos um por um. O Nutri-Scan™ IA identifica seu prato pela foto ou texto na hora.
                     </p>
         
                     <div className="teaser-benefits">
                         {[
                             { 
                                 icon: "📸", 
-                                title: "Scan Biométrico Instantâneo:", 
-                                text: "Adeus digitação. O Nutri-Scan™ mapeia visualmente os ingredientes num clique." 
+                                title: "Análise pela Foto:", 
+                                text: "Tire uma foto da sua refeição e veja calorias, proteínas, carboidratos e gorduras na hora." 
                             },
                             { 
-                                icon: "🔍", 
-                                title: "Leitura Ótica Inteligente (OCR):", 
-                                text: "Fotografou rótulos ou menus? A IA extrai os dados nutricionais em tempo real." 
+                                icon: "✍️", 
+                                title: "Ou Digite o que Comeu:", 
+                                text: "Esqueceu de tirar foto? Basta escrever o que comeu e a IA calcula tudo para você." 
                             },
                             { 
-                                icon: "💸", 
-                                title: "Exatidão Científica:", 
-                                text: "O nosso motor de visão computacional é calibrado para identificar gramagens e proporções com precisão de laboratório." 
+                                icon: "🎯", 
+                                title: "Meta Diária Personalizada:", 
+                                text: "Saiba exatamente quanto falta para bater sua meta de emagrecimento ou definição." 
                             },
                             { 
                                 icon: "📈", 
-                                text: "Cada foto gera um log detalhado que sincroniza diretamente com o seu Dashboard e Calendário de Consistência." 
+                                title: "Histórico & Consistência:", 
+                                text: "Cada refeição salva atualiza seu calendário diário automaticamente." 
                             }
                         ].map((b, i) => (
                             <div key={i} className="benefit-card" style={{ animationDelay: `${0.1 * i}s` }}>
@@ -1447,19 +1480,23 @@ import { createClient } from '@supabase/supabase-js';
                                 href="https://pay.hotmart.com/H106107115U?checkoutMode=10"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="w-full text-center font-bold uppercase px-8 py-4 rounded-full bg-[#f97316] hover:bg-[#ea580c] text-white shadow-lg hover:shadow-xl hover:scale-105 transition-transform duration-300 block no-underline"
+                                className="w-full text-center font-bold uppercase px-8 py-4 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] transition-transform duration-300 block no-underline"
                             >
-                                👉 ATIVAR O NUTRI-SCAN™ (APENAS R$ 0,33 AO DIA)
+                                👉 LIBERAR 7 DIAS GRÁTIS (R$ 9,90/MÊS)
                             </a>
-                            <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '700', padding: '0 10px' }}>
-                                🔒 Liberado na hora. Cancele com 1 clique direto na app a qualquer momento.
+                            {onGoToExtras && (
+                                <button
+                                    onClick={onGoToExtras}
+                                    className="w-full py-2 text-xs text-slate-300 hover:text-white underline font-semibold"
+                                >
+                                    Já comprou? Ativar com código • Ou ver Acesso Total sem mensalidade
+                                </button>
+                            )}
+                            <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.45)', fontSize: '10px', letterSpacing: '0.5px', fontWeight: '600', padding: '0 10px' }}>
+                                🔒 Teste por 7 dias grátis na Hotmart. Cancele quando quiser sem burocracia.
                             </p>
                         </div>
                     </div>
-                    
-                    <p style={{ marginTop: '24px', color: 'rgba(255,255,255,0.3)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: '800' }}>
-                        🔒 TECNOLOGIA DE PRECISÃO MILITAR
-                    </p>
                 </div>
             );
         }
@@ -1467,41 +1504,37 @@ import { createClient } from '@supabase/supabase-js';
         function TeaserArsenalPage({ onGoToExtras }) {
             return (
                 <div className="teaser-container">
-                    <div className="teaser-badge">🔒 ACESSO RESTRITO</div>
+                    <div className="teaser-badge">🔒 CONTEÚDO EXCLUSIVO</div>
                     
                     <div className="teaser-ia-icon-wrapper">
                         <div className="teaser-ia-icon-bg" style={{ background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' }}></div>
-                        <div className="teaser-ia-icon">⚔️🛡️</div>
+                        <div className="teaser-ia-icon">✨💪</div>
                     </div>
                     
                     <h1 className="teaser-title">
-                        O seu Arsenal de Elite <span className="highlight">está à espera.</span>
+                        Seus Treinos Favoritos e Extras <span className="highlight">em um só lugar.</span>
                     </h1>
                     
                     <p className="teaser-subtitle">
-                        Pare de treinar à deriva. Tenha acesso a mais de 300 exercícios com execução técnica perfeita, vídeos 4K e progressão de carga inteligente. O treino dos Titãs não é para amadores.
+                        Organize seus exercícios favoritos e libere nossos programas completos para emagrecer, tonificar e ganhar força em casa com praticidade.
                     </p>
         
                     <div className="teaser-benefits">
                         {[
                             { 
-                                icon: "💎", 
-                                title: "Biblioteca Premium:", 
-                                text: "Acesso ilimitado ao Arsenal completo de exercícios categorizados por grupo muscular." 
+                                icon: "🥇", 
+                                title: "Combo de Ouro Vitalício:", 
+                                text: "Desafio 30 Dias + Musculação em Casa + Pilates + 3 Guias Bônus pagando uma única vez." 
                             },
                             { 
                                 icon: "🎥", 
-                                title: "Execução Perfeita:", 
-                                text: "Vídeos explicativos detalhados para evitar lesões e maximizar o recrutamento de fibras." 
+                                title: "Execução Segura:", 
+                                text: "Vídeos explicativos para evitar dores e garantir o máximo resultado em cada movimento." 
                             },
                             { 
-                                icon: "📊", 
-                                title: "Foco Titã:", 
-                                text: "Registe cada série, repetição e carga diretamente no módulo de treino inteligente." 
-                            },
-                            { 
-                                icon: "📈", 
-                                text: "Desbloqueie o seu potencial genético com as mesmas ferramentas usadas pelos profissionais." 
+                                icon: "❤️", 
+                                title: "Seus Favoritos Salvos:", 
+                                text: "Salve seus exercícios preferidos e monte sua rotina em segundos." 
                             }
                         ].map((b, i) => (
                             <div key={i} className="benefit-card" style={{ animationDelay: `${0.1 * i}s` }}>
@@ -1516,26 +1549,31 @@ import { createClient } from '@supabase/supabase-js';
                     <div className="fixed-cta-container">
                         <div style={{ width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '8px', margin: '0 auto' }}>
                             <a 
-                                href="https://pay.hotmart.com/I105940414O?checkoutMode=10"
+                                href="https://pay.hotmart.com/O106106388F?checkoutMode=10"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="w-full text-center font-bold uppercase px-8 py-4 rounded-full bg-orange-600 hover:bg-orange-500 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-transform duration-300 block no-underline"
+                                className="w-full text-center font-bold uppercase px-8 py-4 rounded-full bg-orange-600 hover:bg-orange-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] transition-transform duration-300 block no-underline"
                             >
-                                👉 QUERO DESBLOQUEAR O ARSENAL AGORA
+                                👉 LIBERAR COMBO DE OURO (R$ 24,90 VITALÍCIO)
                             </a>
-                            <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '700', padding: '0 10px' }}>
-                                🔒 Acesso Vitalício Libertado Imediatamente após a confirmação.
-                            </p>
+                            {onGoToExtras && (
+                                <button
+                                    onClick={onGoToExtras}
+                                    className="w-full py-2 text-xs text-slate-300 hover:text-white underline font-semibold"
+                                >
+                                    Ver todos os planos ou ativar meu código
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
             );
         }
 
-        function TeaserDesafioPage() {
+        function TeaserDesafioPage({ onGoToExtras }) {
             return (
                 <div className="teaser-container">
-                    <div className="teaser-badge">🔥 ACESSO RESTRITO</div>
+                    <div className="teaser-badge">🔥 PROGRAMA MAIS VENDIDO</div>
                     
                     <div className="teaser-squares">
                         <div className="teaser-square"></div>
@@ -1546,30 +1584,30 @@ import { createClient } from '@supabase/supabase-js';
                     </div>
 
                     <h1 className="teaser-title" style={{ marginTop: '-10px' }}>
-                        <span className="block text-orange-500 text-5xl italic font-black mb-4 tracking-tighter">DESAFIO 30 DIAS</span>
-                        O CRONOGRAMA OCULTO DOS <span className="highlight">RESULTADOS RÁPIDOS.</span>
+                        <span className="block text-orange-500 text-4xl sm:text-5xl italic font-black mb-3 tracking-tighter">DESAFIO 30 DIAS</span>
+                        SEU PLANO PRONTO PARA <span className="highlight">SECAR E DEFINIR EM CASA.</span>
                     </h1>
                     
                     <p className="teaser-subtitle">
-                        A maioria não evolui porque treina sem estratégia. Este sistema desbloqueia a periodização exata de 30 dias. Cada dia é milimetricamente calculado: o estímulo perfeito e a recuperação exata para ganhos acelerados.
+                        A maioria desiste porque não sabe qual exercício fazer em cada dia. Com o Desafio 30 Dias, cada treino já vem montado na ordem certa para queimar gordura, tonificar e criar constância.
                     </p>
         
                     <div className="teaser-benefits">
                         {[
                             { 
                                 icon: "📅", 
-                                title: "Periodização Elite:", 
-                                text: "30 dias de treinos estruturados para evitar o plateau e forçar o crescimento constante." 
+                                title: "30 Dias Passo a Passo:", 
+                                text: "Abra o app, aperte o play e siga a sequência pronta do dia sem perder tempo pensando." 
                             },
                             { 
                                 icon: "⚡", 
-                                title: "Estímulo Adaptativo:", 
-                                text: "Variação inteligente de volume e intensidade para recrutar fibras adormecidas." 
+                                title: "Ritmo Progressivo:", 
+                                text: "Treinos equilibrados com dias estratégicos de descanso ativo para o corpo evoluir sem dores." 
                             },
                             { 
                                 icon: "🏆", 
-                                title: "Foco em Definição:", 
-                                text: "Protocolo desenhado para queimar gordura enquanto preserva e constrói massa magra." 
+                                title: "Foco em Resultados Reais:", 
+                                text: "Avaliações semanais dentro do app para você acompanhar sua evolução no espelho e na balança." 
                             }
                         ].map((b, i) => (
                             <div key={i} className="benefit-card" style={{ animationDelay: `${0.1 * i}s` }}>
@@ -1584,23 +1622,39 @@ import { createClient } from '@supabase/supabase-js';
                     <div className="fixed-cta-container">
                         <div style={{ width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '8px', margin: '0 auto' }}>
                             <a 
+                                href="https://pay.hotmart.com/O106106388F?checkoutMode=10"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full text-center font-black uppercase px-6 py-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-xl transition-transform duration-200 block no-underline text-xs sm:text-sm"
+                            >
+                                🥇 LEVAR NO COMBO DE OURO (DESAFIO + 5 GUIAS) — R$ 24,90
+                            </a>
+                            <a 
                                 href="https://pay.hotmart.com/R106106925S?checkoutMode=10"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="w-full text-center font-bold uppercase px-8 py-4 rounded-full bg-orange-600 hover:bg-orange-500 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-transform duration-300 block no-underline"
+                                className="w-full text-center font-bold uppercase px-6 py-3 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-white transition-all block no-underline text-xs"
                             >
-                                👉 DESBLOQUEAR DESAFIO (R$ 19,90)
+                                Ou desbloquear só o Desafio 30 Dias (R$ 19,90 vitalício)
                             </a>
+                            {onGoToExtras && (
+                                <button
+                                    onClick={onGoToExtras}
+                                    className="w-full py-1.5 text-[11px] text-slate-400 hover:text-white underline font-semibold"
+                                >
+                                    Já comprou o Desafio 30 Dias? Clique aqui para ativar seu código
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
             );
         }
 
-        function TeaserSonoPage() {
+        function TeaserSonoPage({ onGoToExtras }) {
             return (
                 <div className="teaser-container">
-                    <div className="teaser-badge">🌙 PERFORMANCE NOTURNA</div>
+                    <div className="teaser-badge">🌙 SONO & DISPOSIÇÃO</div>
                     
                     <div className="teaser-ia-icon-wrapper">
                         <div className="teaser-ia-icon-bg" style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)' }}></div>
@@ -1608,29 +1662,29 @@ import { createClient } from '@supabase/supabase-js';
                     </div>
                     
                     <h1 className="teaser-title">
-                        A hipertrofia acontece <span className="highlight">enquanto dormes.</span>
+                        Durma melhor e acorde com <span className="highlight">mais energia para treinar.</span>
                     </h1>
                     
                     <p className="teaser-subtitle">
-                        Não adianta treinar como um Titã se você recupera como um mortal. Desbloqueie o protocolo de otimização de sono profundo e maximize sua produção hormonal natural.
+                        Dormir mal aumenta a vontade de comer doces e trava o emagrecimento. Desbloqueie nossos áudios relaxantes e protocolo de sono profundo para descansar de verdade.
                     </p>
         
                     <div className="teaser-benefits">
                         {[
                             { 
                                 icon: "🌙", 
-                                title: "Higiene Avançada:", 
-                                text: "Protocolos baseados em neurociência para reduzir a latência do sono e eliminar a insónia." 
+                                title: "Rotina Antiestresse:", 
+                                text: "Orientações simples para desacelerar a mente antes de dormir e combater a insônia." 
                             },
                             { 
-                                icon: "🧠", 
-                                title: "Recuperação Neural:", 
-                                text: "Otimiza a limpeza de toxinas cerebrais para acordares com foco total e energia explosiva." 
+                                icon: "🎧", 
+                                title: "Áudios Relaxantes no App:", 
+                                text: "Sons calmantes com timer automático para ajudar você a pegar no sono mais rápido." 
                             },
                             { 
-                                icon: "💉", 
-                                title: "Pico Hormonal:", 
-                                text: "Garante que seu corpo atinja o estado REM profundo para maximizar o GH e a Testosterona." 
+                                icon: "✨", 
+                                title: "Mais Disposição & Menos Ansiedade:", 
+                                text: "Um sono reparador equilibra o metabolismo e acelera a recuperação muscular." 
                             }
                         ].map((b, i) => (
                             <div key={i} className="benefit-card" style={{ animationDelay: `${0.1 * i}s` }}>
@@ -1645,13 +1699,29 @@ import { createClient } from '@supabase/supabase-js';
                     <div className="fixed-cta-container">
                         <div style={{ width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '8px', margin: '0 auto' }}>
                             <a 
+                                href="https://pay.hotmart.com/O106106388F?checkoutMode=10"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full text-center font-black uppercase px-6 py-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-xl transition-transform duration-200 block no-underline text-xs sm:text-sm"
+                            >
+                                🥇 LEVAR GRÁTIS NO COMBO DE OURO (+5 PROGRAMAS) — R$ 24,90
+                            </a>
+                            <a 
                                 href="https://pay.hotmart.com/Y106107162P?checkoutMode=10"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="w-full text-center font-bold uppercase px-8 py-4 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg hover:shadow-xl hover:scale-105 transition-transform duration-300 block no-underline"
+                                className="w-full text-center font-bold uppercase px-6 py-3 rounded-2xl bg-indigo-600/80 hover:bg-indigo-500 text-white transition-all block no-underline text-xs"
                             >
-                                👉 QUERO OTIMIZAR O MEU SONO AGORA
+                                Ou liberar apenas o Sono Profundo (R$ 19,90)
                             </a>
+                            {onGoToExtras && (
+                                <button
+                                    onClick={onGoToExtras}
+                                    className="w-full py-1.5 text-[11px] text-slate-400 hover:text-white underline font-semibold"
+                                >
+                                    Já comprou? Ative seu código aqui
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -1698,29 +1768,34 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function ExtrasHub({ ud, onNav }) {
+        function ExtrasHub({ ud, onNav, freeScansRemaining = 0, onOpenNutriScan }) {
             const [activeTab, setActiveTab] = React.useState('combos');
             const [localUnlocked, setLocalUnlocked] = React.useState(() => {
                 try { return JSON.parse(localStorage.getItem('app_unlocked_modules') || '[]'); } catch (e) { return []; }
             });
             const [redeemCode, setRedeemCode] = React.useState('');
-            const [showModulesDropdown, setShowModulesDropdown] = React.useState(false);
             const [viewingPdf, setViewingPdf] = React.useState(null);
 
             const profile = ud.userProfile;
             const hasTotalVip = profile?.permissions?.total_vip || localUnlocked.includes('total_vip') || profile?.is_vip;
-            const hasGold = profile?.acesso_combo_ouro || localUnlocked.includes('vip_gold') || hasTotalVip;
-            const hasScannerIA = profile?.assinatura_scanner_ia_ativa || localUnlocked.includes('scanner_ia') || localUnlocked.includes('pacote_elite') || hasTotalVip;
+            const hasGold = profile?.acesso_combo_ouro || profile?.permissions?.vip_gold || profile?.permissions?.gold || localUnlocked.includes('vip_gold') || hasTotalVip;
+            const hasScannerIA = profile?.assinatura_scanner_ia_ativa || profile?.permissions?.scanner_ia || profile?.permissions?.pacote_elite || localUnlocked.includes('scanner_ia') || localUnlocked.includes('pacote_elite') || localStorage.getItem('acessoScannerIA') === 'true' || hasTotalVip;
             const hasDesafio = profile?.permissions?.desafio30 || localUnlocked.includes('desafio30') || hasGold || hasTotalVip;
             const hasSono = profile?.permissions?.sono || localUnlocked.includes('sono') || hasGold || hasTotalVip;
-            const hasComunidade = profile?.permissions?.comunidade_vip || localUnlocked.includes('comunidade_vip') || localUnlocked.includes('pacote_elite') || hasTotalVip;
+            const hasComunidade = profile?.permissions?.comunidade_vip || profile?.permissions?.pacote_elite || localUnlocked.includes('comunidade_vip') || localUnlocked.includes('pacote_elite') || hasTotalVip;
             const hasMusculacao = profile?.permissions?.musculacao || localUnlocked.includes('musculacao') || hasGold || hasTotalVip;
             const hasSenior = profile?.permissions?.senior || localUnlocked.includes('senior') || hasGold || hasTotalVip;
             const hasPilates = profile?.permissions?.pilates || localUnlocked.includes('pilates') || hasGold || hasTotalVip;
             const hasGymnastics = profile?.permissions?.gymnastics || localUnlocked.includes('gymnastics') || hasGold || hasTotalVip;
 
+            const ALL_GUIDES = [
+                { title: "Musculação em Casa", unlocked: hasMusculacao, url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" },
+                { title: "Pilates Modelador", unlocked: hasPilates, url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf" },
+                { title: "Recuperação Ativa", unlocked: hasSenior, url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Protocolo%20de%20Recuperacao%20Ativa.pdf" },
+                { title: "Guia Mini-Bands", unlocked: hasGymnastics, url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Treinamento%20Mini-Faixas%20(Mini-Bands).pdf" }
+            ];
 
-            const handleRedeemCode = () => {
+            const handleRedeemCode = async () => {
                 const code = redeemCode.trim().toUpperCase();
                 if (!code) return;
 
@@ -1731,7 +1806,8 @@ import { createClient } from '@supabase/supabase-js';
                     'COMUNIDADEVIPMB': 'comunidade_vip',
                     'TOTALVIP69': 'total_vip',
                     'SONOMILITARVIP': 'sono',
-                    'ELITE2026': 'pacote_elite'
+                    'ELITE2026': 'pacote_elite',
+                    'MUSCULACAO2026': 'musculacao'
                 };
 
                 if (mapping[code]) {
@@ -1739,76 +1815,86 @@ import { createClient } from '@supabase/supabase-js';
                     const newUnlocked = Array.from(new Set([...localUnlocked, moduleSlug]));
                     setLocalUnlocked(newUnlocked);
                     localStorage.setItem('app_unlocked_modules', JSON.stringify(newUnlocked));
+                    if (moduleSlug === 'scanner_ia' || moduleSlug === 'total_vip' || moduleSlug === 'pacote_elite') {
+                        localStorage.setItem('acessoScannerIA', 'true');
+                    }
+                    try {
+                        if (ud?.unlockModule) {
+                            await ud.unlockModule(moduleSlug);
+                        }
+                    } catch (e) {
+                        console.warn('Sync módulo Supabase:', e);
+                    }
                     setRedeemCode('');
-                    alert("Acesso libertado com sucesso! ✅");
-                    window.location.reload(); // Re-sync state
+                    alert("Acesso liberado com sucesso! ✅");
+                    window.location.reload();
                 } else {
-                    alert("Código inválido ou expirado.");
+                    alert("Código inválido ou expirado. Verifique o e-mail da Hotmart ou fale com o suporte.");
                 }
             };
 
-            const ExtraCard = ({ title, desc, price, oldPrice, badge, ribbon, icon, unlocked, isMonthly, onAction, subPrice, pdfs, glow, glowColor = 'orange' }) => {
+            const ExtraCard = ({ title, desc, price, oldPrice, badge, ribbon, icon, unlocked, isMonthly, onAction, ctaLabel, secondaryCta, onSecondaryAction, subPrice, pdfs, glow, glowColor = 'orange' }) => {
                 const isGreen = glowColor === 'green';
                 const glowClass = isGreen 
-                    ? 'shadow-[0_0_40px_-5px_rgba(16,185,129,0.4)] border border-emerald-500/50 animate-[pulse_2s_ease-in-out_infinite]' 
-                    : 'shadow-[0_0_40px_-5px_rgba(249,115,22,0.4)] border border-orange-500/50 animate-[pulse_2s_ease-in-out_infinite]';
+                    ? 'shadow-[0_0_35px_-6px_rgba(16,185,129,0.45)] border-2 border-emerald-500/50' 
+                    : 'shadow-[0_0_35px_-6px_rgba(249,115,22,0.45)] border-2 border-orange-500/50';
 
                 return (
-                <div className={`p-6 rounded-[24px] bg-[#1e2330] flex flex-col relative overflow-hidden transition-all duration-300 ${glow ? glowClass : 'border border-white/5 hover:bg-[#252b3a]'}`}>
+                <div className={`p-6 rounded-[24px] bg-[#1e2330] flex flex-col relative overflow-hidden transition-all duration-300 ${glow ? glowClass : 'border border-white/10 hover:bg-[#252b3a]'}`}>
                     {ribbon && (
                         <div className="absolute top-0 right-0 w-28 h-28 overflow-hidden pointer-events-none z-20">
-                            <div className="absolute top-4 -right-8 w-36 bg-gradient-to-r from-red-600 to-red-500 text-white text-center font-black text-[8px] py-1.5 rotate-45 shadow-2xl uppercase tracking-[0.2em] border-y border-white/10">
+                            <div className={`absolute top-4 -right-8 w-36 ${isGreen ? 'bg-gradient-to-r from-emerald-600 to-emerald-500' : 'bg-gradient-to-r from-orange-600 to-amber-500'} text-white text-center font-black text-[8px] py-1.5 rotate-45 shadow-2xl uppercase tracking-[0.15em] border-y border-white/10`}>
                                 {ribbon}
                             </div>
                         </div>
                     )}
                     {badge && (
-                        <div className={`absolute top-12 right-5 ${isGreen ? 'bg-emerald-600' : 'bg-orange-600'} text-white text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-wider z-10`}>
+                        <div className={`inline-flex self-start mb-4 ${isGreen ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-orange-500/20 text-orange-300 border border-orange-500/30'} text-[9px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider z-10`}>
                             {badge}
                         </div>
                     )}
                     
-                    <div className="flex gap-4 mb-6">
-                        <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-3xl">
+                    <div className="flex gap-4 mb-5">
+                        <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center text-3xl shrink-0">
                             {icon}
                         </div>
                         <div className="flex-1 pt-1">
-                            <h3 className="text-lg font-black text-white leading-none mb-1 uppercase italic tracking-tighter">{title}</h3>
+                            <h3 className="text-lg font-black text-white leading-tight mb-1 uppercase italic tracking-tighter">{title}</h3>
                             <div className="flex items-center gap-2">
-                                <span className={`w-1.5 h-1.5 rounded-full ${unlocked ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`}></span>
-                                <p className="text-[8px] text-slate-500 font-black uppercase tracking-widest">{unlocked ? 'Acesso Ativo' : 'Pendente'}</p>
+                                <span className={`w-1.5 h-1.5 rounded-full ${unlocked ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-600'}`}></span>
+                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{unlocked ? 'Liberado na sua conta' : (isMonthly ? 'Assinatura flexível' : 'Pagamento único')}</p>
                             </div>
                         </div>
                     </div>
 
-                    <p className="text-[11px] text-slate-400 mb-6 leading-relaxed font-bold">{desc}</p>
+                    <div className="text-[12px] text-slate-300 mb-6 leading-relaxed font-medium">{desc}</div>
 
                     <div className="mt-auto">
                         {!unlocked ? (
-                            <div className="mb-6">
-                                {oldPrice && <p className="text-[9px] text-slate-600 line-through font-black mb-1 italic">DE: R$ {oldPrice}</p>}
+                            <div className="mb-5">
+                                {oldPrice && <p className="text-[10px] text-slate-500 line-through font-bold mb-1">DE: R$ {oldPrice}</p>}
                                 <div className="flex items-baseline gap-1">
-                                    <span className="text-xs font-black text-white/40 italic">R$</span>
+                                    <span className="text-xs font-black text-white/50">R$</span>
                                     <span className="text-3xl font-black text-white tracking-tighter italic">{price}</span>
-                                    <span className="text-[9px] text-slate-500 font-black uppercase ml-1">{isMonthly ? '/ mês' : 'Vitalício'}</span>
+                                    <span className="text-[10px] text-slate-400 font-black uppercase ml-1">{isMonthly ? '/ mês' : 'Vitalício'}</span>
                                 </div>
-                                {subPrice && <p className="text-[8px] text-green-500 font-black mt-1 uppercase tracking-tighter italic">⚡ {subPrice}</p>}
+                                {subPrice && <p className="text-[10px] text-emerald-400 font-bold mt-1.5">⚡ {subPrice}</p>}
                             </div>
                         ) : (
-                            <div className="mb-6 py-3 bg-white/5 rounded-xl text-center border border-white/5">
-                                <span className="text-[8px] font-black text-slate-500 tracking-[0.2em] uppercase">Desbloqueado ✅</span>
+                            <div className="mb-5 py-2.5 bg-emerald-500/10 rounded-xl text-center border border-emerald-500/20">
+                                <span className="text-[10px] font-black text-emerald-400 tracking-[0.15em] uppercase">Desbloqueado ✅</span>
                             </div>
                         )}
 
                         {unlocked && pdfs && pdfs.length > 0 && (
-                            <div className="grid grid-cols-2 gap-2 mb-6">
+                            <div className="grid grid-cols-2 gap-2 mb-5">
                                 {pdfs.map((pdf, idx) => (
                                     <div 
                                         key={idx} 
                                         onClick={(e) => { 
                                             e.preventDefault();
                                             if(!pdf.url) { 
-                                                alert("Este PDF está sendo processado e será liberado na sua conta em breve. Verifique novamente em alguns minutos."); 
+                                                alert("Este PDF está sendo processado e será liberado na sua conta em breve."); 
                                             } else if (pdf.title.toLowerCase().includes('musculação')) {
                                                 window.open(pdf.url, '_blank');
                                             } else {
@@ -1817,46 +1903,75 @@ import { createClient } from '@supabase/supabase-js';
                                         }}
                                         className="bg-white/5 hover:bg-white/10 border border-white/10 p-3 rounded-xl flex flex-col items-center gap-1.5 transition-all group/pdf active:scale-95 cursor-pointer hover:border-orange-500/30"
                                     >
-                                        <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500 text-sm group-hover/pdf:bg-red-500/20">
+                                        <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400 text-sm group-hover/pdf:bg-red-500/20">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                                         </div>
-                                        <span className="text-[7px] font-black uppercase text-slate-400 group-hover/pdf:text-white text-center leading-tight tracking-wider">{pdf.title}</span>
+                                        <span className="text-[8px] font-black uppercase text-slate-300 group-hover/pdf:text-white text-center leading-tight tracking-wider">{pdf.title}</span>
                                     </div>
                                 ))}
                             </div>
                         )}
 
-
-                        <button 
-                            onClick={onAction}
-                            className={`w-full py-4 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 ${unlocked ? 'bg-white/10 text-white' : (isGreen ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-lg shadow-emerald-600/10' : 'bg-orange-600 text-white hover:bg-orange-700 shadow-lg shadow-orange-600/10')}`}
-                        >
-                            {unlocked ? 'Acessar Agora' : 'Quero Acesso'}
-                        </button>
+                        <div className="flex flex-col gap-2">
+                            <button 
+                                onClick={onAction}
+                                className={`w-full py-4 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 ${unlocked ? 'bg-white/10 hover:bg-white/15 text-white' : (isGreen ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg shadow-emerald-600/20' : 'bg-orange-600 text-white hover:bg-orange-500 shadow-lg shadow-orange-600/20')}`}
+                            >
+                                {unlocked ? 'Acessar Agora' : (ctaLabel || 'Liberar Acesso Agora')}
+                            </button>
+                            {!unlocked && secondaryCta && onSecondaryAction && (
+                                <button
+                                    onClick={onSecondaryAction}
+                                    className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-emerald-300 border border-emerald-500/20 text-[11px] font-bold transition-all"
+                                >
+                                    {secondaryCta}
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             );
             }
 
+            const unlockedGuides = ALL_GUIDES.filter(g => g.unlocked);
+
             return (
                 <div id="extras-page" className="extras-hub p-5 pb-32 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-700">
-                    <div className="page-header mb-8">
-                        <h1 className="text-4xl font-black italic tracking-tighter mb-2">💎 Extras & Combos</h1>
-                        <p className="text-slate-500 font-bold uppercase tracking-widest text-[9px] italic">Eleve seu potencial ao nível Elite</p>
+                    <div className="page-header mb-6">
+                        <h1 className="text-3xl sm:text-4xl font-black italic tracking-tighter mb-2">✨ Planos & Guias Extras</h1>
+                        <p className="text-slate-400 font-medium text-xs sm:text-sm">Escolha o complemento ideal para acelerar seus resultados em casa</p>
                     </div>
 
-                    <div className="flex gap-2 mb-8 bg-white/5 p-1 rounded-[20px] border border-white/5">
+                    {unlockedGuides.length > 0 && (
+                        <div className="mb-6 p-5 bg-emerald-500/10 border border-emerald-500/25 rounded-3xl">
+                            <h3 className="text-emerald-300 font-black uppercase tracking-widest text-[10px] mb-3">📚 Seus Guias Liberados</h3>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                {unlockedGuides.map((pdf, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => pdf.title.toLowerCase().includes('musculação') ? window.open(pdf.url, '_blank') : setViewingPdf(pdf)}
+                                        className="bg-slate-900/60 hover:bg-slate-800 border border-white/10 p-3 rounded-xl flex items-center gap-2 text-left transition-all"
+                                    >
+                                        <span className="text-red-400 text-base">📄</span>
+                                        <span className="text-[10px] font-black text-white uppercase leading-tight">{pdf.title}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="flex gap-2 mb-7 bg-white/5 p-1 rounded-[20px] border border-white/5">
                         <button 
                             onClick={() => setActiveTab('combos')}
-                            className={`flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all ${activeTab === 'combos' ? 'bg-orange-600 text-white shadow-xl shadow-orange-600/20' : 'text-slate-500 hover:text-white'}`}
+                            className={`flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.16em] transition-all ${activeTab === 'combos' ? 'bg-orange-600 text-white shadow-xl shadow-orange-600/20' : 'text-slate-400 hover:text-white'}`}
                         >
-                            Combos
+                            🔥 Mais Vendidos (3)
                         </button>
                         <button 
                             onClick={() => setActiveTab('separados')}
-                            className={`flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] transition-all ${activeTab === 'separados' ? 'bg-orange-600 text-white shadow-xl shadow-orange-600/20' : 'text-slate-500 hover:text-white'}`}
+                            className={`flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.16em] transition-all ${activeTab === 'separados' ? 'bg-orange-600 text-white shadow-xl shadow-orange-600/20' : 'text-slate-400 hover:text-white'}`}
                         >
-                            Separados
+                            Programas Individuais
                         </button>
                     </div>
 
@@ -1864,251 +1979,172 @@ import { createClient } from '@supabase/supabase-js';
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <ExtraCard 
                                 title="Combo de Ouro"
+                                badge="🔥 MAIS ESCOLHIDO"
+                                glow={true}
+                                glowColor="orange"
                                 desc={
                                     <>
-                                        A base da performance. Desbloqueia:
-                                        <div className="mt-2 space-y-0.5">
-                                            <div className="font-black text-amber-400">✓ DESAFIO 30 DIAS</div>
-                                            <div className="font-black text-amber-400">✓ SONO PROFUNDO</div>
-                                            <div className="font-black text-amber-400">✓ PILATES DE ELITE</div>
-                                            <div className="font-black text-amber-400">✓ GINÁSTICA PÉLVICA</div>
-                                            <div className="font-black text-amber-400">✓ IDOSOS FIT</div>
-                                            <div className="font-black text-amber-400">✓ MÓDULOS ESPECIAIS VIP</div>
+                                        {hasDesafio && !hasGold ? (
+                                            <div className="mb-3 p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-[11px] font-bold">
+                                                ✨ Você já tem o Desafio 30D! Complete sua coleção com Musculação em Casa + Pilates + 4 Guias Bônus:
+                                            </div>
+                                        ) : (
+                                            <span>O pacote completo de treinos e guias em pagamento único (sem mensalidade):</span>
+                                        )}
+                                        <div className="mt-2.5 space-y-1">
+                                            <div className="font-bold text-amber-300">✓ Desafio 30 Dias Passo a Passo</div>
+                                            <div className="font-bold text-amber-300">✓ Guia Musculação em Casa</div>
+                                            <div className="font-bold text-amber-300">✓ Pilates Modelador & Ginástica Pélvica</div>
+                                            <div className="font-bold text-amber-300">✓ Treino Sênior / Mobilidade</div>
+                                            <div className="font-bold text-emerald-300">🎁 Bônus Grátis: Sono Profundo + Mini-Bands + Recuperação Ativa</div>
                                         </div>
                                     </>
                                 }
                                 price="24,90"
                                 oldPrice="119,40"
+                                subPrice="Pague 1 única vez (PIX ou Cartão) • Sem mensalidade"
                                 icon="🥇"
-                                badge="O MAIS POPULAR"
+                                ctaLabel="Quero o Combo de Ouro"
                                 unlocked={hasGold}
-                                pdfs={[
-                                    { title: "Musculação em Casa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" },
-                                    { title: "Recuperação Ativa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Protocolo%20de%20Recuperacao%20Ativa.pdf" },
-                                    { title: "Guia Mini-Bands", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Treinamento%20Mini-Faixas%20(Mini-Bands).pdf" },
-                                    { title: "Pilates de Elite", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf" }
-                                ]}
+                                pdfs={ALL_GUIDES}
                                 onAction={() => hasGold ? onNav('arsenal-vip') : window.open('https://pay.hotmart.com/O106106388F?checkoutMode=10', '_blank')}
                             />
+
                             <ExtraCard 
-                                title="Pacote de Elite"
+                                title="Nutri-Scan™ IA"
+                                badge="📸 7 DIAS GRÁTIS"
+                                glow={true}
+                                glowColor="green"
                                 desc={
                                     <>
-                                        O combo de suporte total. Acesso ilimitado a:
-                                        <div className="mt-2 space-y-0.5">
-                                            <div className="font-black text-orange-400">✓ NUTRI-SCAN™ IA</div>
-                                            <div className="font-black text-orange-400">✓ COMUNIDADE VIP</div>
+                                        Tire uma foto do seu prato ou digite o que comeu e descubra calorias e proteínas em 3 segundos:
+                                        <div className="mt-2.5 space-y-1">
+                                            <div className="font-bold text-emerald-300">✓ Análises Ilimitadas por Foto e Texto</div>
+                                            <div className="font-bold text-emerald-300">✓ Meta Diária para Emagrecer ou Definir</div>
+                                            <div className="font-bold text-emerald-300">✓ Calendário de Consistência Automático</div>
                                         </div>
                                     </>
                                 }
-                                price="14,90"
-                                oldPrice="19,90"
-                                icon="⚔️"
+                                price="9,90"
                                 isMonthly={true}
-                                ribbon="SUPORTE VIP"
-                                unlocked={hasScannerIA && hasComunidade} 
-                                onAction={() => (hasScannerIA && hasComunidade) ? window.open('https://t.me/+KiOxeuwQ8a40ZWM8', '_blank') : window.open('https://pay.hotmart.com/I105940414O?checkoutMode=10', '_blank')}
+                                subPrice="7 Dias Grátis na Hotmart • Cancele quando quiser"
+                                icon="📸"
+                                ctaLabel="Liberar 7 Dias Grátis"
+                                secondaryCta={!hasScannerIA && freeScansRemaining > 0 && onOpenNutriScan ? `🎁 Usar teste grátis no app (${freeScansRemaining} restante)` : null}
+                                onSecondaryAction={onOpenNutriScan}
+                                unlocked={hasScannerIA}
+                                onAction={() => hasScannerIA ? (onOpenNutriScan ? onOpenNutriScan() : onNav('arsenal-vip')) : window.open('https://pay.hotmart.com/H106107115U?checkoutMode=10', '_blank')}
                             />
+
                             <ExtraCard 
                                 title="Acesso Total VIP"
+                                badge="💎 SEM MENSALIDADE"
                                 desc={
                                     <>
-                                        A CHAVE MESTRA. Desbloqueia absolutamente TUDO:
-                                        <div className="mt-2 space-y-0.5">
-                                            <div className="font-black text-emerald-400">✓ COMBO DE OURO & ELITE</div>
-                                            <div className="font-black text-emerald-400">✓ TODAS AS FERRAMENTAS IA</div>
-                                            <div className="font-black text-emerald-400">✓ ATUALIZAÇÕES FUTURAS</div>
+                                        Pague uma única vez e nunca mais pague mensalidade! Libera TUDO para sempre:
+                                        <div className="mt-2.5 space-y-1">
+                                            <div className="font-bold text-emerald-300">✓ Tudo do Combo de Ouro (6 Programas)</div>
+                                            <div className="font-bold text-emerald-300">✓ Nutri-Scan™ IA Vitalício (sem mensalidade!)</div>
+                                            <div className="font-bold text-emerald-300">✓ Comunidade VIP no Telegram</div>
+                                            <div className="font-bold text-emerald-300">✓ Todas as Atualizações Futuras</div>
                                         </div>
                                     </>
                                 }
                                 price="69,90"
                                 oldPrice="119,40 + 19,90/mês"
+                                subPrice="Economia máxima • Pagamento único vitalício"
                                 icon="💎"
-                                ribbon="ACESSO TOTAL"
+                                ribbon="TUDO LIBERADO"
+                                ctaLabel="Quero Acesso Total Vitalício"
                                 unlocked={hasTotalVip}
-                                pdfs={[
-                                    { title: "Musculação em Casa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" },
-                                    { title: "Recuperação Ativa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Protocolo%20de%20Recuperacao%20Ativa.pdf" },
-                                    { title: "Guia Mini-Bands", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Treinamento%20Mini-Faixas%20(Mini-Bands).pdf" },
-                                    { title: "Pilates de Elite", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf" }
-                                ]}
-                                onAction={() => hasTotalVip ? onNav('home') : window.open('https://pay.hotmart.com/E105939718I?checkoutMode=10', '_blank')}
+                                pdfs={ALL_GUIDES}
+                                onAction={() => hasTotalVip ? onNav('inicio') : window.open('https://pay.hotmart.com/E105939718I?checkoutMode=10', '_blank')}
                             />
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            {!hasGold && (
+                                <div
+                                    onClick={() => setActiveTab('combos')}
+                                    className="p-4 rounded-2xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-between gap-3 cursor-pointer hover:bg-orange-500/15 transition-all"
+                                >
+                                    <p className="text-xs text-orange-200 font-bold leading-snug">
+                                        💡 <strong>Dica de economia:</strong> No <strong>Combo de Ouro (R$ 24,90)</strong> você leva o Desafio 30D + Musculação em Casa + Pilates + 3 Guias Bônus por apenas R$ 5 a mais!
+                                    </p>
+                                    <span className="text-[10px] font-black text-orange-400 uppercase shrink-0">Ver Combo ➔</span>
+                                </div>
+                            )}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                 <ExtraCard 
                                     title="Musculação em Casa"
-                                    desc="O guia definitivo para construir um físico de elite usando apenas o peso do corpo e o que tens em casa."
+                                    desc="Guia prático em PDF para tonificar, ganhar força e definir o corpo em casa sem precisar de aparelhos de academia."
                                     price="19,90"
                                     icon="💪"
-                                    badge="GUIA VIP"
-                                    glow={true}
-                                    glowColor="green"
+                                    badge="GUIA EM PDF"
+                                    subPrice="Pagamento único vitalício"
                                     unlocked={hasMusculacao}
                                     pdfs={[{ title: "Musculação em Casa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" }]}
                                     onAction={() => hasMusculacao ? window.open('https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf', '_blank') : window.open('https://pay.hotmart.com/N105939399C?checkoutMode=10', '_blank')}
                                 />
                                 <ExtraCard 
-                                    title="Nutri-Scan™ IA"
-                                    desc="Analise suas refeições com Inteligência Artificial. Macronutrientes e calorias em segundos."
-                                    price="9,90"
-                                    isMonthly={true}
-                                    icon="📸"
-                                    unlocked={hasScannerIA}
-                                    onAction={() => hasScannerIA ? onNav('arsenal-vip') : window.open('https://pay.hotmart.com/H106107115U?checkoutMode=10', '_blank')}
-                                />
-                                <ExtraCard 
-                                    title="Meu Desafio 30 Dias"
-                                    desc="O cronograma oculto dos resultados rápidos. Periodização elite para transformar seu físico."
+                                    title="Desafio 30 Dias"
+                                    desc="Seu cronograma diário pronto por 30 dias para eliminar a dúvida do que treinar e acelerar resultados reais."
                                     price="19,90"
                                     icon="🔥"
+                                    subPrice="Pagamento único vitalício"
                                     unlocked={hasDesafio}
                                     onAction={() => hasDesafio ? onNav('arsenal-vip') : window.open('https://pay.hotmart.com/R106106925S?checkoutMode=10', '_blank')}
                                 />
                                 <ExtraCard 
-                                    title="Comunidade VIP"
-                                    desc="Suporte direto, análise de postura 24h e círculo exclusivo de guerreiros no Telegram."
+                                    title="Nutri-Scan™ IA"
+                                    desc="Fotografe seu prato ou escreva o que comeu e descubra calorias e macronutrientes em segundos."
                                     price="9,90"
                                     isMonthly={true}
-                                    icon="💬"
-                                    unlocked={hasComunidade}
-                                    onAction={() => hasComunidade ? window.open('https://t.me/+KiOxeuwQ8a40ZWM8', '_blank') : window.open('https://pay.hotmart.com/B105940293A?checkoutMode=10', '_blank')}
+                                    subPrice="7 Dias Grátis na Hotmart"
+                                    icon="📸"
+                                    unlocked={hasScannerIA}
+                                    onAction={() => hasScannerIA ? (onOpenNutriScan ? onOpenNutriScan() : onNav('arsenal-vip')) : window.open('https://pay.hotmart.com/H106107115U?checkoutMode=10', '_blank')}
                                 />
                                 <ExtraCard 
-                                    title="Sono Profundo"
-                                    desc="Otimização hormonal através do sono. O segredo da recuperação atlética de elite."
+                                    title="Pilates Modelador"
+                                    desc="Fortaleça abdômen, melhore a postura e alivie dores nas costas com treinos suaves e eficientes em casa."
                                     price="19,90"
-                                    icon="🌙"
-                                    unlocked={hasSono}
-                                    onAction={() => hasSono ? onNav('arsenal-vip') : window.open('https://pay.hotmart.com/Y106107162P?checkoutMode=10', '_blank')}
+                                    icon="🧘‍♀️"
+                                    subPrice="Pagamento único vitalício"
+                                    unlocked={hasPilates}
+                                    pdfs={[{ title: "Pilates Modelador", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf" }]}
+                                    onAction={() => hasPilates ? setViewingPdf({ title: "Pilates Modelador", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf" }) : window.open('https://pay.hotmart.com/E105938855Y?checkoutMode=10', '_blank')}
                                 />
-                            </div>
-
-                            <div className="bg-[#1e2330] rounded-[28px] p-6 border border-white/5 transition-all">
-                                <button 
-                                    onClick={() => setShowModulesDropdown(!showModulesDropdown)}
-                                    className="w-full flex items-center justify-between text-white font-black uppercase tracking-[0.2em] text-xs"
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-xl">📖</div>
-                                        <span>Módulos Especiais</span>
-                                    </div>
-                                    <svg className={`w-5 h-5 text-slate-500 transition-transform duration-300 ${showModulesDropdown ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" /></svg>
-                                </button>
-                                
-                                {showModulesDropdown && (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-8 animate-in slide-in-from-top-4 duration-500">
-                                        {[
-                                            { 
-                                                name: 'Musculação em Casa', 
-                                                icon: '💪', 
-                                                desc: 'O guia definitivo para construir um físico de elite usando apenas o peso do corpo e o que tens em casa.',
-                                                link: 'https://pay.hotmart.com/N105939399C?checkoutMode=10',
-                                                unlocked: hasMusculacao,
-                                                pdfTitle: 'Guia Musculação Elite',
-                                                pdfUrl: 'https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf'
-                                            },
-                                            { 
-                                                name: 'Recuperação Ativa', 
-                                                icon: '🧘', 
-                                                desc: 'Protocolos de mobilidade e libertação para acelerar a regeneração muscular e prevenir lesões.',
-                                                link: 'https://pay.hotmart.com/D105938993C?checkoutMode=10',
-                                                unlocked: hasSenior,
-                                                pdfTitle: 'Protocolo Recuperação',
-                                                pdfUrl: 'https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Protocolo%20de%20Recuperacao%20Ativa.pdf'
-                                            },
-                                            { 
-                                                name: 'Protocolo Mini-Bands', 
-                                                icon: '🎗️', 
-                                                desc: 'Maximiza a tensão muscular e a hipertrofia usando elásticos de resistência. Treino portátil e letal.',
-                                                link: 'https://pay.hotmart.com/M105939209K?checkoutMode=10',
-                                                unlocked: hasGymnastics,
-                                                pdfTitle: 'Manual Mini-Bands',
-                                                pdfUrl: 'https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Treinamento%20Mini-Faixas%20(Mini-Bands).pdf'
-                                            },
-                                            { 
-                                                name: 'Pilates de Elite', 
-                                                icon: '🧘‍♀️', 
-                                                desc: 'Domine seu core e a estabilidade profunda com exercícios usados por atletas de alto rendimento.',
-                                                link: 'https://pay.hotmart.com/E105938855Y?checkoutMode=10',
-                                                unlocked: hasPilates,
-                                                pdfTitle: 'Pilates de Elite',
-                                                pdfUrl: 'https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf'
-                                            }
-                                        ].map(mod => (
-                                            <div key={mod.name} className="p-5 bg-white/5 rounded-[28px] border border-white/5 hover:border-orange-500/20 transition-all group relative overflow-hidden flex flex-col h-full">
-                                                <div className="flex items-start justify-between mb-4">
-                                                    <div className="w-12 h-12 rounded-2xl bg-orange-600/10 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                                                        {mod.icon}
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <div className="bg-orange-600/20 text-orange-500 text-[7px] font-black px-2 py-1 rounded-md uppercase tracking-widest mb-2 inline-block">GUIA VIP</div>
-                                                        <div className="flex items-baseline gap-1 justify-end">
-                                                            <span className="text-[10px] font-black text-white/40 italic">R$</span>
-                                                            <span className="text-2xl font-black text-white italic tracking-tighter">19,90</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                
-                                                <h4 className="text-xs font-black text-white uppercase italic tracking-widest mb-2">{mod.name}</h4>
-                                                <p className="text-[10px] text-slate-500 font-bold leading-relaxed mb-6 flex-1">{mod.desc}</p>
-
-                                                {(mod.unlocked || hasGold) && (
-                                                    <div className="mb-6">
-                                                        <div 
-                                                            onClick={(e) => { 
-                                                                e.preventDefault(); 
-                                                                if (mod.name.toLowerCase().includes('musculação')) {
-                                                                    window.open(mod.pdfUrl, '_blank');
-                                                                } else {
-                                                                    setViewingPdf({ title: mod.pdfTitle, url: mod.pdfUrl });
-                                                                }
-                                                            }}
-                                                            className="flex items-center gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-xl hover:bg-red-500/20 transition-all group/p cursor-pointer"
-                                                        >
-                                                            <div className="w-8 h-8 rounded-lg bg-red-500 flex items-center justify-center text-white">
-                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-[8px] font-black text-white uppercase tracking-tighter">Ver Guia</p>
-                                                                <p className="text-[7px] text-red-400 font-bold uppercase tracking-widest">{mod.pdfTitle}</p>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                
-                                                <button 
-                                                    onClick={() => (mod.unlocked || hasGold) ? alert("Este guia já está desbloqueado. Usa o botão de download acima.") : window.open(mod.link, '_blank')}
-                                                    className={`w-full py-3 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] transition-all active:scale-95 border border-white/5 ${ (mod.unlocked || hasGold) ? 'bg-white/10 text-white border-white/10' : 'bg-white/5 text-white hover:bg-orange-600 hover:border-transparent'}`}
-                                                >
-                                                    {(mod.unlocked || hasGold) ? 'Guia Desbloqueado ✅' : 'Adquirir Guia'}
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                                <ExtraCard 
+                                    title="Pacote de Elite (IA + Comunidade)"
+                                    desc="Nutri-Scan™ IA ilimitado + acesso à Comunidade VIP no Telegram com suporte e dicas."
+                                    price="14,90"
+                                    oldPrice="19,90"
+                                    isMonthly={true}
+                                    icon="💬"
+                                    unlocked={hasScannerIA && hasComunidade}
+                                    onAction={() => (hasScannerIA && hasComunidade) ? window.open('https://t.me/+KiOxeuwQ8a40ZWM8', '_blank') : window.open('https://pay.hotmart.com/I105940414O?checkoutMode=10', '_blank')}
+                                />
                             </div>
                         </div>
                     )}
 
-                    <div className="mt-16 p-8 bg-[#1e2330] rounded-[32px] border border-dashed border-white/10 text-center">
-                        <h3 className="text-white font-black uppercase tracking-[0.3em] text-[10px] mb-6">Possuis um Código de Resgate?</h3>
+                    <div className="mt-12 p-7 bg-[#1e2330] rounded-[28px] border border-dashed border-white/15 text-center">
+                        <h3 className="text-white font-black uppercase tracking-[0.2em] text-xs mb-2">Já comprou na Hotmart? Ative seu código aqui</h3>
+                        <p className="text-slate-400 text-xs mb-5">Digite o código que você recebeu por e-mail para liberar imediatamente na sua conta.</p>
                         <div className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto">
                             <input 
                                 type="text" 
                                 value={redeemCode}
                                 onChange={(e) => setRedeemCode(e.target.value)}
-                                placeholder="INTRODUZ O CÓDIGO AQUI"
-                                className="flex-1 bg-black/40 border border-white/5 rounded-2xl px-6 py-4 text-white font-black text-xs focus:border-orange-500 outline-none transition-all placeholder:text-slate-700"
+                                placeholder="DIGITE SEU CÓDIGO AQUI"
+                                className="flex-1 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-white font-black text-xs focus:border-orange-500 outline-none transition-all placeholder:text-slate-600"
                             />
                             <button 
                                 onClick={handleRedeemCode}
-                                className="bg-white text-black px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-600 hover:text-white transition-all active:scale-95 shadow-xl"
+                                className="bg-white text-black px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-orange-600 hover:text-white transition-all active:scale-95 shadow-xl"
                             >
-                                Validar
+                                Liberar
                             </button>
                         </div>
                     </div>
@@ -2438,14 +2474,19 @@ import { createClient } from '@supabase/supabase-js';
             onScanClick,
             aiTextInput,
             setAiTextInput,
-            onTextOnlyScan
+            onTextOnlyScan,
+            isTrialMode,
+            freeScansRemaining,
+            onOpenNutriUpsell,
+            onNav,
+            hasCustomProfile
         }) {
             const [selectedMacro, setSelectedMacro] = React.useState(null);
 
             const macroSources = {
-                'Proteína': 'Frango, Atum, Ovos, Whey Protein, Queijo Fresco Magro, Tofu.',
-                'Hidratos': 'Arroz Branco/Integral, Batata (Doce/Branca), Aveia, Massa, Fruta.',
-                'Gordura': 'Azeite Virgem Extra, Abacate, Nozes, Amêndoas, Salmão.'
+                'Proteína': 'Frango, Atum, Ovos, Whey Protein, Queijo Cottage/Minas, Patinho Moído.',
+                'Carboidratos': 'Arroz Branco/Integral, Batata Doce/Inglesa, Aveia, Mandioca, Frutas.',
+                'Gordura': 'Azeite Extra Virgem, Abacate, Castanhas, Amêndoas, Salmão.'
             };
 
             const MacroCard = ({ label, current, target, unit, barColor }) => (
@@ -2472,27 +2513,144 @@ import { createClient } from '@supabase/supabase-js';
 
             return (
                 <div className="p-5 animate-in fade-in duration-500 pb-32">
-                    <div className="page-header mb-6"><h1>🍎 Gestão Nutricional</h1></div>
+                    <div className="page-header mb-4"><h1>📸 Nutri-Scan™ IA</h1></div>
 
-                    {nutritionProfile?.isProfileIncomplete && (
-                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-6 flex items-center gap-3 animate-in slide-in-from-top duration-700">
-                            <span className="text-xl">⚠️</span>
-                            <p className="text-amber-200 text-[10px] font-bold leading-tight uppercase tracking-wide">
-                                Perfil incompleto. Cálculos baseados em valores genéricos. 
-                                Atualize idade e objetivo na Evolução.
+                    {isTrialMode && freeScansRemaining > 0 && (
+                        <div className="bg-gradient-to-r from-emerald-600/20 via-emerald-500/15 to-teal-500/10 border border-emerald-500/35 rounded-3xl p-5 mb-6 shadow-xl">
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                                <span className="inline-flex items-center gap-1.5 bg-emerald-500 text-slate-950 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">
+                                    🎁 {freeScansRemaining === 1 ? '1 TESTE GRÁTIS RESTANTE' : `${freeScansRemaining} TESTES GRÁTIS LIBERADOS`}
+                                </span>
+                                <button
+                                    onClick={() => onNav && onNav('extras')}
+                                    className="text-[10px] text-emerald-300 font-bold underline"
+                                >
+                                    Já tenho código
+                                </button>
+                            </div>
+                            <p className="text-sm text-white font-bold leading-snug mb-1">
+                                Teste agora na prática, sem pagar nada!
+                            </p>
+                            <p className="text-xs text-slate-300 leading-relaxed">
+                                Tire uma foto do seu prato ou digite o que você comeu abaixo e veja a IA calcular suas calorias e macros em segundos.
                             </p>
                         </div>
+                    )}
+
+                    {isTrialMode && freeScansRemaining === 0 && (
+                        <div className="bg-gradient-to-br from-orange-600/25 via-slate-900 to-slate-900 border border-orange-500/40 rounded-3xl p-6 mb-6 shadow-2xl">
+                            <div className="inline-flex items-center gap-1.5 bg-orange-500/20 border border-orange-500/40 text-orange-300 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3">
+                                ✨ Você completou seus 2 testes grátis
+                            </div>
+                            <h3 className="text-xl font-black text-white leading-tight mb-2">
+                                Gostou de saber as calorias do seu prato em segundos?
+                            </h3>
+                            <p className="text-xs text-slate-300 leading-relaxed mb-4">
+                                Libere análises ilimitadas todos os dias com <strong className="text-white">7 Dias Grátis</strong> (depois apenas R$ 9,90/mês — cancele quando quiser na Hotmart).
+                            </p>
+                            <div className="flex flex-col gap-2">
+                                <button
+                                    onClick={() => onOpenNutriUpsell && onOpenNutriUpsell('limit_reached')}
+                                    className="w-full py-4 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 rounded-2xl text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/25 active:scale-95 transition-all"
+                                >
+                                    👉 Liberar Nutri-Scan Ilimitado (7 Dias Grátis)
+                                </button>
+                                <button
+                                    onClick={() => onNav && onNav('extras')}
+                                    className="w-full py-2.5 text-[11px] text-slate-400 hover:text-white font-bold underline"
+                                >
+                                    Já assinou ou tem código? Ativar aqui • Ou veja o Acesso Total sem mensalidade
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* FERRAMENTAS DE REGISTRO (LOGO NO TOPO PARA CONVERSÃO IMEDIATA!) */}
+                    <div className="space-y-4 mb-6">
+                        <button 
+                            onClick={onScanClick}
+                            className={`w-full relative overflow-hidden group rounded-[28px] p-6 shadow-2xl active:scale-95 transition-transform ${isTrialMode && freeScansRemaining === 0 ? 'bg-slate-800 border border-orange-500/40' : 'bg-gradient-to-r from-orange-500 to-orange-600 shadow-orange-500/30'}`}
+                        >
+                            <div className="flex items-center justify-center gap-4">
+                                <span className="text-4xl text-white">{isTrialMode && freeScansRemaining === 0 ? '🔒' : '📸'}</span>
+                                <div className="text-left">
+                                    <div className="text-white font-black text-lg sm:text-xl uppercase tracking-tighter">
+                                        {isTrialMode && freeScansRemaining === 0 ? 'Desbloquear Scanner por Foto' : 'Fotografar Meu Prato com IA'}
+                                    </div>
+                                    <div className="text-white/80 text-[11px] font-bold">
+                                        {isTrialMode && freeScansRemaining > 0
+                                            ? `Grátis! Restam ${freeScansRemaining} de ${NUTRISCAN_FREE_LIMIT} testes`
+                                            : isTrialMode
+                                            ? 'Toque para liberar análises ilimitadas'
+                                            : 'Tire uma foto e descubra calorias e macros na hora'}
+                                    </div>
+                                </div>
+                            </div>
+                        </button>
+
+                        <div className="p-5 bg-white/5 border border-white/10 rounded-[28px] backdrop-blur-md">
+                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mb-3 ml-1">Ou digite o que você comeu</p>
+                            <textarea 
+                                id="meal-description-input"
+                                value={aiTextInput}
+                                onChange={(e) => setAiTextInput(e.target.value)}
+                                placeholder="Ex: 2 ovos mexidos, 1 pão integral e 1 xícara de café com leite..."
+                                className="w-full bg-slate-900/60 border border-white/10 rounded-2xl p-4 text-white text-sm focus:ring-2 focus:ring-orange-500/50 outline-none transition-all placeholder:text-slate-500 mb-3"
+                                style={{ minHeight: '76px', resize: 'none' }}
+                            />
+                            {!aiTextInput?.trim() && (!isTrialMode || freeScansRemaining > 0) && (
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setAiTextInput('2 ovos mexidos, 1 fatia de pão integral e 1 café com leite')}
+                                        className="text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 px-3 py-1.5 rounded-full font-semibold transition-all"
+                                    >
+                                        ✨ Testar café da manhã
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setAiTextInput('150g de frango grelhado, 4 colheres de arroz, feijão e salada')}
+                                        className="text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 px-3 py-1.5 rounded-full font-semibold transition-all"
+                                    >
+                                        🥗 Testar almoço
+                                    </button>
+                                </div>
+                            )}
+                            {aiTextInput?.trim() && (
+                                <button 
+                                    onClick={onTextOnlyScan}
+                                    className="w-full py-3.5 bg-orange-500 hover:bg-orange-400 rounded-xl text-white text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-orange-500/20"
+                                >
+                                    {isTrialMode && freeScansRemaining === 0 ? '🔒 Liberar para Analisar ➔' : 'Calcular Calorias com IA ➔'}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {(!hasCustomProfile || nutritionProfile?.isProfileIncomplete) && (
+                        <button
+                            onClick={() => onNav && onNav('evolucao')}
+                            className="w-full text-left bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/25 rounded-2xl p-4 mb-6 flex items-center justify-between gap-3 transition-all"
+                        >
+                            <div className="flex items-center gap-3">
+                                <span className="text-xl">⚖️</span>
+                                <p className="text-amber-200 text-xs font-semibold leading-snug">
+                                    Meta calórica estimada. Toque aqui para colocar seu peso e altura e personalizar sua meta exata.
+                                </p>
+                            </div>
+                            <span className="text-amber-400 font-black text-xs shrink-0">Ajustar ➔</span>
+                        </button>
                     )}
 
                     {/* Meta Principal */}
                     <div className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-xl rounded-[32px] p-6 border border-white/10 shadow-2xl mb-6">
                         <div className="flex justify-between items-end mb-6">
                             <div>
-                                <p className="text-[10px] text-orange-400 font-black uppercase tracking-[0.2em] mb-1">Calorias Diárias</p>
+                                <p className="text-[10px] text-orange-400 font-black uppercase tracking-[0.2em] mb-1">Meta de Calorias</p>
                                 <h3 className="text-4xl font-black text-white">{metaKcal}<span className="text-sm font-bold text-slate-500 ml-1">kcal</span></h3>
                             </div>
                             <div className="text-right">
-                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mb-1">Registadas</p>
+                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mb-1">Registradas</p>
                                 <h3 className="text-2xl font-black text-white">{consumedToday} kcal</h3>
                             </div>
                         </div>
@@ -2500,7 +2658,7 @@ import { createClient } from '@supabase/supabase-js';
                             <div className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full shadow-[0_0_15px_rgba(249,115,22,0.4)]" style={{ width: `${progressPct}%` }}></div>
                         </div>
                         <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                            <span>Zona Segura: {Math.round(metaKcal * 0.9)} - {Math.round(metaKcal * 1.1)}</span>
+                            <span>Zona Ideal: {Math.round(metaKcal * 0.9)} - {Math.round(metaKcal * 1.1)}</span>
                             <span>{progressPct}%</span>
                         </div>
                     </div>
@@ -2508,7 +2666,7 @@ import { createClient } from '@supabase/supabase-js';
                     {/* Cartões de Macros */}
                     <div className="flex gap-3 mb-4">
                         <MacroCard label="Proteína" current={proteinToday} target={metaProtein} unit="g" barColor="bg-blue-500" />
-                        <MacroCard label="Hidratos" current={carbsToday} target={metaCarbs} unit="g" barColor="bg-green-500" />
+                        <MacroCard label="Carboidratos" current={carbsToday} target={metaCarbs} unit="g" barColor="bg-green-500" />
                         <MacroCard label="Gordura" current={fatToday} target={metaFat} unit="g" barColor="bg-yellow-500" />
                     </div>
 
@@ -2526,51 +2684,15 @@ import { createClient } from '@supabase/supabase-js';
                     {/* Calendário de Consistência */}
                     <ConsistencyCalendar history={localHistory} metaKcal={metaKcal} metaProtein={metaProtein} />
 
-                    {/* FERRAMENTAS DE REGISTRO (ORDEM AJUSTADA) */}
-                    <div className="space-y-4 mb-8">
-                        <button 
-                            onClick={onScanClick}
-                            className="w-full relative overflow-hidden group bg-orange-500 rounded-[28px] p-6 shadow-2xl shadow-orange-500/30 active:scale-95 transition-transform"
-                        >
-                            <div className="flex items-center justify-center gap-4">
-                                <span className="text-4xl text-white">📸</span>
-                                <div className="text-left">
-                                    <div className="text-white font-black text-xl uppercase tracking-tighter">Scanner Nutricional IA</div>
-                                    <div className="text-white/70 text-[10px] font-bold uppercase tracking-widest">Tira foto e identifica macros</div>
-                                </div>
-                            </div>
-                        </button>
-
-                        <div className="p-5 bg-white/5 border border-white/10 rounded-[32px] backdrop-blur-md">
-                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] mb-3 ml-2">Análise por Texto</p>
-                            <textarea 
-                                id="meal-description-input"
-                                value={aiTextInput}
-                                onChange={(e) => setAiTextInput(e.target.value)}
-                                placeholder="Ex: 2 bifes de frango grelhados e 100g de arroz..."
-                                className="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 text-white text-sm focus:ring-2 focus:ring-orange-500/50 outline-none transition-all placeholder:text-slate-600 mb-3"
-                                style={{ minHeight: '80px', resize: 'none' }}
-                            />
-                            {aiTextInput?.trim() && (
-                                <button 
-                                    onClick={onTextOnlyScan}
-                                    className="w-full py-3 bg-white/10 hover:bg-orange-500 rounded-xl text-white text-[11px] font-black uppercase tracking-widest transition-all active:scale-95"
-                                >
-                                    Analisar Texto com IA ➔
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
                     {/* HISTÓRICO NO FUNDO */}
                     <div className="mb-10">
                         <h2 className="text-lg font-black text-white uppercase tracking-tight mb-4 flex items-center gap-2">
-                           🕒 Histórico Hoje
+                           🕒 Histórico de Hoje
                         </h2>
                         <div className="space-y-3">
                             {todayLogs.length === 0 ? (
-                                <div className="bg-slate-800/20 border border-dashed border-white/10 rounded-2xl p-8 text-center text-slate-500 italic text-sm">
-                                    Nenhuma refeição registada hoje.
+                                <div className="bg-slate-800/20 border border-dashed border-white/10 rounded-2xl p-8 text-center text-slate-400 italic text-sm">
+                                    Nenhuma refeição registrada hoje. Tire uma foto do seu prato acima para começar!
                                 </div>
                             ) : (
                                 todayLogs.map((item, idx) => (
@@ -2578,13 +2700,13 @@ import { createClient } from '@supabase/supabase-js';
                                         <div className="flex items-center gap-3">
                                             <div className="text-xl">🍽️</div>
                                             <div>
-                                                <div className="text-sm font-bold text-white">{item.description || item.meal_name || 'Refeição'}</div>
-                                                <div className="text-[10px] text-slate-500 uppercase font-black">{new Date(item.created_at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}</div>
+                                                <div className="text-sm font-bold text-white">{item.meal_name || item.description || 'Refeição'}</div>
+                                                <div className="text-[10px] text-slate-500 uppercase font-black">{new Date(item.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
                                             </div>
                                         </div>
                                         <div className="text-right">
                                             <div className="text-orange-400 font-black">{item.calories} kcal</div>
-                                            <div className="text-[8px] text-slate-600 font-black uppercase">P: {item.protein}g | H: {item.carbs}g | G: {item.fat}g</div>
+                                            <div className="text-[8px] text-slate-500 font-black uppercase">P: {item.protein}g | C: {item.carbs}g | G: {item.fat}g</div>
                                         </div>
                                     </div>
                                 ))
@@ -2595,7 +2717,8 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function NutritionDashboard({ ud, onNav }) {
+        function NutritionDashboard({ ud, onNav, hasNutriScanAccess = true, onOpenNutriUpsell }) {
+            const userId = ud?.session?.user?.id || ud?.userProfile?.id || 'guest';
             const [localHistory, setLocalHistory] = React.useState([]);
             const [nutritionProfile, setNutritionProfile] = React.useState(null);
             const [isLoading, setIsLoading] = React.useState(true);
@@ -2603,6 +2726,18 @@ import { createClient } from '@supabase/supabase-js';
             const [isAnalyzing, setIsAnalyzing] = React.useState(false);
             const [aiData, setAiData] = React.useState(null);
             const [aiTextInput, setAiTextInput] = React.useState('');
+            const [freeScansUsed, setFreeScansUsed] = React.useState(() => getFreeScansUsed(userId));
+
+            React.useEffect(() => {
+                const syncFreeUses = () => setFreeScansUsed(getFreeScansUsed(userId));
+                syncFreeUses();
+                window.addEventListener('nutriscan-free-uses-updated', syncFreeUses);
+                return () => window.removeEventListener('nutriscan-free-uses-updated', syncFreeUses);
+            }, [userId]);
+
+            const effectiveUsed = Math.max(freeScansUsed, localHistory.length);
+            const freeScansRemaining = hasNutriScanAccess ? Infinity : Math.max(0, NUTRISCAN_FREE_LIMIT - effectiveUsed);
+            const isTrialMode = !hasNutriScanAccess;
 
             async function handleAIScan(event) {
                 const file = event.target ? event.target.files[0] : event;
@@ -2611,6 +2746,10 @@ import { createClient } from '@supabase/supabase-js';
             }
 
             async function executeScan(file) {
+                if (isTrialMode && freeScansRemaining <= 0) {
+                    if (onOpenNutriUpsell) onOpenNutriUpsell('limit_reached');
+                    return;
+                }
                 setIsAnalyzing(true);
                 try {
                     const reader = new FileReader();
@@ -2643,6 +2782,9 @@ import { createClient } from '@supabase/supabase-js';
 
                                 if (error || !data) throw new Error(error?.message || 'Erro IA');
 
+                                if (isTrialMode) {
+                                    setFreeScansUsed(incrementFreeScansUsed(userId));
+                                }
                                 setAiData(data);
                                 setAiTextInput('');
                                 setShowMealDetails(true);
@@ -2650,7 +2792,7 @@ import { createClient } from '@supabase/supabase-js';
                                 setAiData({
                                     mealName: "Refeição não identificada",
                                     calories: 0, protein: 0, carbs: 0, fat: 0,
-                                    description: "Introduza os valores manualmente."
+                                    description: "Digite os valores manualmente ou tente outra foto."
                                 });
                                 setShowMealDetails(true);
                             } finally {
@@ -2664,7 +2806,7 @@ import { createClient } from '@supabase/supabase-js';
                     setAiData({
                         mealName: "Refeição não identificada",
                         calories: 0, protein: 0, carbs: 0, fat: 0,
-                        description: "Introduza os valores manualmente."
+                        description: "Digite os valores manualmente ou tente outra foto."
                     });
                     setShowMealDetails(true);
                     setIsAnalyzing(false);
@@ -2673,6 +2815,10 @@ import { createClient } from '@supabase/supabase-js';
 
             async function executeTextOnlyScan() {
                 if (!aiTextInput.trim()) return;
+                if (isTrialMode && freeScansRemaining <= 0) {
+                    if (onOpenNutriUpsell) onOpenNutriUpsell('limit_reached');
+                    return;
+                }
                 setIsAnalyzing(true);
                 try {
                     const { data, error } = await window.supabase.functions.invoke('analyze-meal', {
@@ -2684,6 +2830,9 @@ import { createClient } from '@supabase/supabase-js';
 
                     if (error || !data) throw new Error(error?.message || 'Erro IA');
 
+                    if (isTrialMode) {
+                        setFreeScansUsed(incrementFreeScansUsed(userId));
+                    }
                     setAiData(data);
                     setAiTextInput('');
                     setShowMealDetails(true);
@@ -2691,7 +2840,7 @@ import { createClient } from '@supabase/supabase-js';
                     setAiData({
                         mealName: "Refeição não identificada",
                         calories: 0, protein: 0, carbs: 0, fat: 0,
-                        description: "Introduza os valores manualmente."
+                        description: "Digite os valores manualmente ou tente descrever novamente."
                     });
                     setShowMealDetails(true);
                 } finally {
@@ -2700,6 +2849,10 @@ import { createClient } from '@supabase/supabase-js';
             }
 
             const analyzeMealImage = () => {
+                if (isTrialMode && freeScansRemaining <= 0) {
+                    if (onOpenNutriUpsell) onOpenNutriUpsell('limit_reached');
+                    return;
+                }
                 const input = document.createElement('input');
                 input.type = 'file';
                 input.accept = 'image/*';
@@ -2722,10 +2875,10 @@ import { createClient } from '@supabase/supabase-js';
                             user_id: user.id,
                             meal_name: mealName,
                             description: description,
-                            calories: totalCalories,
-                            protein: protein || 0,
-                            carbs: carbs || 0,
-                            fat: fat || 0,
+                            calories: Math.round(Number(totalCalories) || 0),
+                            protein: Math.round(Number(protein) || 0),
+                            carbs: Math.round(Number(carbs) || 0),
+                            fat: Math.round(Number(fat) || 0),
                             created_at: new Date().toISOString()
                         }]);
 
@@ -2733,7 +2886,7 @@ import { createClient } from '@supabase/supabase-js';
 
                     setShowMealDetails(false);
                     window.dispatchEvent(new CustomEvent('nutrition-updated'));
-                    console.log("Refeição registada!");
+                    console.log("Refeição registrada!");
 
                 } catch (err) {
                     console.error("Erro ao gravar refeição:", err);
@@ -2768,14 +2921,21 @@ import { createClient } from '@supabase/supabase-js';
                         .eq('id', user.id)
                         .maybeSingle();
 
-                    if (!evoData || !evoData.peso || !evoData.altura_cm) {
-                        setNutritionProfile(null);
-                    } else {
-                        const userAge = (profileData && profileData.idade) ? profileData.idade : 30;
-                        const userGender = (profileData && (profileData.gender || profileData.genero)) ? (profileData.gender || profileData.genero) : 'masculino';
-                        const userObjective = (profileData && profileData.objetivo_principal) ? profileData.objetivo_principal : 'manter';
-                        const isProfileIncomplete = (!profileData || !profileData.idade || !profileData.objetivo_principal);
+                    const userAge = (profileData && profileData.idade) ? profileData.idade : 38;
+                    const userGender = (profileData && (profileData.gender || profileData.genero)) ? (profileData.gender || profileData.genero) : 'female';
+                    const userObjective = (profileData && (profileData.objetivo_principal || profileData.goal)) ? (profileData.objetivo_principal || profileData.goal) : 'Perder Peso';
+                    const isProfileIncomplete = (!profileData || !profileData.idade || !(profileData.objetivo_principal || profileData.goal));
 
+                    if (!evoData || !evoData.peso || !evoData.altura_cm) {
+                        setNutritionProfile({
+                            peso: null,
+                            altura: null,
+                            idade: parseInt(userAge),
+                            genero: userGender,
+                            objetivo: userObjective,
+                            isProfileIncomplete: true
+                        });
+                    } else {
                         setNutritionProfile({
                             peso: parseFloat(evoData.peso),
                             altura: parseFloat(evoData.altura_cm),
@@ -2804,7 +2964,7 @@ import { createClient } from '@supabase/supabase-js';
                     }
 
                 } catch (err) {
-                    console.error("Erro no carregamento nutricao:", err);
+                    console.error("Erro no carregamento nutrição:", err);
                 } finally {
                     setIsLoading(false);
                 }
@@ -2821,52 +2981,31 @@ import { createClient } from '@supabase/supabase-js';
                 return (
                     <div className="p-10 flex flex-col items-center justify-center min-h-[60vh]">
                         <div className="w-12 h-12 border-4 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mb-4"></div>
-                        <p className="text-slate-400 font-bold animate-pulse text-sm uppercase tracking-widest">Sincronizando Nutrição...</p>
+                        <p className="text-slate-400 font-bold animate-pulse text-sm uppercase tracking-widest">Carregando Nutri-Scan...</p>
                     </div>
                 );
             }
 
             const p = nutritionProfile || {};
-            const weight = parseFloat(p.peso) || 70;
-            const height = parseFloat(p.altura) || 170;
-            const age = parseFloat(p.idade || 30);
-            const isMale = (p.genero || '').toLowerCase().includes('masc') || (p.genero || '').toLowerCase() === 'm';
-            const goal = p.objetivo || 'manter';
-
-            const hasData = weight > 20 && height > 50;
+            const hasCustomProfile = parseFloat(p.peso) > 20 && parseFloat(p.altura) > 50;
+            const weight = hasCustomProfile ? parseFloat(p.peso) : 68;
+            const goal = p.objetivo || 'Perder Peso';
 
             // --- CÁLCULOS DINÂMICOS (FÓRMULAS DE NUTRIÇÃO ESPORTIVA) ---
-            let metaKcal = 2000; // Valor base
-            let metaProtein = Math.round(weight * 2.0); 
-            let metaFat = Math.round(weight * 0.9);
-            let metaCarbs = 250;
-
-            if (hasData) {
-                // 1. Calorias Totais (TDEE Simplificado por Objetivo)
-                let multiplier = 32; // Manter (Default)
-                const lowerGoal = goal.toLowerCase();
-                
-                if (lowerGoal.includes('perder') || lowerGoal.includes('emagrecer') || lowerGoal.includes('seca')) {
-                    multiplier = 24;
-                } else if (lowerGoal.includes('ganhar') || lowerGoal.includes('massa') || lowerGoal.includes('bulking')) {
-                    multiplier = 38;
-                }
-                
-                metaKcal = Math.round(weight * multiplier);
-                
-                // 2. Cálculo dos Macros (Garantes que a soma bate certo)
-                // Proteína: 2.0g por kg
-                // Gordura: 0.9g por kg
-                // Hidratos: O Restante
-                
-                const kcalFromProt = metaProtein * 4;
-                const kcalFromFat = metaFat * 9;
-                
-                metaCarbs = Math.round((metaKcal - kcalFromProt - kcalFromFat) / 4);
-                
-                // Safety check: Mínimo de hidratos
-                if (metaCarbs < 50) metaCarbs = 50;
+            let multiplier = 28;
+            const lowerGoal = goal.toLowerCase();
+            if (lowerGoal.includes('perder') || lowerGoal.includes('emagrecer') || lowerGoal.includes('seca')) {
+                multiplier = 24;
+            } else if (lowerGoal.includes('ganhar') || lowerGoal.includes('massa') || lowerGoal.includes('bulking')) {
+                multiplier = 34;
             }
+
+            const metaKcal = Math.round(weight * multiplier);
+            const metaProtein = Math.round(weight * 1.8);
+            const metaFat = Math.round(weight * 0.8);
+            const kcalFromProt = metaProtein * 4;
+            const kcalFromFat = metaFat * 9;
+            const metaCarbs = Math.max(50, Math.round((metaKcal - kcalFromProt - kcalFromFat) / 4));
 
             // --- TOTAIS DE HOJE ---
             const todayLogs = localHistory.filter(h => new Date(h.created_at).toDateString() === new Date().toDateString());
@@ -2876,27 +3015,6 @@ import { createClient } from '@supabase/supabase-js';
             const fatToday = todayLogs.reduce((acc, curr) => acc + (curr.fat || 0), 0);
             
             const progressPct = Math.min(100, Math.round((consumedToday / metaKcal) * 100));
-
-            if (!hasData) {
-                return (
-                    <div className="p-5 animate-in fade-in duration-500">
-                        <div className="page-header"><h1>🍎 Dashboard Nutricional</h1></div>
-                        <div className="bg-slate-800/40 backdrop-blur-md rounded-3xl p-8 border border-white/5 text-center shadow-2xl">
-                            <div className="text-6xl mb-6">⚖️</div>
-                            <h2 className="text-2xl font-black text-white mb-4">Falta o seu Perfil!</h2>
-                            <p className="text-slate-400 mb-8 leading-relaxed">
-                                Precisamos saber o seu peso e objetivo para a IA calcular as suas calorias.
-                            </p>
-                            <button 
-                                onClick={() => onNav('evolucao')}
-                                className="w-full py-4 bg-orange-500 rounded-2xl text-white font-black uppercase tracking-widest active:scale-95 transition-transform"
-                            >
-                                Fazer Avaliação Rápida
-                            </button>
-                        </div>
-                    </div>
-                );
-            }
 
             return (
                 <React.Fragment>
@@ -2917,13 +3035,18 @@ import { createClient } from '@supabase/supabase-js';
                         aiTextInput={aiTextInput}
                         setAiTextInput={setAiTextInput}
                         onTextOnlyScan={executeTextOnlyScan}
+                        isTrialMode={isTrialMode}
+                        freeScansRemaining={freeScansRemaining}
+                        onOpenNutriUpsell={onOpenNutriUpsell}
+                        onNav={onNav}
+                        hasCustomProfile={hasCustomProfile}
                     />
 
                     {isAnalyzing && (
                         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-[250000] animate-in fade-in duration-300">
                             <div className="w-16 h-16 border-4 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mb-6 shadow-[0_0_30px_rgba(249,115,22,0.3)]"></div>
                             <p className="text-white font-black text-xl uppercase tracking-widest animate-pulse">IA Analisando...</p>
-                            <p className="text-slate-500 text-xs mt-2 uppercase tracking-tight">Estou identificando a sua refeição</p>
+                            <p className="text-slate-400 text-xs mt-2 uppercase tracking-tight">Identificando os alimentos e calorias do seu prato</p>
                         </div>
                     )}
 
@@ -3049,10 +3172,10 @@ import { createClient } from '@supabase/supabase-js';
             const progressPercent = Math.round((completedCount / 30) * 100);
             
             // Lógica de Rank
-            let rank = { name: 'RECRUTA', class: 'rank-recruta', icon: '🥉' };
-            if (completedCount >= 24) rank = { name: 'TITÃ', class: 'rank-titã', icon: '🔥' };
-            else if (completedCount >= 16) rank = { name: 'GUERREIRO', class: 'rank-guerreiro', icon: '🥇' };
-            else if (completedCount >= 8) rank = { name: 'ELITE', class: 'rank-elite', icon: '🥈' };
+            let rank = { name: 'INICIANTE', class: 'rank-recruta', icon: '🥉' };
+            if (completedCount >= 24) rank = { name: 'DESTAQUE', class: 'rank-titã', icon: '🔥' };
+            else if (completedCount >= 16) rank = { name: 'AVANÇADO', class: 'rank-guerreiro', icon: '🥇' };
+            else if (completedCount >= 8) rank = { name: 'CONSTANTE', class: 'rank-elite', icon: '🥈' };
 
             // Cálculo de Repetições (6 ex x 3 séries x 12 reps)
             const totalReps = completedCount * 6 * 3 * 12; 
@@ -3153,8 +3276,8 @@ import { createClient } from '@supabase/supabase-js';
                                         {rank.icon} {rank.name}
                                     </span>
                                 </div>
-                                <h1 className="text-4xl font-black italic tracking-tighter uppercase leading-none">
-                                    Modo Titã: <span className="text-orange-500">{rank.name}</span>
+                                <h1 className="text-3xl sm:text-4xl font-black italic tracking-tighter uppercase leading-none">
+                                    Desafio 30 Dias: <span className="text-orange-500">{rank.name}</span>
                                 </h1>
                             </div>
                             <div className="text-right">
@@ -3165,7 +3288,7 @@ import { createClient } from '@supabase/supabase-js';
 
                         <div className="h-3 bg-black/40 rounded-full overflow-hidden mb-6 border border-white/5">
                             <div 
-                                className={`h-full transition-all duration-1000 ${rank.name === 'TITÃ' ? 'bg-gradient-to-r from-red-600 via-orange-500 to-yellow-400' : 'bg-gradient-to-r from-orange-600 to-orange-400'}`}
+                                className={`h-full transition-all duration-1000 ${rank.name === 'DESTAQUE' ? 'bg-gradient-to-r from-red-600 via-orange-500 to-yellow-400' : 'bg-gradient-to-r from-orange-600 to-orange-400'}`}
                                 style={{ width: `${progressPercent}%`, boxShadow: '0 0 20px rgba(249, 115, 22, 0.4)' }}
                             ></div>
                         </div>
@@ -3233,7 +3356,7 @@ import { createClient } from '@supabase/supabase-js';
                                     <span className="text-orange-500 font-black text-[10px] uppercase tracking-[0.3em] italic">Missão Ativa</span>
                                 </div>
                                 <h3 className="text-3xl font-black italic tracking-tighter uppercase leading-tight">
-                                    {isRestDay ? 'Descanso Estratégico' : isBoss ? 'Evento: Boss Level' : 'Protocolo de Treino'}
+                                    {isRestDay ? 'Descanso Ativo' : isBoss ? 'Dia de Avaliação Semanal' : 'Treino do Dia'}
                                 </h3>
                             </div>
                             {isCompleted && (
@@ -3285,16 +3408,16 @@ import { createClient } from '@supabase/supabase-js';
                                         value={evaluationData.feel}
                                         onChange={e => setEvaluationData({...evaluationData, feel: e.target.value})}
                                         className="w-full bg-black/40 border-none rounded-2xl px-6 py-5 text-white font-black italic text-lg placeholder:text-slate-700 outline-none focus:ring-2 focus:ring-orange-600 transition-all min-h-[140px] resize-none shadow-inner"
-                                        placeholder="RELATÓRIO DE CAMPO (COMO TE SENTES?)"
+                                        placeholder="COMO VOCÊ ESTÁ SE SENTINDO ESTA SEMANA?"
                                     />
                                     <button 
                                         onClick={handleSaveEvaluation}
                                         disabled={isSaving || !evaluationData.weight}
-                                        className="w-full py-6 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600 rounded-2xl font-black text-sm uppercase tracking-[0.3em] shadow-xl shadow-orange-600/30 active:scale-95 transition-all disabled:opacity-50 group"
+                                        className="w-full py-6 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600 rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-orange-600/30 active:scale-95 transition-all disabled:opacity-50 group"
                                     >
-                                        {isSaving ? 'A SINCRONIZAR...' : (
+                                        {isSaving ? 'SALVANDO...' : (
                                             <span className="flex items-center justify-center gap-3">
-                                                CONCLUIR BOSS LEVEL 
+                                                SALVAR AVALIAÇÃO SEMANAL 
                                                 <svg className="group-hover:translate-x-2 transition-transform" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
                                             </span>
                                         )}
@@ -3308,7 +3431,7 @@ import { createClient } from '@supabase/supabase-js';
                                 </div>
                                 <h4 className="text-2xl font-black italic uppercase mb-4 text-white">Descanso Ativo</h4>
                                 <p className="text-sm text-slate-400 font-medium leading-relaxed mb-10 max-w-sm mx-auto italic">
-                                    "O guerreiro inteligente sabe quando afiar a espada." Foca em mobilidade leve e hidratação massiva hoje.
+                                    O descanso faz parte do resultado! Hoje foque em alongamentos leves, uma boa caminhada e bastante água.
                                 </p>
                                 {!isCompleted && (
                                     <button 
@@ -3393,8 +3516,8 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
 
                         <div className="mt-8 text-center">
-                            <p className="text-[9px] text-slate-600 font-bold uppercase tracking-[0.3em]">
-                                Algoritmo de Progressão Ativo • v2.0 modo titã
+                            <p className="text-[9px] text-slate-600 font-bold uppercase tracking-[0.25em]">
+                                Plano de Progressão Ativo • Desafio 30 Dias
                             </p>
                         </div>
                     </div>
@@ -4312,7 +4435,7 @@ import { createClient } from '@supabase/supabase-js';
                             </div>
 
                             <div>
-                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Como te sentes hoje?</label>
+                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Como você está se sentindo hoje?</label>
                                 <div className="grid grid-cols-3 gap-2">
                                     {['Cansado', 'Normal', 'Revigorado'].map(f => (
                                         <button 
@@ -4330,7 +4453,7 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
 
                         <button onClick={handleSave} disabled={loading} className="w-full py-5 bg-gradient-to-r from-orange-600 to-amber-600 rounded-2xl font-black text-white text-xs uppercase tracking-widest shadow-xl shadow-orange-600/20 active:scale-95 transition-all">
-                            {loading ? 'A GRAVAR...' : 'GRAVAR DESCANSO'}
+                            {loading ? 'SALVANDO...' : 'SALVAR DESCANSO'}
                         </button>
                     </div>
                 </div>
@@ -4366,19 +4489,19 @@ import { createClient } from '@supabase/supabase-js';
                             </div>
 
                             <h3 className="text-2xl font-black text-white italic uppercase tracking-tight mb-3">
-                                Acesso Restrito: <br/><span className="text-orange-500">Arsenal Premium</span>
+                                Conteúdo Exclusivo <br/><span className="text-orange-500">Combo de Ouro</span>
                             </h3>
 
-                            <p className="text-slate-400 font-medium text-sm leading-relaxed mb-8">
-                                Ferramentas de elite bloqueadas. Garante o teu acesso na plataforma oficial para elevar os teus resultados e dominar a arena.
+                            <p className="text-slate-300 font-medium text-sm leading-relaxed mb-8">
+                                Libere este e mais 5 programas completos no Combo de Ouro pagando uma única vez (R$ 24,90 vitalício).
                             </p>
 
                             <div className="w-full space-y-3">
                                 <button 
                                     className="w-full py-5 bg-gradient-to-r from-orange-600 to-orange-500 rounded-2xl font-black text-white text-xs uppercase tracking-widest shadow-xl shadow-orange-600/20 active:scale-95 transition-all"
-                                    onClick={() => window.open('#', '_blank')}
+                                    onClick={() => { setShow(false); window.open('https://pay.hotmart.com/O106106388F?checkoutMode=10', '_blank'); }}
                                 >
-                                    DESBLOQUEAR AGORA
+                                    DESBLOQUEAR AGORA (R$ 24,90)
                                 </button>
                                 <button 
                                     className="w-full py-4 text-slate-500 hover:text-white font-bold text-xs uppercase tracking-widest transition-all"
@@ -4454,11 +4577,11 @@ import { createClient } from '@supabase/supabase-js';
         }
 
 
-        function RankingTab({ session, userProfile, currentXP }) {
+        function RankingTab({ session, userProfile, currentXP, onGoToTreinos }) {
             return (
                 <div className="tab-content fade-in pb-24">
                     <div className="fade-in">
-                        <RankingView session={session} userProfile={userProfile} currentXP={currentXP} hideHeader={true} />
+                        <RankingView session={session} userProfile={userProfile} currentXP={currentXP} onGoToTreinos={onGoToTreinos} hideHeader={true} />
                     </div>
                 </div>
             );
@@ -5255,7 +5378,7 @@ import { createClient } from '@supabase/supabase-js';
             }
         };
 
-        function RankingView({ session, userProfile, currentXP }) {
+        function RankingView({ session, userProfile, currentXP, onGoToTreinos }) {
             const [topUsers, setTopUsers] = useState([]);
             const [loading, setLoading] = useState(true);
             const [myRank, setMyRank] = useState(null);
@@ -5289,10 +5412,10 @@ import { createClient } from '@supabase/supabase-js';
                     if (session) {
                         combined.push({
                             id: session.user.id,
-                            name: userProfile?.name || 'Tu',
+                            name: userProfile?.name || 'Você',
                             xp: currentXP || 0,
                             level: Math.floor((currentXP || 0) / 1000) + 1,
-                            estado: userProfile?.estado || 'PT',
+                            estado: userProfile?.estado || 'BR',
                             isReal: true,
                             avatar: '👤'
                         });
@@ -5332,9 +5455,9 @@ import { createClient } from '@supabase/supabase-js';
                     
                     <div className="progress-dashboard relative z-10 pb-40">
                         <div className="page-header mb-2 text-center">
-                        <h1 style={{ fontSize: '28px', fontWeight: '900' }}>🏆 Hall of Fame</h1>
+                        <h1 style={{ fontSize: '28px', fontWeight: '900' }}>🏆 Ranking de Consistência</h1>
                         <p style={{ color: 'var(--text-secondary)', fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
-                            Temporada Alpha: Elite Arsenal
+                            Comunidade +500 Exercícios
                         </p>
                     </div>
 
@@ -5437,7 +5560,7 @@ import { createClient } from '@supabase/supabase-js';
 
                                         <div style={{ flex: 1 }}>
                                             <div style={{ fontSize: '15px', fontWeight: '900', color: isMe ? 'var(--accent)' : '#fff' }}>
-                                                {u.name} {isMe && <span className="ml-2 px-2 py-0.5 bg-orange-500 text-[9px] rounded-full text-white">TU</span>}
+                                                {u.name} {isMe && <span className="ml-2 px-2 py-0.5 bg-orange-500 text-[9px] rounded-full text-white">VOCÊ</span>}
                                             </div>
                                             <div style={{ fontSize: '9px', color: 'var(--text-muted)', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px' }}>
                                                 Nível {u.level} • {filterMode === 'global' ? 'World Class' : (u.estado || 'Atleta')}
@@ -5483,18 +5606,18 @@ import { createClient } from '@supabase/supabase-js';
                                     <div style={{ fontSize: '13px', fontWeight: '900', color: '#fff' }}>Minha Posição</div>
                                     <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.6)', fontWeight: '700' }}>
                                         {(!myRank || myRank > 50) ? (
-                                            <>🎯 Alvo: <span className="text-orange-500">Faltam {Math.max(1, (topUsers[49]?.xp || 0) - currentXP)} XP</span> para entrar no ranking.</>
+                                            <>🎯 Meta: <span className="text-orange-500">Faltam {Math.max(1, (topUsers[49]?.xp || 0) - currentXP)} XP</span> para entrar no Top 50.</>
                                         ) : myRank === 1 ? (
-                                            <>🏆 <span className="text-orange-500">És o Top 1!</span> Mantém a posição.</>
+                                            <>🏆 <span className="text-orange-500">Você está no Top 1!</span> Continue assim.</>
                                         ) : (
-                                            <>🎯 Próximo Alvo: <span className="text-orange-500">Faltam {Math.max(1, (topUsers[myRank - 2]?.xp || 0) - currentXP)} XP</span> para subir.</>
+                                            <>🎯 Próxima posição: <span className="text-orange-500">Faltam {Math.max(1, (topUsers[myRank - 2]?.xp || 0) - currentXP)} XP</span> para subir.</>
                                         )}
                                     </div>
                                 </div>
                                 <button 
-                                    onClick={() => console.log('Train Triggered')}
+                                    onClick={() => onGoToTreinos && onGoToTreinos()}
                                     style={{ 
-                                        background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '14px', 
+                                        background: 'rgba(249,115,22,0.2)', border: '1px solid rgba(249,115,22,0.4)', borderRadius: '14px', 
                                         padding: '10px 14px', color: '#fff', fontSize: '10px', fontWeight: '900', 
                                         textTransform: 'uppercase', cursor: 'pointer' 
                                     }}
@@ -5511,7 +5634,7 @@ import { createClient } from '@supabase/supabase-js';
             const [faqOpen, setFaqOpen] = React.useState(null);
 
             const handleReset = () => {
-                if (window.confirm('Tem certeza que deseja apagar todos os dados da aplicação e limpar a cache do seu dispositivo? Esta ação fará log-out e não pode ser desfeita.')) {
+                if (window.confirm('Tem certeza que deseja limpar o cache do aplicativo? Esta ação vai desconectar sua conta neste aparelho para atualizar tudo do zero.')) {
                     localStorage.clear();
                     window.location.reload();
                 }
@@ -5522,49 +5645,49 @@ import { createClient } from '@supabase/supabase-js';
             };
 
             const faqs = [
-                { q: "Como acessar os Módulos Premium?", a: "Se adquiriu o Combo de Ouro, todos os módulos extra (Pilates, Idosos, Ginástica Pélvica) estarão disponíveis na aba 'Extras', bastando ativá-los gratuitamente se já estão desbloqueados na sua conta." },
-                { q: "Como funciona a Matemática Calórica?", a: "Utilizamos a fórmula profissional de Mifflin-St Jeor no Raio-X corporal. A calculadora estipula o seu gasto diário (TDEE) cruzando o seu nível cardiorespiratório e musculatura com o seu objetivo em dias ativos vs dias de descanso." },
-                { q: "Onde configuro o Peso Inicial?", a: "Pode configurar clicando no botão do Raio-X na aba de Evolução Corporal. Os seus registros permanecerão seguros mesmo que feche o app." },
-                { q: "Posso perder o meu registro de treinos de hoje?", a: "Apenas se limpar o cache do celular manualmente ou clicar em 'Limpar Cache do App' nas opções avançadas. A melhor prática é 'Instalar' a plataforma web como App para a tela inicial." }
+                { q: "Como ativar o Desafio 30 Dias, Nutri-Scan ou Combo de Ouro?", a: "Após comprar na Hotmart, você recebe um código no seu e-mail. Basta ir na aba 'Extras', descer até a caixa 'Ative seu código aqui', digitar o código e clicar em Liberar!" },
+                { q: "Como funciona o Nutri-Scan™ IA?", a: "Você já tem 2 análises grátis liberadas na aba 'Nutri IA'. Basta tirar uma foto do seu prato ou digitar o que comeu e a IA calcula automaticamente calorias, proteínas, carboidratos e gorduras." },
+                { q: "Onde configuro meu Peso e Altura?", a: "Você pode registrar seu peso e altura clicando na aba 'Evolução'. Os seus dados ficam salvos na sua conta para acompanhar sua evolução." },
+                { q: "Como instalar o aplicativo na tela inicial do celular?", a: "Veja o vídeo curto abaixo! Em iPhone (Safari) toque em Compartilhar > Adicionar à Tela de Início. Em Android (Chrome) toque nos 3 pontinhos > Instalar aplicativo." }
             ];
 
             return (
                 <div className="progress-dashboard">
                     <div className="page-header" style={{ marginBottom: '16px' }}>
-                        <h1>Central de Suporte</h1>
+                        <h1>Central de Ajuda</h1>
                     </div>
 
                     <div style={{ background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)', padding: '12px 16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
                         <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 10px #22c55e', animation: 'pulse 2s infinite' }}></div>
-                        <span style={{ color: '#22c55e', fontWeight: '700', fontSize: '15px' }}>Sistemas Operacionais: 100% 🟢</span>
+                        <span style={{ color: '#22c55e', fontWeight: '700', fontSize: '15px' }}>Aplicativo Funcionando 100% 🟢</span>
                     </div>
 
                     <div className="install-app-card" style={{ marginBottom: '32px' }}>
-                        <h3 className="install-app-card-title">📱 Como instalar a App</h3>
+                        <h3 className="install-app-card-title">📱 Como instalar o App</h3>
                         <p className="install-app-card-text">
-                            Adicione a plataforma à sua Tela Inicial para que atue como um aplicativo nativo. Para Android ou iOS, clique em <strong style={{ color: 'var(--text-primary)' }}>Compartilhar</strong> (ícone exportar/opções) e depois em <strong style={{ color: 'var(--accent)' }}>"Adicionar à Tela Inicial"</strong>.
+                            Adicione o aplicativo à sua Tela Inicial para usar com um toque. Para Android ou iPhone, clique em <strong style={{ color: 'var(--text-primary)' }}>Compartilhar</strong> (ou nos 3 pontinhos) e depois em <strong style={{ color: 'var(--accent)' }}>"Adicionar à Tela Inicial"</strong>.
                         </p>
                         <div style={{ width: '100%', maxWidth: '280px', borderRadius: '8px', overflow: 'hidden', margin: '0 auto', marginTop: '16px' }}>
                             <video src="./instalar_app.mp4" poster="./OIP.webp" controls playsInline preload="none" style={{ width: "100%", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.5)" }}></video>
                         </div>
                     </div>
 
-                    <h3 className="ps-title" style={{ marginTop: '32px' }}>Mini-Glossário da Plataforma</h3>
+                    <h3 className="ps-title" style={{ marginTop: '32px' }}>Guia Rápido do Aplicativo</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '32px' }}>
                         <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.4), rgba(15,23,42,0.8))', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                            <div style={{ fontSize: '24px', marginBottom: '8px' }}>🏆</div>
-                            <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>XP & Ranking</h4>
-                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Ganhe XP a cada treino e suba o seu nível competitivo no Hall of Fame de Elite.</p>
+                            <div style={{ fontSize: '24px', marginBottom: '8px' }}>📸</div>
+                            <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>Nutri IA</h4>
+                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Tire foto do seu prato e descubra calorias e macros em segundos (2 testes grátis!).</p>
                         </div>
                         <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.4), rgba(15,23,42,0.8))', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
                             <div style={{ fontSize: '24px', marginBottom: '8px' }}>📈</div>
-                            <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>Avaliação Física</h4>
-                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Mantenha as suas métricas visuais no Raio-X baseadas no Mifflin-St Jeor.</p>
+                            <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>Evolução</h4>
+                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Acompanhe seu peso, medidas e progresso semana a semana.</p>
                         </div>
                         <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.4), rgba(15,23,42,0.8))', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
                             <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔓</div>
-                            <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>Módulos Extra</h4>
-                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>O ecossistema extra e de reabilitação. Explore de acordo com a permissão (VIP).</p>
+                            <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>Extras & Guias</h4>
+                            <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Acesse o Desafio 30 Dias, Musculação em Casa, Pilates e ative seus códigos.</p>
                         </div>
                     </div>
 
@@ -5585,24 +5708,24 @@ import { createClient } from '@supabase/supabase-js';
                         ))}
                     </div>
 
-                    <h3 className="ps-title" style={{ marginTop: '32px' }}>Fala Connosco</h3>
+                    <h3 className="ps-title" style={{ marginTop: '32px' }}>Fale Conosco</h3>
                     <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.5), rgba(15,23,42,0.8))', padding: '24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', marginBottom: '32px', textAlign: 'center' }}>
                         <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '20px' }}>
-                            Descobriu um bug? Tem alguma sugestão de melhoria fenomenal para o nosso ecossistema? Envie um e-mail com detalhes.
+                            Precisa de ajuda com seu acesso ou encontrou algum erro? Envie um e-mail para nossa equipe.
                         </p>
                         <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
                             <a href="mailto:suporte@app.com" style={{ display: 'inline-block', background: 'var(--accent)', color: '#fff', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', textDecoration: 'none', boxShadow: '0 4px 12px rgba(249,115,22,0.3)', flex: 1, maxWidth: '280px' }}>
-                                ✉️ Reportar Erro / Suporte
+                                ✉️ Falar com o Suporte
                             </a>
                         </div>
                     </div>
 
                     <h3 className="ps-title" style={{ marginTop: '32px', color: 'var(--red)' }}>Opções Avançadas</h3>
                     <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '24px', borderRadius: '16px', marginBottom: '40px' }}>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '16px' }}>Encontrou um erro grave de cache que está a corromper as suas estatísticas? Use o botão para deslogar e limpar a Base local interna do seu perfil.</p>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '16px' }}>O aplicativo não atualizou suas informações? Use o botão abaixo para limpar o cache local e entrar novamente.</p>
                         <button onClick={handleReset} style={{ width: '100%', background: 'transparent', border: '1px solid var(--red)', color: 'var(--red)', padding: '12px', borderRadius: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                            Limpar Cache da App
+                            Limpar Cache do App
                         </button>
                     </div>
 
@@ -6324,12 +6447,13 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function TreinoModuleLive({ setSel, hasAccess, onGoToExtras }) {
+        function TreinoModuleLive({ setSel, hasAccess, hasDesafio = false, hasMusculacao = false, hasPilates = false, onOpenDesafio, onGoToExtras }) {
             const [viewMode, setViewMode] = useState('categories');
             const [data, setData] = useState([]);
             const [categories, setCategories] = useState([]);
             const [activeTab, setActiveTab] = useState(null);
             const [loading, setLoading] = useState(true);
+            const [previewProgram, setPreviewProgram] = useState(null);
 
             useEffect(() => {
                 async function fetchLiveData() {
@@ -6395,7 +6519,7 @@ import { createClient } from '@supabase/supabase-js';
                 else setLoading(false);
             }, []);
 
-            if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>A sincronizar base de dados... ⏳</div>;
+            if (loading) return <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>Carregando seus exercícios... ⏳</div>;
 
             const categoryConfigs = {
                 'pernas': { color: '#3b82f6', img: './assets/categories/pernas.png' },
@@ -6409,28 +6533,82 @@ import { createClient } from '@supabase/supabase-js';
                 'outro': { color: '#eab308', img: './assets/categories/outros.png' }
             };
 
+            const PREMIUM_PROGRAMS = [
+                {
+                    id: 'desafio30',
+                    icon: '🔥',
+                    title: 'Desafio 30 Dias',
+                    subtitle: 'Seca Barriga & Definição',
+                    badge: 'MAIS VENDIDO',
+                    unlocked: hasDesafio || hasAccess,
+                    singlePrice: '19,90',
+                    singleLink: 'https://pay.hotmart.com/R106106925S?checkoutMode=10',
+                    comboLink: 'https://pay.hotmart.com/O106106388F?checkoutMode=10',
+                    bullets: [
+                        'Cronograma pronto dia após dia por 30 dias (sem precisar inventar treino)',
+                        'Foco em queima de gordura, definição e consistência em casa',
+                        'Avaliações semanais de progresso dentro do app'
+                    ],
+                    onOpenUnlocked: () => onOpenDesafio && onOpenDesafio()
+                },
+                {
+                    id: 'musculacao',
+                    icon: '💪',
+                    title: 'Musculação em Casa',
+                    subtitle: 'Definição sem academia',
+                    badge: 'GUIA EM PDF',
+                    unlocked: hasMusculacao || hasAccess,
+                    singlePrice: '19,90',
+                    singleLink: 'https://pay.hotmart.com/N105939399C?checkoutMode=10',
+                    comboLink: 'https://pay.hotmart.com/O106106388F?checkoutMode=10',
+                    bullets: [
+                        'Guia prático passo a passo para ganhar tônus e força usando o que você tem em casa',
+                        'Ideal para firmar braços, pernas e glúteos sem pagar academia',
+                        'Acesso vitalício para baixar e consultar sempre que quiser'
+                    ],
+                    onOpenUnlocked: () => window.open('https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf', '_blank')
+                },
+                {
+                    id: 'pilates',
+                    icon: '🧘‍♀️',
+                    title: 'Pilates Modelador',
+                    subtitle: 'Abdômen, postura & alívio de dores',
+                    badge: 'INCLUSO NO COMBO',
+                    unlocked: hasPilates || hasAccess,
+                    singlePrice: '19,90',
+                    singleLink: 'https://pay.hotmart.com/E105938855Y?checkoutMode=10',
+                    comboLink: 'https://pay.hotmart.com/O106106388F?checkoutMode=10',
+                    bullets: [
+                        'Exercícios de baixo impacto para fortalecer o core e afinar a cintura',
+                        'Excelente para aliviar dores nas costas e melhorar a flexibilidade',
+                        'Perfeito para fazer em casa em qualquer idade'
+                    ],
+                    onOpenUnlocked: () => window.open('https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf', '_blank')
+                }
+            ];
+
             const displayedExercises = data.filter(e => e.category === activeTab);
 
             return (
                 <div className="w-full" id="treino-module-live-root">
                     <div style={{
                         animation: 'fade-in 0.4s ease-out',
-                        paddingBottom: '100px',
+                        paddingBottom: '110px',
                         width: '100%',
                         position: 'relative'
                     }}>
 
                         {viewMode === 'categories' ? (
                             <div style={{ animation: 'fade-in 0.3s ease' }}>
-                                <div style={{ padding: '24px', fontSize: '28px', fontWeight: '900', color: 'white', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '14px' }}>
-                                    <Zap size={32} className="text-white" />
+                                <div style={{ padding: '24px 24px 8px', fontSize: '26px', fontWeight: '900', color: 'white', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <Zap size={28} className="text-orange-500" />
                                     <span className="text-white">O que vamos treinar hoje?</span>
                                 </div>
                                 <div style={{
                                     display: 'grid',
                                     gridTemplateColumns: 'repeat(2, 1fr)',
-                                    gap: '24px',
-                                    padding: '24px',
+                                    gap: '20px',
+                                    padding: '20px 24px',
                                     width: '100%'
                                 }}>
                                     {categories.map(cat => {
@@ -6455,22 +6633,80 @@ import { createClient } from '@supabase/supabase-js';
                                                     background: 'linear-gradient(180deg, rgba(30, 41, 59, 0.45) 0%, rgba(2, 6, 23, 0.98) 100%)',
                                                     backdropFilter: 'blur(20px)',
                                                     border: '1px solid rgba(255, 255, 255, 0.1)',
-                                                    borderRadius: '40px',
-                                                    aspectRatio: '1 / 1.25',
+                                                    borderRadius: '36px',
+                                                    aspectRatio: '1 / 1.22',
                                                     boxShadow: '0 20px 40px -15px rgba(0,0,0,0.9)',
                                                     overflow: 'hidden',
                                                     cursor: 'pointer'
                                                 }}
                                             >
-                                                <div style={{ width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(0,0,0,0.6)', border: `1px solid ${themeColor}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
+                                                <div style={{ width: '112px', height: '112px', borderRadius: '50%', background: 'rgba(0,0,0,0.6)', border: `1px solid ${themeColor}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
                                                     <img src={config.img} alt={cat} style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.25)' }} />
                                                 </div>
-                                                <span style={{ color: '#ffffff', fontSize: '18px', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', textAlign: 'center', marginTop: '16px' }}>
+                                                <span style={{ color: '#ffffff', fontSize: '17px', fontWeight: '900', letterSpacing: '1.5px', textTransform: 'uppercase', textAlign: 'center', marginTop: '14px' }}>
                                                     {cat}
                                                 </span>
                                             </button>
                                         );
                                     })}
+                                </div>
+
+                                {/* UPSELLS CONTEXTUAIS NA ABA MAIS VISITADA (PROGRAMAS EXCLUSIVOS) */}
+                                <div className="px-6 pt-4 pb-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <div>
+                                            <span className="text-[10px] font-black text-orange-400 uppercase tracking-[0.2em]">Acelere seus Resultados</span>
+                                            <h3 className="text-xl font-black text-white tracking-tight">✨ Programas & Guias Exclusivos</h3>
+                                        </div>
+                                        {!hasAccess && (
+                                            <button
+                                                onClick={onGoToExtras}
+                                                className="text-[10px] font-black uppercase text-amber-400 bg-amber-500/10 border border-amber-500/25 px-3 py-1.5 rounded-full"
+                                            >
+                                                Combo R$ 24,90 ➔
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {PREMIUM_PROGRAMS.map(prog => (
+                                            <button
+                                                key={prog.id}
+                                                onClick={() => prog.unlocked ? prog.onOpenUnlocked() : setPreviewProgram(prog)}
+                                                className={`w-full text-left p-4 rounded-3xl border flex items-center gap-4 transition-all active:scale-[0.98] ${
+                                                    prog.unlocked
+                                                        ? 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/15'
+                                                        : 'bg-slate-800/60 border-white/10 hover:border-orange-500/40'
+                                                }`}
+                                            >
+                                                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shrink-0 relative ${prog.unlocked ? 'bg-emerald-500/20' : 'bg-orange-500/15'}`}>
+                                                    {prog.icon}
+                                                    {!prog.unlocked && (
+                                                        <span className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-slate-950 border border-orange-500/40 flex items-center justify-center text-[11px]">🔒</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${prog.unlocked ? 'bg-emerald-500/20 text-emerald-300' : 'bg-orange-500/20 text-orange-300'}`}>
+                                                            {prog.unlocked ? 'LIBERADO ✅' : prog.badge}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-base font-black text-white truncate">{prog.title}</div>
+                                                    <div className="text-xs text-slate-400 font-medium truncate">{prog.subtitle}</div>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                    {prog.unlocked ? (
+                                                        <span className="text-xs font-black text-emerald-400">Abrir ➔</span>
+                                                    ) : (
+                                                        <div>
+                                                            <div className="text-xs font-black text-white">R$ {prog.singlePrice}</div>
+                                                            <div className="text-[9px] text-orange-400 font-bold">Ver prévia ➔</div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         ) : (
@@ -6497,26 +6733,94 @@ import { createClient } from '@supabase/supabase-js';
                             </div>
                         )}
                     </div>
+
+                    {/* MODAL DE PRÉVIA + ANCORAGEM COMBO DE OURO */}
+                    {previewProgram && (
+                        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && setPreviewProgram(null)}>
+                            <div className="bg-slate-900 border border-white/15 rounded-[28px] w-full max-w-md p-6 relative shadow-2xl animate-in zoom-in-95 duration-200">
+                                <button
+                                    onClick={() => setPreviewProgram(null)}
+                                    className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 text-white text-xl flex items-center justify-center hover:bg-white/20"
+                                >&times;</button>
+
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-14 h-14 rounded-2xl bg-orange-500/15 border border-orange-500/30 flex items-center justify-center text-3xl">
+                                        {previewProgram.icon}
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] font-black uppercase text-orange-400 tracking-widest">Programa Exclusivo</span>
+                                        <h3 className="text-xl font-black text-white leading-tight">{previewProgram.title}</h3>
+                                        <p className="text-xs text-slate-400">{previewProgram.subtitle}</p>
+                                    </div>
+                                </div>
+
+                                <ul className="space-y-2.5 mb-6 text-xs text-slate-200">
+                                    {previewProgram.bullets.map((b, i) => (
+                                        <li key={i} className="flex items-start gap-2">
+                                            <span className="text-emerald-400 font-black">✅</span>
+                                            <span>{b}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={() => window.open(previewProgram.comboLink, '_blank')}
+                                        className="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white font-black text-xs uppercase tracking-wider shadow-xl shadow-orange-600/25 active:scale-95 transition-all"
+                                    >
+                                        🥇 Levar NO COMBO DE OURO (Este + 5 Guias) — R$ 24,90
+                                        <span className="block text-[10px] font-bold opacity-90 normal-case mt-0.5">Apenas R$ 5 a mais • Pagamento único vitalício!</span>
+                                    </button>
+
+                                    <button
+                                        onClick={() => window.open(previewProgram.singleLink, '_blank')}
+                                        className="w-full py-3.5 px-4 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-white font-bold text-xs uppercase tracking-wider transition-all"
+                                    >
+                                        Desbloquear só {previewProgram.title} — R$ {previewProgram.singlePrice}
+                                    </button>
+
+                                    <button
+                                        onClick={() => { setPreviewProgram(null); onGoToExtras && onGoToExtras(); }}
+                                        className="w-full py-2 text-[11px] text-slate-400 hover:text-white underline font-semibold"
+                                    >
+                                        Já comprou? Clique aqui para ativar seu código
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
 
-        function ArsenalVIP({ ud, onNav, temAcessoNutriScan, hasDesafio, hasSono, temAcessoPremium, setSel, isVipUser }) {
-            const [activeSubTab, setActiveSubTab] = useState('nutricao');
+        function ArsenalVIP({ ud, onNav, temAcessoNutriScan, hasDesafio, hasSono, temAcessoPremium, setSel, isVipUser, initialSubTab = 'nutricao', onOpenNutriUpsell, freeScansRemaining = 0 }) {
+            const [activeSubTab, setActiveSubTab] = useState(initialSubTab || 'nutricao');
+
+            useEffect(() => {
+                if (initialSubTab) setActiveSubTab(initialSubTab);
+            }, [initialSubTab]);
 
             const SUB_TABS = [
-                { id: 'nutricao', label: 'Nutrição' },
-                { id: 'cronograma', label: 'Meu Desafio' },
-                { id: 'sono', label: 'Sono Profundo' }
+                {
+                    id: 'nutricao',
+                    label: !temAcessoNutriScan && freeScansRemaining > 0
+                        ? `📸 Nutri-Scan (${freeScansRemaining} grátis)`
+                        : '📸 Nutri-Scan IA'
+                },
+                { id: 'cronograma', label: hasDesafio ? '🔥 Desafio 30D' : '🔒 Desafio 30D' },
+                { id: 'sono', label: hasSono ? '🌙 Sono' : '🔒 Sono' }
             ];
 
             const renderSubPage = () => {
                 switch (activeSubTab) {
                     case 'nutricao':
-                        return temAcessoNutriScan ? (
-                            <NutritionDashboard ud={ud} onNav={onNav} />
-                        ) : (
-                            <TeaserScannerPage onGoToExtras={() => onNav('extras')} />
+                        return (
+                            <NutritionDashboard
+                                ud={ud}
+                                onNav={onNav}
+                                hasNutriScanAccess={temAcessoNutriScan}
+                                onOpenNutriUpsell={onOpenNutriUpsell}
+                            />
                         );
                     case 'cronograma':
                         return hasDesafio ? (
@@ -6528,13 +6832,13 @@ import { createClient } from '@supabase/supabase-js';
                                 onSelect={setSel} 
                             />
                         ) : (
-                            <TeaserDesafioPage />
+                            <TeaserDesafioPage onGoToExtras={() => onNav('extras')} />
                         );
                     case 'sono':
                         return hasSono ? (
                             <SonoProfundo ud={ud} />
                         ) : (
-                            <TeaserSonoPage />
+                            <TeaserSonoPage onGoToExtras={() => onNav('extras')} />
                         );
                     default:
                         return null;
@@ -6543,15 +6847,15 @@ import { createClient } from '@supabase/supabase-js';
 
             return (
                 <div className="arsenal-vip-container">
-                    <div className="flex gap-2 mb-6 overflow-x-auto pb-2 no-scrollbar px-1">
+                    <div className="flex gap-2 mb-4 overflow-x-auto pb-2 no-scrollbar px-4 pt-3">
                         {SUB_TABS.map(tab => (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveSubTab(tab.id)}
-                                className={`px-5 py-3 rounded-2xl font-bold text-sm transition-all whitespace-nowrap ${
+                                className={`px-4 py-3 rounded-2xl font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${
                                     activeSubTab === tab.id 
-                                    ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20 scale-105' 
-                                    : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                                    ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20 scale-[1.02]' 
+                                    : 'bg-white/5 text-slate-300 hover:bg-white/10'
                                 }`}
                             >
                                 {tab.label}
@@ -6565,49 +6869,93 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function NutriScanUpsellModal({ isOpen, onClose, onTrackEvent }) {
+        function NutriScanUpsellModal({ isOpen, onClose, onTrackEvent, reason = 'post_workout', freeScansRemaining = 0, onTryFreeNow, onGoToExtras }) {
             if (!isOpen) return null;
 
+            const isLimitReached = reason === 'limit_reached' || freeScansRemaining <= 0;
+
             return (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 100000, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-                    <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px', width: '100%', maxWidth: '400px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.5)', animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-                        <div style={{ width: '100%', height: '120px', flexShrink: 0, background: 'linear-gradient(135deg, #1e293b, #0f172a)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden' }}>
-                            <img src="/nutri_scan_illustration.png" alt="Nutri Scan" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.9, animation: 'pulse 2s infinite' }} />
+                <div style={{ position: 'fixed', inset: 0, zIndex: 100000, background: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={(e) => { if (e.target === e.currentTarget) { if (onTrackEvent) onTrackEvent('no'); onClose(); } }}>
+                    <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '26px', width: '100%', maxWidth: '410px', maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 50px rgba(0,0,0,0.6)', animation: 'slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+                        <div style={{ width: '100%', height: '130px', flexShrink: 0, background: 'linear-gradient(135deg, #0f172a, #1e293b)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', position: 'relative' }}>
+                            <img src="./nutri_scan_illustration.png" alt="Nutri-Scan IA" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.92 }} />
+                            <button
+                                onClick={() => { if (onTrackEvent) onTrackEvent('no'); onClose(); }}
+                                style={{ position: 'absolute', top: '12px', right: '12px', width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(0,0,0,0.65)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', fontSize: '18px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >&times;</button>
+                            <div style={{ position: 'absolute', bottom: '10px', left: '14px', background: isLimitReached ? '#f97316' : '#10b981', color: '#fff', fontSize: '10px', fontWeight: '900', padding: '4px 10px', borderRadius: '99px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                                {isLimitReached ? '✨ Testes grátis concluídos' : `🎁 ${freeScansRemaining} testes grátis liberados`}
+                            </div>
                         </div>
-                        <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
-                            <h2 style={{ fontSize: '22px', fontWeight: '900', marginBottom: '16px', color: 'var(--text-primary)', lineHeight: '1.2' }}>🚀 Pare de adivinhar o que comer (e de pesar a sua comida).</h2>
+
+                        <div style={{ padding: '22px', overflowY: 'auto', flex: 1 }}>
+                            <h2 style={{ fontSize: '21px', fontWeight: '900', marginBottom: '12px', color: 'var(--text-primary)', lineHeight: '1.22' }}>
+                                {isLimitReached
+                                    ? 'Gostou de ver as calorias do seu prato em segundos?'
+                                    : 'Treino pago! Agora cuide do que faz 70% do resultado: sua alimentação.'}
+                            </h2>
                             
-                            <div style={{ fontSize: '14px', color: 'var(--text-secondary)', lineHeight: '1.6', marginBottom: '24px' }}>
-                                <p style={{ marginBottom: '12px' }}>Sabia que uma consulta com um bom nutricionista no Brasil custa entre R$ 200 e R$ 400 por mês?</p>
-                                <p style={{ marginBottom: '16px' }}>Desenvolvido por engenheiros de IA e nutricionistas de ponta, o Nutri-Scan coloca um especialista no seu bolso 24h por dia, por menos do que um café: apenas <strong>R$ 9,90/mês</strong>.</p>
+                            <div style={{ fontSize: '13.5px', color: 'var(--text-secondary)', lineHeight: '1.58', marginBottom: '20px' }}>
+                                <p style={{ marginBottom: '12px' }}>
+                                    {isLimitReached
+                                        ? 'Com o Nutri-Scan™ IA ilimitado você tira foto ou digita qualquer refeição do seu dia e acompanha sua meta de emagrecimento sem pesar comida.'
+                                        : 'Não adianta treinar firme e ficar no escuro na cozinha. O Nutri-Scan™ IA analisa seu prato pela foto e calcula calorias e proteínas em 3 segundos.'}
+                                </p>
                                 
-                                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 16px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <li><span style={{color: 'var(--accent)'}}>✅</span> <strong>Tire uma foto:</strong> A IA identifica a comida e calcula a sua meta diária automaticamente.</li>
-                                    <li><span style={{color: 'var(--accent)'}}>✅</span> <strong>Fim das dúvidas:</strong> O aplicativo diz exatamente o que você deve comer para emagrecer ou ganhar massa.</li>
-                                    <li><span style={{color: 'var(--accent)'}}>✅</span> <strong>Sem stress:</strong> Escreva o que comeu e deixe o sistema fazer a matemática chata por você.</li>
+                                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 14px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <li><span style={{color: '#10b981'}}>✅</span> <strong>Foto ou texto em 3s:</strong> Calorias, proteínas, carboidratos e gorduras na hora.</li>
+                                    <li><span style={{color: '#10b981'}}>✅</span> <strong>Sem balança e sem estresse:</strong> Perfeito para a rotina corrida de casa ou trabalho.</li>
+                                    <li><span style={{color: '#10b981'}}>✅</span> <strong>Valor acessível:</strong> Comece com <strong>7 Dias Grátis</strong> e depois apenas <strong>R$ 9,90/mês</strong> (menos que um cafezinho!).</li>
                                 </ul>
 
-                                <p style={{ color: 'var(--text-primary)', fontWeight: '600' }}>🎁 Libere agora 7 Dias Totalmente Grátis. Só pague se amar. Cancele com 1 clique a qualquer momento.</p>
+                                <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '14px', padding: '10px 12px', fontSize: '12px', color: '#d1fae5', fontWeight: '600' }}>
+                                    🔒 Teste por 7 dias grátis na Hotmart. Se não amar, cancele quando quiser sem multa.
+                                </div>
                             </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {!isLimitReached && onTryFreeNow && (
+                                    <button
+                                        onClick={() => {
+                                            onClose();
+                                            onTryFreeNow();
+                                        }}
+                                        style={{ width: '100%', padding: '15px', background: 'linear-gradient(135deg, #f97316, #ea580c)', color: '#fff', borderRadius: '16px', fontWeight: '900', fontSize: '15px', border: 'none', cursor: 'pointer', boxShadow: '0 6px 18px rgba(249, 115, 22, 0.35)' }}
+                                    >
+                                        📸 Testar Agora Grátis ({freeScansRemaining} {freeScansRemaining === 1 ? 'uso' : 'usos'} no app)
+                                    </button>
+                                )}
+
                                 <button 
                                     onClick={() => {
                                         if(onTrackEvent) onTrackEvent('yes');
                                         window.open('https://pay.hotmart.com/H106107115U?checkoutMode=10&bid=1784830143838', '_blank');
                                     }}
-                                    style={{ width: '100%', padding: '16px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', borderRadius: '16px', fontWeight: '900', fontSize: '16px', border: 'none', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)' }}
+                                    style={{ width: '100%', padding: '15px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', borderRadius: '16px', fontWeight: '900', fontSize: '15px', border: 'none', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.35)' }}
                                 >
-                                    👉 Liberar Meus 7 Dias Grátis
+                                    👉 Liberar 7 Dias Grátis (R$ 9,90/mês)
                                 </button>
+
+                                {onGoToExtras && (
+                                    <button
+                                        onClick={() => {
+                                            onClose();
+                                            onGoToExtras();
+                                        }}
+                                        style={{ width: '100%', padding: '10px', background: 'rgba(255,255,255,0.05)', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', fontWeight: '700', fontSize: '11.5px', cursor: 'pointer' }}
+                                    >
+                                        💎 Prefere sem mensalidade? Ver Acesso Total Vitalício (R$ 69,90)
+                                    </button>
+                                )}
+
                                 <button 
                                     onClick={() => {
                                         if(onTrackEvent) onTrackEvent('no');
                                         onClose();
                                     }}
-                                    style={{ width: '100%', padding: '12px', background: 'transparent', color: 'var(--text-muted)', border: 'none', fontWeight: '500', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline' }}
+                                    style={{ width: '100%', padding: '8px', background: 'transparent', color: 'var(--text-muted)', border: 'none', fontWeight: '500', fontSize: '12px', cursor: 'pointer' }}
                                 >
-                                    Não, obrigado. Prefiro continuar adivinhando o peso da comida e contando calorias à mão.
+                                    Agora não, continuar no app
                                 </button>
                             </div>
                         </div>
@@ -6620,6 +6968,7 @@ import { createClient } from '@supabase/supabase-js';
 
             const ud = useUserData();
             const [page, setPage] = useState('inicio');
+            const [arsenalSubTab, setArsenalSubTab] = useState('nutricao');
             
             const [warriorCount, setWarriorCount] = useState(101 + (Math.floor(Date.now() / 300000) % 899));
             useEffect(() => {
@@ -6635,6 +6984,20 @@ import { createClient } from '@supabase/supabase-js';
             const [temAcessoTotalVIP, setTemAcessoTotalVIP] = useState(false);
             const [hasDesafio, setHasDesafio] = useState(false);
             const [hasSono, setHasSono] = useState(false);
+            const [hasMusculacao, setHasMusculacao] = useState(false);
+            const [hasPilates, setHasPilates] = useState(false);
+
+            const currentUserId = ud?.session?.user?.id || ud?.userProfile?.id || 'guest';
+            const [freeScansUsedGlobal, setFreeScansUsedGlobal] = useState(() => getFreeScansUsed(currentUserId));
+
+            useEffect(() => {
+                const syncGlobalFree = () => setFreeScansUsedGlobal(getFreeScansUsed(currentUserId));
+                syncGlobalFree();
+                window.addEventListener('nutriscan-free-uses-updated', syncGlobalFree);
+                return () => window.removeEventListener('nutriscan-free-uses-updated', syncGlobalFree);
+            }, [currentUserId]);
+
+            const freeScansRemainingGlobal = temAcessoNutriScan ? Infinity : Math.max(0, NUTRISCAN_FREE_LIMIT - freeScansUsedGlobal);
 
             React.useEffect(() => {
                 const checkAccess = () => {
@@ -6642,12 +7005,14 @@ import { createClient } from '@supabase/supabase-js';
                     const localModules = JSON.parse(localStorage.getItem('app_unlocked_modules') || '[]');
                     
                     const totalVip = profile?.permissions?.total_vip || localModules.includes('total_vip') || profile?.is_vip;
-                    const gold = profile?.acesso_combo_ouro || localModules.includes('vip_gold') || totalVip;
-                    const nutri = profile?.assinatura_scanner_ia_ativa || localModules.includes('scanner_ia') || localStorage.getItem('acessoScannerIA') === 'true' || totalVip;
-                    const vip = profile?.permissions?.vip || localModules.includes('comunidade_vip') || totalVip;
+                    const gold = profile?.acesso_combo_ouro || profile?.permissions?.vip_gold || profile?.permissions?.gold || localModules.includes('vip_gold') || totalVip;
+                    const nutri = profile?.assinatura_scanner_ia_ativa || profile?.permissions?.scanner_ia || profile?.permissions?.pacote_elite || localModules.includes('scanner_ia') || localModules.includes('pacote_elite') || localStorage.getItem('acessoScannerIA') === 'true' || totalVip;
+                    const vip = profile?.permissions?.vip || profile?.permissions?.comunidade_vip || localModules.includes('comunidade_vip') || localModules.includes('pacote_elite') || totalVip;
                     
                     const desafio = profile?.permissions?.desafio30 || localModules.includes('desafio30') || gold || totalVip;
                     const sono = profile?.permissions?.sono || localModules.includes('sono') || gold || totalVip;
+                    const musc = profile?.permissions?.musculacao || localModules.includes('musculacao') || gold || totalVip;
+                    const pil = profile?.permissions?.pilates || localModules.includes('pilates') || gold || totalVip;
 
                     setTemAcessoTotalVIP(!!totalVip);
                     setTemAcessoPremium(!!gold);
@@ -6655,32 +7020,37 @@ import { createClient } from '@supabase/supabase-js';
                     setTemAcessoVIP(!!vip);
                     setHasDesafio(!!desafio);
                     setHasSono(!!sono);
+                    setHasMusculacao(!!musc);
+                    setHasPilates(!!pil);
                 };
                 checkAccess();
             }, [ud.userProfile]);
 
             const [showNutriScanUpsell, setShowNutriScanUpsell] = useState(false);
-            const [hasShownUpsellOnLoad, setHasShownUpsellOnLoad] = useState(false);
+            const [nutriUpsellReason, setNutriUpsellReason] = useState('post_workout');
+
+            const openNutriScanUpsell = useCallback((reason = 'post_workout') => {
+                if (temAcessoNutriScan) return;
+                setNutriUpsellReason(reason);
+                setShowNutriScanUpsell(true);
+            }, [temAcessoNutriScan]);
             
             useEffect(() => {
                 const handleShowModal = () => {
                     if (!temAcessoNutriScan) {
-                        setShowNutriScanUpsell(true);
+                        // Mostrar no máximo 1x por dia após treino concluído para não gerar irritação
+                        const todayKey = new Date().toISOString().slice(0, 10);
+                        const lastShown = localStorage.getItem('nutri_upsell_last_shown_date');
+                        if (lastShown !== todayKey) {
+                            localStorage.setItem('nutri_upsell_last_shown_date', todayKey);
+                            setNutriUpsellReason('post_workout');
+                            setShowNutriScanUpsell(true);
+                        }
                     }
                 };
                 window.addEventListener('triggerNutriScanUpsell', handleShowModal);
                 return () => window.removeEventListener('triggerNutriScanUpsell', handleShowModal);
             }, [temAcessoNutriScan]);
-
-            useEffect(() => {
-                if (ud.userProfile && !temAcessoNutriScan && !hasShownUpsellOnLoad) {
-                    const timer = setTimeout(() => {
-                        setShowNutriScanUpsell(true);
-                        setHasShownUpsellOnLoad(true);
-                    }, 2500); // Small delay to let the app load properly
-                    return () => clearTimeout(timer);
-                }
-            }, [ud.userProfile, temAcessoNutriScan, hasShownUpsellOnLoad]);
 
             const handleTrackUpsell = async (action) => {
                 if (ud.userProfile?.id && window.supabase) {
@@ -6711,7 +7081,6 @@ import { createClient } from '@supabase/supabase-js';
             const [isLoadingExercises, setIsLoadingExercises] = useState(true);
             const [isQuestActive, setIsQuestActive] = React.useState(true);
             const [questSuccess, setQuestSuccess] = React.useState(false);
-            const [showXpModal, setShowXpModal] = useState(false);
 
             const handleScannerUnlock = React.useCallback(() => {
                 localStorage.setItem('acessoScannerIA', 'true');
@@ -7013,12 +7382,19 @@ import { createClient } from '@supabase/supabase-js';
             const isVipUser = temAcessoTotalVIP; 
 
             const handleAccessModule = useCallback((moduleId) => {
-                if (moduleId === 'scanner_ia') {
-                    setPage('nutricao');
+                if (moduleId === 'scanner_ia' || moduleId === 'nutricao') {
+                    setArsenalSubTab('nutricao');
+                    setPage('arsenal-vip');
                     return;
                 }
-                if (moduleId === 'desafio30') {
-                    setPage('cronograma');
+                if (moduleId === 'desafio30' || moduleId === 'cronograma') {
+                    setArsenalSubTab('cronograma');
+                    setPage('arsenal-vip');
+                    return;
+                }
+                if (moduleId === 'sono') {
+                    setArsenalSubTab('sono');
+                    setPage('arsenal-vip');
                     return;
                 }
                 setModFilter(moduleId);
@@ -7055,8 +7431,8 @@ import { createClient } from '@supabase/supabase-js';
 
             const recovery = calculateRecovery();
 
-            if (ud.authLoading) {
-                return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f172a', color: '#f97316', fontWeight: 'bold', fontSize: '1.2rem' }}>A preparar a Arena...</div>;
+            if (ud.authLoading || (ud.session && !ud.localSynced && !ud.userProfile)) {
+                return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f172a', color: '#f97316', fontWeight: 'bold', fontSize: '1.1rem' }}>Preparando seu plano...</div>;
             }
 
             if (!ud.session) {
@@ -7069,7 +7445,7 @@ import { createClient } from '@supabase/supabase-js';
                         <div className="auth-card" style={{ maxWidth: '400px', width: '100%', position: 'relative' }}>
                             <h2 style={{ color: '#fff', fontSize: '20px', fontWeight: '900', marginBottom: '12px' }}>Definir Nova Senha</h2>
                             <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', marginBottom: '24px' }}>
-                                Insira a sua nova senha abaixo para recuperar o acesso total.
+                                Insira sua nova senha abaixo para recuperar o acesso à sua conta.
                             </div>
                             <form onSubmit={async (e) => {
                                 e.preventDefault();
@@ -7093,7 +7469,8 @@ import { createClient } from '@supabase/supabase-js';
                 );
             }
 
-            if (!ud.userProfile) {
+            const isOnboardingIncomplete = !ud.userProfile || (!ud.userProfile.name && !(ud.userProfile.goal || ud.userProfile.objetivo_principal));
+            if (isOnboardingIncomplete) {
                 return <Onboarding onComplete={ud.saveProfile} />;
             }
 
@@ -7205,29 +7582,16 @@ import { createClient } from '@supabase/supabase-js';
                             }
                         });
 
-                        // Lógica Nutrição Estática Premium
-                        const metaTdee = 2700;
-                        const kcalConsumed = 0;
-
                         // Variáveis Dinâmicas de Texto do Objetivo
-                        const resolvedUserGoal = ud.metaProfile?.user_goal || ud.metaProfile?.objetivo_principal || ud.userProfile?.goal;
-                        const dynamicFocusText = resolvedUserGoal ? `Foco: ${resolvedUserGoal}` : 'Foco: Ganho de Massa';
-                        const dynamicPText = "Meta diária de ganho de massa magra.";
-
-                        // XP e Nível são calculados globalmente agora.
-
+                        const resolvedUserGoal = ud.metaProfile?.user_goal || ud.metaProfile?.objetivo_principal || ud.userProfile?.goal || ud.userProfile?.objetivo_principal || '';
+                        const isGoalMassa = resolvedUserGoal.toLowerCase().includes('massa');
                         const totalCompleted = ud.completedLog?.length || 0;
-                        const locTop1 = generateFakeRanking(homeXP, 'local', 'WW')[0].xp;
-                        const globTop1 = generateFakeRanking(homeXP, 'global', 'WW')[0].xp;
-                        const missingLocal = Math.max(0, locTop1 - homeXP);
-                        const missingGlobal = Math.max(0, globTop1 - homeXP);
-
 
                         return (
                             <div className="w-full min-h-screen pb-24 overflow-y-auto px-5">
                                 {/* 1. HEADER DINÂMICO PREMIUM */}
                                 <div className="dashboard-header sticky top-0 z-[100] backdrop-blur-xl bg-slate-900/80 border-b border-white/5 py-3 px-5 -mx-5 -mt-5 mb-6 flex justify-between items-center">
-                                    {/* Lado Esquerdo: Avatar & Identidade (Agora Interativo) */}
+                                    {/* Lado Esquerdo: Avatar & Identidade */}
                                     <div className="relative">
                                         <button 
                                             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
@@ -7242,16 +7606,16 @@ import { createClient } from '@supabase/supabase-js';
                                                         ? 'url(avatar_female.png) center / 220% no-repeat'
                                                         : ud.userProfile?.avatar_url 
                                                         ? `url(${ud.userProfile.avatar_url}) center/cover` 
-                                                        : 'linear-gradient(135deg, #22d3ee, #06b6d4)',
+                                                        : 'linear-gradient(135deg, #f97316, #ea580c)',
                                                     border: '2px solid rgba(255,255,255,0.1)'
                                                 }}
-                                                className="flex items-center justify-center font-bold text-white shadow-lg flex-shrink-0 group-hover:border-cyan-400/50 transition-colors"
+                                                className="flex items-center justify-center font-bold text-white shadow-lg flex-shrink-0 group-hover:border-orange-400/50 transition-colors"
                                             >
                                                 {(!ud.userProfile?.avatar_url && (ud.userProfile?.gender !== 'Masculino' && ud.userProfile?.gender !== 'Feminino' && ud.userProfile?.gender !== 'male' && ud.userProfile?.gender !== 'female')) && (ud.userProfile?.name ? ud.userProfile.name.charAt(0).toUpperCase() : 'A')}
                                             </div>
                                             <div className="flex flex-col">
-                                                <h1 className="text-base font-black text-white leading-tight group-hover:text-cyan-400 transition-colors flex items-center gap-1.5">
-                                                    Olá, {ud.userProfile?.name || 'Guerreiro'}!
+                                                <h1 className="text-base font-black text-white leading-tight group-hover:text-orange-400 transition-colors flex items-center gap-1.5">
+                                                    Olá, {ud.userProfile?.name || 'seja bem-vindo(a)'}!
                                                     <svg className={`transition-transform duration-300 ${isProfileMenuOpen ? 'rotate-180' : ''} text-white/30`} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                                                 </h1>
                                                 <div className="flex items-center mt-0.5 gap-2">
@@ -7270,16 +7634,17 @@ import { createClient } from '@supabase/supabase-js';
                                                 />
                                                 <div className="absolute top-full left-0 mt-3 w-56 bg-slate-800/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl z-[120] overflow-hidden animate-fade-in-up" style={{ animation: 'fade-in-up 0.3s ease-out' }}>
                                                     <div className="p-4 border-b border-white/5">
-                                                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Perfil Selecionado</div>
-                                                        <div className="text-sm font-bold text-white truncate">{ud.userProfile?.name || 'Utilizador'}</div>
+                                                        <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Seu Perfil</div>
+                                                        <div className="text-sm font-bold text-white truncate">{ud.userProfile?.name || 'Aluno(a)'}</div>
+                                                        {resolvedUserGoal && <div className="text-[11px] text-orange-400 font-semibold mt-0.5">Meta: {resolvedUserGoal}</div>}
                                                     </div>
                                                     <div className="p-2">
                                                         <button 
                                                             onClick={handleLogout}
-                                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-500 hover:bg-red-500/10 transition-colors text-sm font-bold"
+                                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors text-sm font-bold"
                                                         >
                                                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                                                            Terminar Sessão
+                                                            Sair da Conta
                                                         </button>
                                                     </div>
                                                 </div>
@@ -7306,199 +7671,205 @@ import { createClient } from '@supabase/supabase-js';
                                 </div>
 
                                 <div className="home-dashboard p-4 sm:p-6 max-w-4xl mx-auto">
-                                {/* 1. Community Indicator */}
-                                <div className="flex items-center gap-3 mb-6 opacity-80">
-                                    <div className="relative flex h-2 w-2">
-                                        <div className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></div>
-                                        <div className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></div>
+                                {/* 1. Indicador de Comunidade */}
+                                <div className="flex items-center justify-between gap-3 mb-5 opacity-90">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="relative flex h-2 w-2">
+                                            <div className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></div>
+                                            <div className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></div>
+                                        </div>
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.18em]">{warriorCount} alunos treinando agora</span>
                                     </div>
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{warriorCount} guerreiros a treinar agora</span>
-                                </div>
-
-
-
-                                {/* 2 & 3. HERO + PROVA SOCIAL (Impacto) */}
-                                <div className="grid grid-cols-1 gap-4 mb-8">
-                                    {!temAcessoPremium ? (
-                                        <div
-                                            className="flash-quest-card rounded-[28px] p-7 relative overflow-hidden group cursor-pointer"
-                                            onClick={() => setPage('extras')}
-                                        >
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-[0_0_14px_rgba(249,115,22,0.6)]"></span>
-                                                <span className="text-xs text-slate-300 font-black uppercase tracking-widest">Oferta Exclusiva</span>
-                                            </div>
-                                            <div className="text-[32px] font-black text-white leading-[1.1] tracking-tight drop-shadow-[0_6px_18px_rgba(249,115,22,0.35)] mb-3">
-                                                60% OFF + ACESSO VITALÍCIO
-                                            </div>
-                                            <p className="text-[14px] text-slate-300 leading-relaxed font-medium mb-6">
-                                                Desbloqueie o Combo de Ouro: Desafio 30 Dias (Modo Titã) + Biblioteca completa de Módulos de Elite num único pack vitalício.
-                                            </p>
-                                            <div className="bg-orange-500 text-white font-black py-4 px-6 rounded-2xl text-xs uppercase tracking-[0.2em] text-center group-hover:bg-orange-400 transition-colors">ATIVE SEU COMBO AGORA</div>
-                                        </div>
-                                    ) : !temAcessoNutriScan ? (
-                                        <div
-                                            className="flash-quest-card rounded-[28px] p-7 relative overflow-hidden group cursor-pointer border-green-500/30"
-                                            onClick={() => setPage('nutricao')}
-                                            style={{ animation: 'flash-pulse 3s infinite', borderColor: 'rgba(34, 197, 94, 0.4)' }}
-                                        >
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_14px_rgba(34,197,94,0.6)]"></span>
-                                                <span className="text-xs text-slate-300 font-black uppercase tracking-widest">Upgrade Disponível</span>
-                                            </div>
-                                            <div className="text-[32px] font-black text-white leading-[1.1] tracking-tight mb-3">
-                                                NUTRI-SCAN IA
-                                            </div>
-                                            <p className="text-[14px] text-slate-300 leading-relaxed font-medium mb-6">
-                                                Analise as suas refeições com inteligência artificial. Lembre-se de ativar este módulo para precisão total.
-                                            </p>
-                                            <div className="bg-green-600 text-white font-black py-4 px-6 rounded-2xl text-xs uppercase tracking-[0.2em] text-center group-hover:bg-green-500 transition-colors">DESBLOQUEAR SCANNER</div>
-                                        </div>
-                                    ) : !temAcessoVIP ? (
-                                        <div
-                                            className="flash-quest-card rounded-[28px] p-7 relative overflow-hidden group cursor-pointer border-cyan-500/30"
-                                            onClick={() => setPage('extras')}
-                                            style={{ animation: 'flash-pulse 3s infinite', borderColor: 'rgba(6, 182, 212, 0.4)' }}
-                                        >
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <span className="w-2.5 h-2.5 rounded-full bg-cyan-500 shadow-[0_0_14px_rgba(6,182,212,0.6)]"></span>
-                                                <span className="text-xs text-slate-300 font-black uppercase tracking-widest">Oportunidade Final</span>
-                                            </div>
-                                            <div className="text-[32px] font-black text-white leading-[1.1] tracking-tight mb-3">
-                                                COMUNIDADE VIP
-                                            </div>
-                                            <p className="text-[14px] text-slate-300 leading-relaxed font-medium mb-6">
-                                                Junte-se ao círculo interno dos guerreiros de elite. Acesso exclusivo a conteúdos e suporte.
-                                            </p>
-                                            <div className="bg-cyan-600 text-white font-black py-4 px-6 rounded-2xl text-xs uppercase tracking-[0.2em] text-center group-hover:bg-cyan-500 transition-colors">ADQUIRIR ACESSO VIP</div>
-                                        </div>
-                                    ) : (
-                                        <div
-                                            className="flash-quest-card rounded-[28px] p-7 relative overflow-hidden border-amber-500/30"
-                                            style={{ background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(15, 23, 42, 0.9) 100%)', borderColor: 'rgba(251, 191, 36, 0.4)' }}
-                                        >
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-[0_0_14px_rgba(251,191,36,0.6)]"></span>
-                                                <span className="text-xs text-amber-300 font-black uppercase tracking-widest">Status: Lendário</span>
-                                            </div>
-                                            <div className="text-[32px] font-black text-white leading-[1.1] tracking-tight mb-3">
-                                                100% FOCO ATIVO
-                                            </div>
-                                            <p className="text-[14px] text-slate-300 leading-relaxed font-medium mb-2">
-                                                Parabéns! Já desbloqueou todos os extras da plataforma.
-                                            </p>
-                                            <p className="text-[12px] text-amber-500/80 font-bold italic">
-                                                Estamos a trabalhar nos próximos módulos de elite para si. Continue a treinar!
-                                            </p>
-                                        </div>
+                                    {resolvedUserGoal && (
+                                        <span className="text-[10px] font-black text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                                            🎯 {resolvedUserGoal}
+                                        </span>
                                     )}
-
                                 </div>
 
-                                {/* NOVO BOTÃO XP/RANKING */}
-                                <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-100">
-                                    <button
-                                        onClick={() => setShowXpModal(true)}
-                                        className="w-full relative overflow-hidden rounded-[28px] p-6 group cursor-pointer border border-yellow-500/30 transition-transform active:scale-[0.98]"
-                                        style={{ background: 'linear-gradient(135deg, rgba(234, 179, 8, 0.15) 0%, rgba(15, 23, 42, 0.95) 100%)', boxShadow: '0 8px 32px rgba(234, 179, 8, 0.15)' }}
-                                    >
-                                        <div className="absolute inset-0 bg-gradient-to-r from-yellow-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                                        <div className="flex items-center justify-between relative z-10">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center border border-yellow-300/50 shadow-[0_0_20px_rgba(234,179,8,0.4)]">
-                                                    <span className="text-2xl drop-shadow-md">🏆</span>
-                                                </div>
-                                                <div className="text-left">
-                                                    <h3 className="text-[17px] font-black text-white leading-tight tracking-tight mb-1 drop-shadow-md">Como Ganhar 100 Dólares/mês</h3>
-                                                    <div className="flex flex-col gap-0.5 mt-0.5">
-                                                        <p className="text-[10px] text-orange-400 font-black uppercase tracking-widest drop-shadow-md">
-                                                            {missingLocal === 0 ? "🏆 Top 1 Local!" : `Local: Faltam ${missingLocal.toLocaleString()} XP`}
-                                                        </p>
-                                                        <p className="text-[10px] text-cyan-400 font-black uppercase tracking-widest drop-shadow-md">
-                                                            {missingGlobal === 0 ? "🌍 Top 1 Global!" : `Global: Faltam ${missingGlobal.toLocaleString()} XP`}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-yellow-500 group-hover:bg-yellow-500 group-hover:text-white transition-colors">
-                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                                            </div>
-                                        </div>
-                                    </button>
-                                </div>
-
-                                {/* 4. Treino dinâmico do dia */}
-                                <div className="flex items-center justify-between gap-3 mb-4">
-                                    <h2 className="text-sm font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                                        O Seu Treino Full Body de Hoje
+                                {/* 2. TREINO DO DIA NO TOPO (VALOR IMEDIATO + RETENÇÃO!) */}
+                                <div className="flex items-center justify-between gap-3 mb-3">
+                                    <h2 className="text-xs sm:text-sm font-black text-slate-300 uppercase tracking-[0.18em] flex items-center gap-2">
+                                        ⚡ Seu Treino de Hoje em Casa
                                     </h2>
                                     <button
                                         onClick={generateDailyWorkout}
-                                        className="text-[11px] font-black uppercase tracking-[0.12em] text-orange-300 hover:text-orange-200 transition-colors"
+                                        className="text-[11px] font-black uppercase tracking-[0.12em] text-orange-400 hover:text-orange-300 transition-colors"
                                         title="Trocar sequência"
                                     >
-                                        ↻ Trocar Sequência
+                                        ↻ Trocar Treino
                                     </button>
                                 </div>
 
-                                <div className="relative overflow-hidden w-full bg-slate-800/40 rounded-3xl shadow-xl mt-6 group mb-8">
+                                <div className="relative overflow-hidden w-full bg-slate-800/40 rounded-3xl shadow-xl group mb-6">
                                     <img
                                         src="./assets/hero-bg.webp"
                                         className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 pointer-events-none z-0 opacity-80"
-                                        alt="Treino Premium"
+                                        alt="Treino de Hoje"
                                     />
                                     <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/80 to-transparent pointer-events-none z-0"></div>
 
-                                    {/* Tag Flutuante */}
-                                    <div className="absolute top-5 left-5 z-20 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-2 pointer-events-none">
+                                    <div className="absolute top-5 left-5 z-20 bg-black/45 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-2 pointer-events-none">
                                         <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></div>
-                                        <span className="text-[10px] font-black text-white uppercase tracking-widest">Resultados Premium</span>
+                                        <span className="text-[10px] font-black text-white uppercase tracking-widest">Corpo Inteiro com Elásticos</span>
                                     </div>
 
-                                    {/* Content Base */}
-                                    <div className="relative z-10 p-6 pointer-events-auto flex flex-col gap-5 mt-[140px]">
+                                    <div className="relative z-10 p-6 pointer-events-auto flex flex-col gap-4 mt-[115px]">
                                         <div>
-                                            <h3 className="text-3xl font-black text-white leading-tight mb-2 drop-shadow-xl">
-                                                Sequência inteligente para corpo inteiro.
+                                            <h3 className="text-2xl sm:text-3xl font-black text-white leading-tight mb-1.5 drop-shadow-xl">
+                                                Sequência prática para o corpo inteiro.
                                             </h3>
                                             <p className="text-[13px] text-slate-300 font-medium leading-relaxed">
-                                                Treino montado profissionalmente com 6 blocos: Pernas, Costas, Peito, Ombros, Braços e Cardio.
+                                                {getMotivationalPhrase(resolvedUserGoal)}
                                             </p>
                                         </div>
 
-                                        <div className="grid grid-cols-3 gap-3">
-                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
-                                                <div className="text-sm font-black text-white">{dailyWorkout.length}/7</div>
-                                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Treino montado</div>
+                                        <div className="grid grid-cols-3 gap-2.5">
+                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
+                                                <div className="text-sm font-black text-white">{dailyWorkout.length} exercícios</div>
+                                                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Treino pronto</div>
                                             </div>
-                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
-                                                <div className="text-sm font-black text-white">{Math.max(1, dailyWorkout.length * 6)} min</div>
-                                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Duração estimada</div>
+                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
+                                                <div className="text-sm font-black text-white">{Math.max(15, dailyWorkout.length * 4)} min</div>
+                                                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Duração</div>
                                             </div>
-                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
+                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
                                                 <div className="text-sm font-black text-white">{homeStreak} dias</div>
-                                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-2">Streak</div>
+                                                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Sequência</div>
                                             </div>
                                         </div>
 
-                                        <button
-                                            onClick={startDailyWorkout}
-                                            disabled={isLoadingExercises}
-                                            className={`w-full py-4 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl text-white font-black tracking-[0.15em] uppercase text-sm shadow-[0_8px_25px_rgba(249,115,22,0.28)] hover:scale-[1.02] active:scale-[0.98] transition-all transform flex items-center justify-center gap-3 ${isLoadingExercises ? 'opacity-70 cursor-not-allowed' : ''}`}
-                                        >
-                                            {isLoadingExercises ? (
-                                                <>
-                                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                                    Carregando...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" className="drop-shadow-md"><path d="M8 5v14l11-7z"></path></svg>
-                                                    Começar Agora
-                                                </>
-                                            )}
-                                        </button>
+                                        <div className="flex flex-col sm:flex-row gap-2.5">
+                                            <button
+                                                onClick={startDailyWorkout}
+                                                disabled={isLoadingExercises}
+                                                className={`flex-1 py-4 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl text-white font-black tracking-[0.14em] uppercase text-sm shadow-[0_8px_25px_rgba(249,115,22,0.3)] hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-3 ${isLoadingExercises ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                            >
+                                                {isLoadingExercises ? (
+                                                    <>
+                                                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                        Carregando...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg>
+                                                        Começar Treino Agora
+                                                    </>
+                                                )}
+                                            </button>
+                                            <button
+                                                onClick={() => setPage('treinos')}
+                                                className="py-3.5 px-5 bg-white/10 hover:bg-white/15 border border-white/10 rounded-2xl text-white font-bold text-xs uppercase tracking-wider transition-all"
+                                            >
+                                                Ver +500 Exercícios
+                                            </button>
+                                        </div>
                                     </div>
+                                </div>
+
+                                {/* 3. GANCHO DE DEGUSTAÇÃO NUTRI-SCAN (2 TESTES GRÁTIS NO DIA 1!) */}
+                                {!temAcessoNutriScan && (
+                                    <div
+                                        onClick={() => { setArsenalSubTab('nutricao'); setPage('arsenal-vip'); }}
+                                        className="rounded-[28px] p-6 mb-6 relative overflow-hidden cursor-pointer border border-emerald-500/35 transition-all hover:scale-[1.01] active:scale-[0.99] shadow-2xl"
+                                        style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(15,23,42,0.96) 75%)' }}
+                                    >
+                                        <div className="flex items-center justify-between gap-2 mb-3">
+                                            <span className="inline-flex items-center gap-1.5 bg-emerald-500 text-slate-950 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">
+                                                {freeScansRemainingGlobal > 0
+                                                    ? `🎁 ${freeScansRemainingGlobal} ${freeScansRemainingGlobal === 1 ? 'TESTE GRÁTIS' : 'TESTES GRÁTIS'} LIBERADOS`
+                                                    : '✨ 7 DIAS GRÁTIS NA HOTMART'}
+                                            </span>
+                                            <span className="text-2xl">📸</span>
+                                        </div>
+                                        <h3 className="text-xl sm:text-2xl font-black text-white leading-tight mb-2">
+                                            Descubra as calorias do seu prato tirando uma foto
+                                        </h3>
+                                        <p className="text-[13px] text-slate-300 leading-relaxed font-medium mb-4">
+                                            {freeScansRemainingGlobal > 0
+                                                ? 'Sem balança e sem anotar tudo na mão! Use agora seus testes grátis do Nutri-Scan™ IA e veja a mágica acontecer em 3 segundos.'
+                                                : 'Você já testou o Nutri-Scan™ IA! Libere análises ilimitadas com 7 dias grátis (depois apenas R$ 9,90/mês).'}
+                                        </p>
+                                        <div className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 px-5 rounded-2xl text-xs uppercase tracking-[0.14em] text-center transition-colors shadow-lg shadow-emerald-500/20">
+                                            {freeScansRemainingGlobal > 0 ? '📸 TESTAR NUTRI-SCAN GRÁTIS AGORA' : '👉 LIBERAR MEUS 7 DIAS GRÁTIS'}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* 4. OFERTA CONTEXTUAL PERSONALIZADA (OBJETIVO + STATUS DO DESAFIO 30D) */}
+                                <div className="grid grid-cols-1 gap-4 mb-8">
+                                    {hasDesafio && !temAcessoPremium ? (
+                                        <div
+                                            className="flash-quest-card rounded-[28px] p-6 relative overflow-hidden group cursor-pointer border border-amber-500/30"
+                                            onClick={() => setPage('extras')}
+                                        >
+                                            <div className="flex items-center gap-2 mb-2.5">
+                                                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.6)]"></span>
+                                                <span className="text-[11px] text-amber-300 font-black uppercase tracking-widest">Upgrade para quem já faz o Desafio 30D</span>
+                                            </div>
+                                            <div className="text-2xl font-black text-white leading-tight tracking-tight mb-2">
+                                                Complete sua rotina com o Combo de Ouro
+                                            </div>
+                                            <p className="text-[13px] text-slate-300 leading-relaxed font-medium mb-5">
+                                                Você já garantiu o Desafio 30 Dias! Libere agora <strong className="text-white">Musculação em Casa + Pilates Modelador + Sono Profundo + Mini-Bands</strong> em um único pagamento vitalício de <strong className="text-amber-300">R$ 24,90</strong>.
+                                            </p>
+                                            <div className="bg-orange-500 text-white font-black py-3.5 px-6 rounded-2xl text-xs uppercase tracking-[0.15em] text-center group-hover:bg-orange-400 transition-colors">VER COMBO DE OURO (R$ 24,90 VITALÍCIO)</div>
+                                        </div>
+                                    ) : !temAcessoPremium ? (
+                                        <div
+                                            className="flash-quest-card rounded-[28px] p-6 relative overflow-hidden group cursor-pointer"
+                                            onClick={() => setPage('extras')}
+                                        >
+                                            <div className="flex items-center gap-2 mb-2.5">
+                                                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-[0_0_14px_rgba(249,115,22,0.6)]"></span>
+                                                <span className="text-[11px] text-orange-300 font-black uppercase tracking-widest">
+                                                    {isGoalMassa ? 'Recomendado para Ganhar Massa em Casa' : 'O Mais Escolhido para Secar e Definir'}
+                                                </span>
+                                            </div>
+                                            <div className="text-2xl sm:text-[26px] font-black text-white leading-tight tracking-tight mb-2">
+                                                {isGoalMassa
+                                                    ? 'Combo de Ouro: Musculação em Casa + Desafio 30D'
+                                                    : 'Combo de Ouro: Desafio 30 Dias + 5 Programas VIP'}
+                                            </div>
+                                            <p className="text-[13px] text-slate-300 leading-relaxed font-medium mb-5">
+                                                Leve o <strong className="text-white">Desafio 30 Dias passo a passo + Musculação em Casa + Pilates + Guias Bônus</strong> pagando uma única vez <strong className="text-orange-300">R$ 24,90</strong> (sem mensalidade!).
+                                            </p>
+                                            <div className="bg-orange-500 text-white font-black py-3.5 px-6 rounded-2xl text-xs uppercase tracking-[0.15em] text-center group-hover:bg-orange-400 transition-colors">CONHECER O COMBO DE OURO</div>
+                                        </div>
+                                    ) : !temAcessoTotalVIP ? (
+                                        <div
+                                            className="flash-quest-card rounded-[28px] p-6 relative overflow-hidden group cursor-pointer border-emerald-500/30"
+                                            onClick={() => setPage('extras')}
+                                        >
+                                            <div className="flex items-center gap-2 mb-2.5">
+                                                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                                                <span className="text-[11px] text-emerald-300 font-black uppercase tracking-widest">Acesso Completo Sem Mensalidade</span>
+                                            </div>
+                                            <div className="text-2xl font-black text-white leading-tight mb-2">
+                                                💎 Acesso Total VIP Vitalício
+                                            </div>
+                                            <p className="text-[13px] text-slate-300 leading-relaxed font-medium mb-5">
+                                                Libere o Nutri-Scan™ IA vitalício + Comunidade VIP + todas as atualizações futuras pagando uma única vez (R$ 69,90).
+                                            </p>
+                                            <div className="bg-emerald-600 text-white font-black py-3.5 px-6 rounded-2xl text-xs uppercase tracking-[0.15em] text-center group-hover:bg-emerald-500 transition-colors">VER ACESSO TOTAL VIP</div>
+                                        </div>
+                                    ) : (
+                                        <div
+                                            className="flash-quest-card rounded-[28px] p-6 relative overflow-hidden border-amber-500/30"
+                                            style={{ background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(15, 23, 42, 0.9) 100%)', borderColor: 'rgba(251, 191, 36, 0.4)' }}
+                                        >
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                                                <span className="text-xs text-amber-300 font-black uppercase tracking-widest">Status: Acesso Total VIP</span>
+                                            </div>
+                                            <div className="text-2xl font-black text-white leading-tight mb-2">
+                                                Tudo liberado para você! ✨
+                                            </div>
+                                            <p className="text-[13px] text-slate-300 leading-relaxed font-medium">
+                                                Você já tem acesso completo a todos os treinos, guias e ao Nutri-Scan™ IA. Bora manter a consistência!
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
@@ -7570,10 +7941,10 @@ import { createClient } from '@supabase/supabase-js';
                                                 </div>
                                                 <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-4 italic">
                                                     {recovery.inferior === 100 && recovery.superior === 100 
-                                                        ? "\"Energia total detetada. Momento ideal para quebrar recordes.\""
+                                                        ? "\"Energia total! Momento ideal para fazer o seu treino de hoje.\""
                                                         : recovery.inferior > recovery.superior 
-                                                        ? "\"Foco em Membros Inferiores hoje. Superior em recuperação.\""
-                                                        : "\"Foco em Superior hoje. Pernas em recuperação.\""}
+                                                        ? "\"Foco em Pernas e Glúteos hoje. Superiores em recuperação.\""
+                                                        : "\"Foco em Braços e Costas hoje. Pernas em recuperação.\""}
                                                 </p>
                                             </div>
                                         </div>
@@ -7621,10 +7992,10 @@ import { createClient } from '@supabase/supabase-js';
                                         </div>
                                     </div>
                                     <div id="termos" className="mt-4 text-[11px] text-slate-600">
-                                        Ao continuar, confirmas que aceitas os termos de uso da plataforma.
+                                        Ao continuar, você confirma que aceita os termos de uso da plataforma.
                                     </div>
                                     <div id="privacidade" className="mt-2 text-[11px] text-slate-600">
-                                        A sua privacidade é prioridade: coleta e tratamento de dados apenas para melhorar a experiência.
+                                        Sua privacidade é prioridade: coleta e tratamento de dados apenas para melhorar sua experiência.
                                     </div>
                                 </div>
                             </div>
@@ -7636,6 +8007,10 @@ import { createClient } from '@supabase/supabase-js';
                             <TreinoModuleLive 
                                 setSel={setSel} 
                                 hasAccess={temAcessoPremium} 
+                                hasDesafio={hasDesafio}
+                                hasMusculacao={hasMusculacao}
+                                hasPilates={hasPilates}
+                                onOpenDesafio={() => { setArsenalSubTab('cronograma'); setPage('arsenal-vip'); }}
                                 onGoToExtras={() => setPage('extras')} 
                             />
                         );
@@ -7652,6 +8027,9 @@ import { createClient } from '@supabase/supabase-js';
                                 temAcessoPremium={temAcessoPremium} 
                                 setSel={setSel}
                                 isVipUser={temAcessoTotalVIP}
+                                initialSubTab={arsenalSubTab}
+                                onOpenNutriUpsell={openNutriScanUpsell}
+                                freeScansRemaining={freeScansRemainingGlobal}
                             />
                         );
                     }
@@ -7666,11 +8044,13 @@ import { createClient } from '@supabase/supabase-js';
                             onNav={setPage}
                             onAccessModule={handleAccessModule} 
                             onScannerUnlock={handleScannerUnlock}
+                            freeScansRemaining={freeScansRemainingGlobal}
+                            onOpenNutriScan={() => { setArsenalSubTab('nutricao'); setPage('arsenal-vip'); }}
                         />;
                     }
 
                     case 'ranking': {
-                        return <RankingTab session={ud.session} userProfile={ud.userProfile} currentXP={homeXP} />;
+                        return <RankingTab session={ud.session} userProfile={ud.userProfile} currentXP={homeXP} onGoToTreinos={() => setPage('treinos')} />;
                     }
 
                     case 'ajuda': {
@@ -7778,21 +8158,31 @@ import { createClient } from '@supabase/supabase-js';
                         <main className="main" style={{ minHeight: '100vh' }}>{renderPage()}</main>
                     </div>
                     <div className="bottom-nav" style={{ bottom: '0px' }}>
-                        {NAV.map(n => (
-                            <button 
-                                key={n.id} 
-                                className={`bottom-nav-item ${page === n.id ? 'active' : ''}`} 
-                                onClick={() => {
-                                    if (n.id === 'treinos') setModFilter('base');
-                                    setPage(n.id);
-                                }}
-                            >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                                    <path d={n.d} strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                                {n.label}
-                            </button>
-                        ))}
+                        {NAV.map(n => {
+                            const showFreeNutriPill = n.id === 'arsenal-vip' && !temAcessoNutriScan && freeScansRemainingGlobal > 0;
+                            return (
+                                <button 
+                                    key={n.id} 
+                                    className={`bottom-nav-item ${page === n.id ? 'active' : ''}`} 
+                                    style={{ position: 'relative' }}
+                                    onClick={() => {
+                                        if (n.id === 'treinos') setModFilter('base');
+                                        if (n.id === 'arsenal-vip') setArsenalSubTab('nutricao');
+                                        setPage(n.id);
+                                    }}
+                                >
+                                    {showFreeNutriPill && (
+                                        <span style={{ position: 'absolute', top: '2px', right: '2px', background: '#10b981', color: '#022c22', fontSize: '7.5px', fontWeight: '900', padding: '1px 4px', borderRadius: '99px', lineHeight: '1.2', letterSpacing: '0.02em', boxShadow: '0 2px 6px rgba(16,185,129,0.5)' }}>
+                                            {freeScansRemainingGlobal} GRÁTIS
+                                        </span>
+                                    )}
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                        <path d={n.d} strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                    {n.label}
+                                </button>
+                            );
+                        })}
                     </div>
 
                     {sel && <VideoModal exercise={sel} isCompleted={ud.isCompleted(sel.id)} onClose={() => setSel(null)} onToggle={ud.toggleComplete} />}
@@ -7810,135 +8200,59 @@ import { createClient } from '@supabase/supabase-js';
                     {notifOpen && (
                         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setNotifOpen(false)} style={{ zIndex: 11000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <div className="password-modal-content" style={{ width: '90%', maxWidth: '400px', padding: '24px' }}>
-                                <button onClick={() => setNotifOpen(false)} style={{ position: 'absolute', top: '16px', right: '16px', color: 'var(--text-muted)', fontSize: '24px', background: 'none', border: 'none' }}>&times;</button>
-                                <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#fff', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '10px' }}>🔔 Notificações</h2>
+                                <button onClick={() => setNotifOpen(false)} style={{ position: 'absolute', top: '16px', right: '16px', color: 'var(--text-muted)', fontSize: '24px', background: 'none', border: 'none', cursor: 'pointer' }}>&times;</button>
+                                <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#fff', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>🔔 Novidades para Você</h2>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                     
-                                    {/* Notificação 1: FOMO Ranking & XP */}
+                                    {/* Notificação 1: 2 Testes Grátis Nutri-Scan (CLICÁVEL) */}
                                     <div 
-                                        className="cursor-pointer transition-transform hover:scale-[1.02]"
-                                        style={{ background: 'linear-gradient(90deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)', borderLeft: '4px solid #ef4444', padding: '16px', borderRadius: '0 8px 8px 0' }}
+                                        onClick={() => { setNotifOpen(false); setArsenalSubTab('nutricao'); setPage('arsenal-vip'); }}
+                                        className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                                        style={{ background: 'linear-gradient(90deg, rgba(16, 185, 129, 0.16) 0%, rgba(16, 185, 129, 0.05) 100%)', borderLeft: '4px solid #10b981', padding: '16px', borderRadius: '0 12px 12px 0' }}
                                     >
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <h4 style={{ color: '#fff', marginBottom: '6px', fontSize: '15px', fontWeight: '800' }}>⚠️ Alerta de Ranking</h4>
-                                            <span style={{ fontSize: '10px', color: '#ef4444', fontWeight: '900', background: 'rgba(239,68,68,0.2)', padding: '2px 6px', borderRadius: '4px' }}>AGORA</span>
+                                            <h4 style={{ color: '#fff', marginBottom: '6px', fontSize: '14px', fontWeight: '800' }}>🎁 Nutri-Scan™ IA Liberado</h4>
+                                            <span style={{ fontSize: '9px', color: '#10b981', fontWeight: '900', background: 'rgba(16,185,129,0.2)', padding: '2px 6px', borderRadius: '4px' }}>TESTE GRÁTIS</span>
                                         </div>
-                                        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', lineHeight: '1.4' }}>
-                                            Você foi ultrapassado! Vários guerreiros ativaram o <strong style={{ color: '#fff' }}>Nutri-Scan IA</strong> (+1500 XP Diários) e subiram na tabela. Não fique para trás na corrida pelos $100!
+                                        <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '12.5px', lineHeight: '1.45' }}>
+                                            {temAcessoNutriScan
+                                                ? 'Seu Nutri-Scan™ IA está ativo! Toque aqui para fotografar sua próxima refeição.'
+                                                : `Você tem ${freeScansRemainingGlobal > 0 ? freeScansRemainingGlobal + ' análises grátis' : '7 dias grátis'} para descobrir as calorias do seu prato pela foto. Toque para abrir →`}
                                         </p>
                                     </div>
 
-                                    {/* Notificação 2: Social Proof & Combo */}
-                                    <div 
-                                        className="cursor-pointer transition-transform hover:scale-[1.02]"
-                                        style={{ background: 'linear-gradient(90deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%)', borderLeft: '4px solid #f59e0b', padding: '16px', borderRadius: '0 8px 8px 0' }}
-                                    >
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <h4 style={{ color: '#fff', marginBottom: '6px', fontSize: '15px', fontWeight: '800' }}>💎 Desbloqueios em Massa</h4>
-                                            <span style={{ fontSize: '10px', color: '#f59e0b', fontWeight: '900', background: 'rgba(245,158,11,0.2)', padding: '2px 6px', borderRadius: '4px' }}>HÁ 1 HORA</span>
+                                    {/* Notificação 2: Combo de Ouro (CLICÁVEL) */}
+                                    {!temAcessoPremium && (
+                                        <div 
+                                            onClick={() => { setNotifOpen(false); setPage('extras'); }}
+                                            className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                                            style={{ background: 'linear-gradient(90deg, rgba(245, 158, 11, 0.16) 0%, rgba(245, 158, 11, 0.05) 100%)', borderLeft: '4px solid #f59e0b', padding: '16px', borderRadius: '0 12px 12px 0' }}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                <h4 style={{ color: '#fff', marginBottom: '6px', fontSize: '14px', fontWeight: '800' }}>🥇 Combo de Ouro Vitalício</h4>
+                                                <span style={{ fontSize: '9px', color: '#f59e0b', fontWeight: '900', background: 'rgba(245,158,11,0.2)', padding: '2px 6px', borderRadius: '4px' }}>R$ 24,90</span>
+                                            </div>
+                                            <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '12.5px', lineHeight: '1.45' }}>
+                                                Desafio 30 Dias + Musculação em Casa + Pilates + 3 Guias Bônus em pagamento único (sem mensalidade). Toque para ver →
+                                            </p>
                                         </div>
-                                        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', lineHeight: '1.4' }}>
-                                            Mais de <strong style={{ color: '#fff' }}>142 pessoas</strong> garantiram o <strong style={{ color: '#f59e0b' }}>Combo de Ouro</strong> hoje. O acesso vitalício aos módulos de Elite pode esgotar em breve.
-                                        </p>
-                                    </div>
+                                    )}
 
-                                    {/* Notificação 3: Resultados & Elite */}
+                                    {/* Notificação 3: Treino de Hoje (CLICÁVEL) */}
                                     <div 
-                                        className="cursor-pointer transition-transform hover:scale-[1.02]"
-                                        style={{ background: 'linear-gradient(90deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.05) 100%)', borderLeft: '4px solid #10b981', padding: '16px', borderRadius: '0 8px 8px 0' }}
+                                        onClick={() => { setNotifOpen(false); setPage('treinos'); }}
+                                        className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                                        style={{ background: 'linear-gradient(90deg, rgba(249, 115, 22, 0.16) 0%, rgba(249, 115, 22, 0.05) 100%)', borderLeft: '4px solid #f97316', padding: '16px', borderRadius: '0 12px 12px 0' }}
                                     >
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                            <h4 style={{ color: '#fff', marginBottom: '6px', fontSize: '15px', fontWeight: '800' }}>🚀 Evolução Extrema</h4>
+                                            <h4 style={{ color: '#fff', marginBottom: '6px', fontSize: '14px', fontWeight: '800' }}>⚡ +500 Exercícios em Vídeo</h4>
                                         </div>
-                                        <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', lineHeight: '1.4' }}>
-                                            Os membros com <strong style={{ color: '#10b981' }}>Acesso Total VIP</strong> estão relatando 3x mais resultados este mês. Eleve seu nível hoje.
+                                        <p style={{ color: 'rgba(255,255,255,0.75)', fontSize: '12.5px', lineHeight: '1.45' }}>
+                                            Escolha o grupo muscular que quer treinar hoje em casa com seus elásticos. Toque para abrir →
                                         </p>
                                     </div>
                                     
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {showXpModal && (
-                        <div className="fixed inset-0 z-[12000] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
-                            <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md" onClick={() => setShowXpModal(false)}></div>
-                            
-                            <div className="relative w-full max-w-md bg-gradient-to-b from-slate-900 to-[#0a0a0c] border border-white/10 rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
-                                {/* Header / Banner Modal */}
-                                <div className="relative h-40 bg-gradient-to-br from-yellow-600 to-amber-700 flex flex-col items-center justify-center text-center p-6 border-b border-yellow-500/30 overflow-hidden">
-                                    <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iOCIgaGVpZ2h0PSI4IiBmaWxsPSIjZmZmIiBmaWxsLW9wYWNpdHk9IjAuMDUiLz4KPC9zdmc+')] opacity-20"></div>
-                                    <button 
-                                        onClick={() => setShowXpModal(false)}
-                                        className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-black/20 hover:bg-black/40 text-white backdrop-blur-sm transition-colors z-20"
-                                    >
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                                    </button>
-                                    
-                                    <div className="w-16 h-16 bg-gradient-to-b from-yellow-300 to-yellow-500 rounded-full flex items-center justify-center text-3xl shadow-[0_0_30px_rgba(253,224,71,0.6)] mb-3 relative z-10 border-2 border-white/20">
-                                        💰
-                                    </div>
-                                    <h2 className="text-2xl font-black text-white italic tracking-tighter drop-shadow-lg relative z-10">O Top 1 Leva Tudo!</h2>
-                                </div>
-
-                                {/* Body Modal */}
-                                <div className="p-6">
-                                    <div className="bg-gradient-to-r from-orange-500/20 to-transparent border-l-4 border-orange-500 p-4 mb-6 rounded-r-xl shadow-lg">
-                                        <h4 className="text-[10px] text-orange-400 font-black uppercase tracking-widest mb-1">O Seu Objetivo</h4>
-                                        <p className="text-sm text-slate-200 font-medium leading-relaxed">
-                                            Faltam <strong className="text-yellow-400 font-black text-lg">{(top1Xp - homeXP).toLocaleString()} XP</strong> para você alcançar o Top 1!
-                                        </p>
-                                    </div>
-
-                                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4 mb-6">
-                                        <div className="flex items-start gap-3">
-                                            <div className="text-xl">🏆</div>
-                                            <div>
-                                                <h4 className="text-[11px] text-yellow-500 font-black uppercase tracking-widest mb-1">O Prêmio</h4>
-                                                <p className="text-sm text-slate-200 font-medium leading-relaxed">
-                                                    Todos os meses, o <strong className="text-white font-bold">número 1 do Ranking Mundial</strong> e o <strong className="text-white font-bold">número 1 do Ranking por Estado</strong> ganham <strong className="text-yellow-400 font-black text-base">100 Dólares</strong>.
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <h3 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
-                                        <span className="text-yellow-500">⚡</span> Como ganhar XP?
-                                    </h3>
-
-                                    <div className="space-y-3 mb-6">
-                                        <div className="bg-slate-800/50 border border-white/5 rounded-2xl p-4 flex gap-4 items-center">
-                                            <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-xl shrink-0">🏋️‍♂️</div>
-                                            <div>
-                                                <h4 className="text-sm font-black text-white mb-0.5">Treinar</h4>
-                                                <p className="text-[11px] text-slate-400 font-medium leading-tight">
-                                                    Você ganha <span className="text-blue-400 font-bold">10 XP</span> por cada exercício concluído.
-                                                </p>
-                                                <p className="text-[9px] text-slate-500 mt-1 uppercase tracking-wider font-bold">Limite: 250 XP / dia</p>
-                                            </div>
-                                        </div>
-
-                                        <div className="bg-gradient-to-r from-amber-500/10 to-yellow-600/10 border border-amber-500/30 rounded-2xl p-4 flex gap-4 items-center relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 bg-amber-500 text-black text-[8px] font-black uppercase px-2 py-0.5 rounded-bl-lg">O Segredo</div>
-                                            <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-xl shrink-0">💎</div>
-                                            <div>
-                                                <h4 className="text-sm font-black text-amber-400 mb-0.5">Boost de Extras</h4>
-                                                <div className="text-[11px] text-slate-300 font-medium leading-tight mt-1 space-y-0.5">
-                                                    <span className="block">Ganhe XP passivo TODOS OS DIAS por cada Extra:</span>
-                                                    <span className="block"><span className="text-amber-400 font-black">Nutri-Scan:</span> +1500 XP/dia</span>
-                                                    <span className="block"><span className="text-amber-400 font-black">Restantes Extras (cada):</span> +1000 XP/dia</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <button 
-                                        onClick={() => setShowXpModal(false)}
-                                        className="w-full bg-slate-100 hover:bg-white text-slate-900 font-black py-4 rounded-xl text-sm uppercase tracking-[0.15em] transition-all active:scale-[0.98]"
-                                    >
-                                        Entendido, Vamos Lutar
-                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -8103,6 +8417,10 @@ import { createClient } from '@supabase/supabase-js';
                         isOpen={showNutriScanUpsell} 
                         onClose={() => setShowNutriScanUpsell(false)} 
                         onTrackEvent={handleTrackUpsell} 
+                        reason={nutriUpsellReason}
+                        freeScansRemaining={freeScansRemainingGlobal}
+                        onTryFreeNow={() => { setArsenalSubTab('nutricao'); setPage('arsenal-vip'); }}
+                        onGoToExtras={() => setPage('extras')}
                     />
                 </div>);
         }

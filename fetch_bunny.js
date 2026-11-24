@@ -1,67 +1,34 @@
+// Script administrativo local: a chave Bunny deve ser fornecida via variável de ambiente BUNNY_API_KEY.
 const https = require('https');
-const fs = require('fs');
+
+const apiKey = process.env.BUNNY_API_KEY;
+if (!apiKey) {
+  console.error('Define BUNNY_API_KEY antes de executar este script.');
+  process.exit(1);
+}
 
 const options = {
   hostname: 'video.bunnycdn.com',
   path: '/library/630822/videos?page=1&itemsPerPage=1000',
   method: 'GET',
   headers: {
-    'AccessKey': 'df691b76-928c-4f85-a140faa5fa1f-8c5f-40b7',
-    'accept': 'application/json'
-  }
+    AccessKey: apiKey,
+    accept: 'application/json',
+  },
 };
 
-const req = https.request(options, res => {
+const req = https.request(options, (res) => {
   let data = '';
-  res.on('data', chunk => data += chunk);
+  res.on('data', (chunk) => { data += chunk; });
   res.on('end', () => {
     try {
-        const json = JSON.parse(data);
-        if (json && json.items) {
-            const list = json.items.map(v => ({
-                title: v.title,
-                url: `https://vz-f56588b2-589.b-cdn.net/${v.guid}/play_720p.mp4`
-            }));
-            
-            let html = fs.readFileSync('C:\\Users\\rafae\\Desktop\\APP\\admin-triage.html', 'utf8');
-            
-            // Replace fetchVideos implementation
-            const newFetchVideos = `
-        async function fetchVideos() {
-            videoList = ${JSON.stringify(list, null, 4)};
-            if(videoList.length > 0) {
-                currentIndex = 0;
-                showAlert(\`\${videoList.length} vídeos injetados nativamente!\`, 'success');
-                
-                elName.disabled = false;
-                elGroup.disabled = false;
-                elTarget.disabled = false;
-                elSaveBtn.disabled = false;
-                elSetup.style.display = 'none';
-                
-                updateUI();
-            } else {
-                showAlert('A biblioteca está vazia.', 'error');
-                elSetup.textContent = 'Nenhum vídeo encontrado.';
-            }
-        }
-            `;
-            
-            html = html.replace(/async function fetchVideos\(\) \{[\s\S]*?\n        \}/, newFetchVideos);
-            
-            fs.writeFileSync('C:\\Users\\rafae\\Desktop\\APP\\admin-triage.html', html, 'utf8');
-            console.log("Successfully retrieved " + list.length + " videos and updated admin-triage.html.");
-        } else {
-            console.error("Invalid response format:", json);
-        }
-    } catch(e) {
-        console.error("Error parsing/writing:", e);
+      const json = JSON.parse(data);
+      console.log('Vídeos encontrados:', Array.isArray(json?.items) ? json.items.length : 0);
+    } catch (err) {
+      console.error('Erro ao ler resposta da Bunny:', err.message);
     }
   });
 });
 
-req.on('error', error => {
-  console.error(error);
-});
-
+req.on('error', (err) => console.error('Erro de rede:', err.message));
 req.end();
