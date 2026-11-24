@@ -3,12 +3,17 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="./OIP.webp">
     <title>+500 Exercícios com Elástico</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700;800&family=Orbitron:wght@400;700;900&display=swap"
         rel="stylesheet">
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="./config.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -37,7 +42,6 @@
             }
         };
     </script>
-    <script src="https://unpkg.com/lucide@latest"></script>
 
 
     <style>
@@ -52,6 +56,7 @@
             --text-secondary: #94a3b8;
             --text-muted: #64748b;
             --accent: #f97316;
+            --accent-rgb: 249, 115, 22;
             --accent-hover: #ea580c;
             --accent-glow: rgba(249, 115, 22, 0.35);
             --accent-soft: rgba(249, 115, 22, 0.12);
@@ -67,8 +72,6 @@
             --font-technical: 'Orbitron', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
         }
-
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Orbitron:wght@400;700;900&display=swap');
 
         .font-technical { font-family: var(--font-technical); }
         .font-mono { font-family: var(--font-mono); }
@@ -157,7 +160,7 @@
             min-width: 0;
             display: flex;
             flex-direction: column;
-            width: 100vw !important;
+            width: 100% !important;
         }
 
         /* -- AUTH UI CSS -- */
@@ -532,10 +535,12 @@
             inset: 0;
             background: var(--bg-primary);
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: center;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
             z-index: 9999;
-            padding: 24px;
+            padding: 24px 16px 40px;
         }
 
         .onboarding-card {
@@ -3129,8 +3134,7 @@
       window.OneSignalDeferred = window.OneSignalDeferred || [];
       OneSignalDeferred.push(async function(OneSignal) {
         await OneSignal.init({
-          appId: "e3ceef68-5a4e-4406-85ca-39a5a0404c4a",
-          allowLocalhostAsSecureContext: true,
+          appId: "e3ceef68-5a4e-4406-85ca-39a5a0404c4a"
         });
       });
     </script>
@@ -3138,211 +3142,10 @@
 
 <body>
     <div id="root"></div>
-    <div id="portal-root"></div>
-    <script src="./exercicios.js"></script>
-    <script type="module" src="/src/main.jsx"></script>
     <div id="modal-root"></div>
     <div id="portal-root"></div>
-
-
-    <!-- INÍCIO DO SCANNER DE REFEIÇÕES IA -->
-    <div id="scanner-container" class="hidden fixed inset-0 z-[100000] bg-gray-900 flex flex-col">
-      <div class="p-4 bg-gray-800 flex justify-between items-center border-b border-gray-700">
-        <h2 class="text-white font-bold text-lg">Scanner IA</h2>
-        <button id="close-scanner-btn" class="text-orange-500 font-bold">Voltar</button>
-      </div>
-      
-      <div class="relative flex-1 bg-black flex justify-center items-center overflow-hidden">
-        <video id="camera-feed" class="w-full h-full object-cover" autoplay playsinline></video>
-        <img id="photo-preview" class="hidden w-full h-full object-cover" />
-        
-        <div id="ai-loading" class="hidden absolute inset-0 bg-black/80 flex flex-col items-center justify-center">
-          <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500 mb-4"></div>
-          <p class="text-white font-bold animate-pulse">Analisando macros...</p>
-        </div>
-      </div>
-
-      <div class="p-6 bg-gray-800 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-10">
-        <div class="mb-4 text-center">
-          <p class="text-xs text-gray-400 uppercase tracking-widest">Objetivo Diário</p>
-          <p class="text-sm font-bold text-green-400">Crescer Seco: ~2.700 kcal</p>
-        </div>
-
-        <div id="hidden-calories-form" class="hidden mb-4 flex justify-center gap-4">
-          <label class="flex items-center text-white text-sm"><input type="checkbox" id="add-oil" class="mr-2 rounded text-orange-500 focus:ring-orange-500" /> + Azeite/Óleo</label>
-          <label class="flex items-center text-white text-sm"><input type="checkbox" id="add-sauce" class="mr-2 rounded text-orange-500 focus:ring-orange-500" /> + Molho</label>
-        </div>
-
-        <button id="capture-btn" class="w-full rounded-full bg-orange-500 py-4 font-bold text-white shadow-lg hover:bg-orange-600 transition-colors text-lg flex items-center justify-center gap-2">
-          📸 Tirar Foto
-        </button>
-        
-        <div id="result-actions" class="hidden w-full flex gap-3">
-          <button id="retake-btn" class="flex-1 rounded-xl bg-gray-700 py-3 font-bold text-white hover:bg-gray-600 transition-colors">Repetir</button>
-          <button id="confirm-meal-btn" class="flex-1 rounded-xl bg-green-500 py-3 font-bold text-white shadow-lg hover:bg-green-600 transition-colors">✅ Salvar</button>
-        </div>
-      
-      </div>
-      
-      <canvas id="capture-canvas" class="hidden"></canvas>
-    </div>
-
-    <script>
-        // Lógica do Scanner Vanilla JS
-        let cameraStream = null;
-
-        window.startScannerCamera = async function() {
-            const video = document.getElementById('camera-feed');
-            const photoPreview = document.getElementById('photo-preview');
-            const captureBtn = document.getElementById('capture-btn');
-            const resultActions = document.getElementById('result-actions');
-            const hiddenForm = document.getElementById('hidden-calories-form');
-            
-            // Reset UI
-            if (video) video.classList.remove('hidden');
-            if (photoPreview) {
-                photoPreview.classList.add('hidden');
-                photoPreview.src = '';
-            }
-            if (captureBtn) captureBtn.classList.remove('hidden');
-            if (resultActions) resultActions.classList.add('hidden');
-            if (hiddenForm) hiddenForm.classList.add('hidden');
-
-            try {
-                cameraStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' },
-                    audio: false
-                });
-                if (video) {
-                    video.srcObject = cameraStream;
-                    video.play().catch(e => console.error("Erro ao dar play no video:", e));
-                }
-            } catch (err) {
-                console.error("Erro ao abrir a câmara:", err);
-                alert("Não foi possível acessar a câmera! Autorize as permissões ou verifique se não está sendo usada por outro app.");
-            }
-        };
-
-        window.stopScannerCamera = function() {
-            if (cameraStream) {
-                cameraStream.getTracks().forEach(track => track.stop());
-                cameraStream = null;
-            }
-            const video = document.getElementById('camera-feed');
-            if (video) video.srcObject = null;
-        };
-
-        // Eventos a serem vinculados apenas uma vez
-        window.addEventListener('load', function() {
-            const _closeScannerBtn = document.getElementById('close-scanner-btn');
-            if (_closeScannerBtn) {
-                _closeScannerBtn.addEventListener('click', () => {
-                    window.stopScannerCamera();
-                    const scannerContainer = document.getElementById('scanner-container');
-                    if (scannerContainer) scannerContainer.classList.add('hidden');
-                    
-                    // Restaurar página de extras apenas se necessário
-                    const extrasWrapper = document.getElementById('extras-page');
-                    if (extrasWrapper && extrasWrapper.classList.contains('hidden')) {
-                        extrasWrapper.classList.remove('hidden');
-                        extrasWrapper.style.display = 'block';
-                    }
-                });
-            }
-
-            const _captureBtn = document.getElementById('capture-btn');
-            const _retakeBtn = document.getElementById('retake-btn');
-            const _video = document.getElementById('camera-feed');
-            const _photoPreview = document.getElementById('photo-preview');
-            const _canvas = document.getElementById('capture-canvas');
-            const _resultActions = document.getElementById('result-actions');
-            const _hiddenForm = document.getElementById('hidden-calories-form');
-
-            if (_captureBtn && _video && _canvas) {
-                _captureBtn.addEventListener('click', () => {
-                    const ctx = _canvas.getContext('2d');
-                    _canvas.width = _video.videoWidth || 1080;
-                    _canvas.height = _video.videoHeight || 1920;
-                    ctx.drawImage(_video, 0, 0, _canvas.width, _canvas.height);
-                    
-                    const base64Photo = _canvas.toDataURL('image/jpeg', 0.8);
-                    if (_photoPreview) _photoPreview.src = base64Photo;
-                    
-                    _video.classList.add('hidden');
-                    if (_photoPreview) _photoPreview.classList.remove('hidden');
-                    
-                    _captureBtn.classList.add('hidden');
-                    if (_resultActions) _resultActions.classList.remove('hidden');
-                    if (_hiddenForm) _hiddenForm.classList.remove('hidden');
-                });
-            }
-
-            if (_retakeBtn) {
-                _retakeBtn.addEventListener('click', () => {
-                    if (_video) _video.classList.remove('hidden');
-                    if (_photoPreview) {
-                        _photoPreview.classList.add('hidden');
-                        _photoPreview.src = '';
-                    }
-                    
-                    if (_captureBtn) _captureBtn.classList.remove('hidden');
-                    if (_resultActions) _resultActions.classList.add('hidden');
-                    if (_hiddenForm) _hiddenForm.classList.add('hidden');
-                });
-            }
-
-            const _confirmBtn = document.getElementById('confirm-meal-btn');
-            const _loadingOverlay = document.getElementById('ai-loading');
-            if (_confirmBtn && _loadingOverlay) {
-                _confirmBtn.addEventListener('click', async () => {
-                    _loadingOverlay.classList.remove('hidden');
-                    
-                    try {
-                        if (!window.supabase) throw new Error("Supabase não iniciado");
-                        
-                        // 1. Obter Utilizador
-                        const { data: { user } } = await window.supabase.auth.getUser();
-                        if (!user) {
-                            alert("Sessão expirada. Faça login novamente.");
-                            return;
-                        }
-
-                        // 2. Simular Análise IA (Gerar macros dinâmicos para a demonstração)
-                        const kcal = Math.floor(400 + Math.random() * 500);
-                        const desc = "Refeição Scanner IA";
-
-                        // 3. Gravar no Banco de Dados
-                        const { error } = await window.supabase
-                            .from('nutrition_logs')
-                            .insert([{
-                                user_id: user.id,
-                                description: desc,
-                                calories: kcal,
-                                created_at: new Date().toISOString()
-                            }]);
-
-                        if (error) throw error;
-
-                        // 4. Sucesso e Notificação Global
-                        _loadingOverlay.classList.add('hidden');
-                        
-                        // Disparar evento para o React Dashboard ouvir
-                        window.dispatchEvent(new CustomEvent('nutrition-updated'));
-
-                        alert(`✅ ${desc} registado!\nCalculado: +${kcal} kcal.`);
-                        
-                        const closeBtn = document.getElementById('close-scanner-btn');
-                        if (closeBtn) closeBtn.click();
-
-                    } catch (err) {
-                        console.error("Erro no Scanner:", err);
-                        _loadingOverlay.classList.add('hidden');
-                        alert("Falha ao salvar: " + (err.message || "Erro desconhecido"));
-                    }
-                });
-            }
-        });
-    </script>
+    <script src="./exercicios.js" defer></script>
+    <script type="module" src="/src/main.jsx"></script>
 </body>
 
 </html>

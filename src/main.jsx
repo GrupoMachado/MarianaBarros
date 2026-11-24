@@ -39,26 +39,56 @@ import { createClient } from '@supabase/supabase-js';
             }
         };
 
+        const safeOpenExternal = (url) => {
+            if (!url || typeof url !== 'string') return;
+            window.open(url, '_blank', 'noopener,noreferrer');
+        };
+
+        const isSafeImageUrl = (url) => {
+            if (!url || typeof url !== 'string') return false;
+            return /^https:\/\//i.test(url.trim()) || /^\.?\//.test(url.trim());
+        };
+
+        // Fonte única de verdade para entitlements (normaliza slugs do webhook Hotmart + promo_codes + perfil)
+        const resolveEntitlements = (profile) => {
+            const set = new Set();
+            if (Array.isArray(profile?.premium_features)) {
+                profile.premium_features.forEach(m => { if (m) set.add(String(m).toLowerCase()); });
+            }
+            if (profile?.permissions && typeof profile.permissions === 'object') {
+                Object.entries(profile.permissions).forEach(([k, v]) => {
+                    if (v) set.add(String(k).toLowerCase());
+                });
+            }
+            const hasTotalVip = Boolean(profile?.is_vip) || set.has('total_vip');
+            const hasGold = Boolean(profile?.acesso_combo_ouro) || set.has('vip_gold') || set.has('gold') || hasTotalVip;
+            const hasScannerIA = Boolean(profile?.assinatura_scanner_ia_ativa) || set.has('scanner_ia') || set.has('pacote_elite') || set.has('arsenal_premium') || set.has('assinatura_scanner_ia_ativa') || hasGold || hasTotalVip;
+            const hasDesafio = set.has('desafio30') || set.has('desafio_30') || hasGold || hasTotalVip;
+            const hasSono = set.has('sono') || hasGold || hasTotalVip;
+            const hasComunidade = set.has('comunidade_vip') || set.has('comunidade') || set.has('pacote_elite') || set.has('vip') || hasTotalVip;
+            const hasMusculacao = set.has('musculacao') || hasGold || hasTotalVip;
+            const hasSenior = set.has('senior') || set.has('recuperacao_ativa') || hasGold || hasTotalVip;
+            const hasPilates = set.has('pilates') || hasGold || hasTotalVip;
+            const hasGymnastics = set.has('gymnastics') || set.has('mini_bands') || hasGold || hasTotalVip;
+
+            return {
+                hasTotalVip,
+                hasGold,
+                hasScannerIA,
+                hasDesafio,
+                hasSono,
+                hasComunidade,
+                hasMusculacao,
+                hasSenior,
+                hasPilates,
+                hasGymnastics
+            };
+        };
+
 
         const CATEGORIES = ['Todos', 'Membros Inferiores', 'Membros Superiores', 'Braços', 'Cardio', 'Mobilidade'];
         const DIFFICULTIES = ['Todos', 'Iniciante', 'Intermediário', 'Avançado'];
         const NUTRISCAN_FREE_LIMIT = 2;
-        const getFreeScanStorageKey = (userId) => `nutriscan_free_uses_${userId || 'guest'}`;
-        const getFreeScansUsed = (userId) => {
-            try {
-                return parseInt(localStorage.getItem(getFreeScanStorageKey(userId)) || '0', 10) || 0;
-            } catch {
-                return 0;
-            }
-        };
-        const incrementFreeScansUsed = (userId) => {
-            const next = getFreeScansUsed(userId) + 1;
-            try {
-                localStorage.setItem(getFreeScanStorageKey(userId), String(next));
-            } catch {}
-            window.dispatchEvent(new CustomEvent('nutriscan-free-uses-updated'));
-            return next;
-        };
 
         const NAV = [
             { id: 'inicio', label: 'Início', d: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0h4' },
@@ -70,45 +100,10 @@ import { createClient } from '@supabase/supabase-js';
             { id: 'ajuda', label: 'Ajuda', d: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' }
         ];
 
-        
-        // EXERCISES array was moved to exercicios.js
-        const EXERCISES = window.EXERCISES;
+        // 5 abas espaçosas no mobile (Ranking e Ajuda acessíveis pelo topo do Início + menu)
+        const MOBILE_NAV = NAV.filter(n => ['inicio', 'treinos', 'arsenal-vip', 'evolucao', 'extras'].includes(n.id));
 
-
-        const CHALLENGE_SCHEDULE = [
-            { day: 1, theme: "Despertar Muscular", focus: "Membros Inferiores", exercises: ['P01', 'P02', 'P04', 'P05', 'P06'] },
-            { day: 2, theme: "Core e Equilíbrio", focus: "Core", exercises: ['C01', 'C02', 'C03', 'C04', 'C05'] },
-            { day: 3, theme: "Cardio de Baixo Impacto", focus: "Cardio", exercises: ['CA01', 'CA02', 'CA03', 'CA05', 'CA10'] },
-            { day: 4, theme: "Fortalecimento Superiores", focus: "Membros Superiores", exercises: ['S01', 'S02', 'S03', 'S04', 'S05'] },
-            { day: 5, theme: "Foco nos Braços", focus: "Braços", exercises: ['B01', 'B02', 'B03', 'B04', 'B05'] },
-            { day: 6, theme: "Descanso Ativo 🧘", focus: "Descanso", exercises: [] },
-            { day: 7, theme: "Avaliação 1 📊", isEvaluation: true, exercises: ['P01', 'S01', 'C01'] },
-            { day: 8, theme: "Potência de Inferiores", focus: "Membros Inferiores", exercises: ['P07', 'P08', 'P10', 'P11', 'P12'] },
-            { day: 9, theme: "Estabilidade de Core", focus: "Core", exercises: ['C06', 'C07', 'C08', 'C09', 'C10'] },
-            { day: 10, theme: "Definição de Superiores", focus: "Membros Superiores", exercises: ['S07', 'S09', 'S10', 'S11', 'S12'] },
-            { day: 11, theme: "Cardio HIIT", focus: "Cardio", exercises: ['CA06', 'CA07', 'CA08', 'CA09', 'CA11'] },
-            { day: 12, theme: "Total Body Foundation", focus: "Total Body", exercises: ['P01', 'S01', 'C01', 'CA01', 'M01'] },
-            { day: 13, theme: "Mobilidade em Fluxo", focus: "Mobilidade", exercises: ['M01', 'M02', 'M03', 'M04', 'M05'] },
-            { day: 14, theme: "Descanso Ativo 🧘", focus: "Descanso", exercises: [] },
-            { day: 15, theme: "Pernas de Aço", focus: "Membros Inferiores", exercises: ['P13', 'P14', 'P15', 'P16', 'P18'] },
-            { day: 16, theme: "Domínio do Core", focus: "Core", exercises: ['C11', 'C12', 'C13', 'C14', 'C15'] },
-            { day: 17, theme: "Peitoral & Costas", focus: "Membros Superiores", exercises: ['S14', 'S15', 'S16', 'S17', 'S18'] },
-            { day: 18, theme: "Cardio Total", focus: "Cardio", exercises: ['CA12', 'CA13', 'CA14', 'CA15', 'CA16'] },
-            { day: 19, theme: "Escultura de Braços", focus: "Braços", exercises: ['B06', 'B07', 'B08', 'B09', 'B10'] },
-            { day: 20, theme: "Complexo Total Body", focus: "Total Body", exercises: ['P02', 'S02', 'C02', 'CA02', 'M02'] },
-            { day: 21, theme: "Avaliação Intermédia 📊", isEvaluation: true, exercises: ['P13', 'S10', 'C12'] },
-            { day: 22, theme: "Inferiores Fire", focus: "Membros Inferiores", exercises: ['P19', 'P20', 'P21', 'P22', 'P23'] },
-            { day: 23, theme: "Abdominais de Aço", focus: "Core", exercises: ['C16', 'C17', 'C18', 'C19', 'C20'] },
-            { day: 24, theme: "Força de Superiores", focus: "Membros Superiores", exercises: ['S19', 'S20', 'S21', 'S22', 'S23'] },
-            { day: 25, theme: "Cardio Endurance", focus: "Cardio", exercises: ['CA17', 'CA18', 'CA19', 'CA20', 'CA21'] },
-            { day: 26, theme: "Braços & Antebraços", focus: "Braços", exercises: ['B11', 'B12', 'B13', 'B14', 'B15'] },
-            { day: 27, theme: "Super Total Body", focus: "Total Body", exercises: ['P31', 'S31', 'C31', 'CA31', 'B31'] },
-            { day: 28, theme: "Descanso Ativo 🧘", focus: "Descanso", exercises: [] },
-            { day: 29, theme: "Preparação Final", focus: "Mobilidade", exercises: ['M06', 'M07', 'M08', 'M09', 'M10'] },
-            { day: 30, theme: "Avaliação Final 🏆", isEvaluation: true, exercises: ['P31', 'S31', 'C31'] }
-        ];
-
-        // Constants consolidated and moved to top for scope stability
+        const EXERCISES = window.EXERCISES || [];
 
         const { SUPABASE_URL, SUPABASE_KEY } = window.APP_CONFIG || {};
         if (!SUPABASE_URL || !SUPABASE_KEY) {
@@ -117,116 +112,202 @@ import { createClient } from '@supabase/supabase-js';
         const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
         window.supabase = supabase;
 
-        function AuthModal({ onAuth }) {
-            const [authMode, setAuthMode] = useState("register"); // login | register | recovery
+        function AuthModal() {
+            const [authMode, setAuthMode] = useState("login"); // login | register | recovery
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
+            const [showPassword, setShowPassword] = useState(false);
             const [error, setError] = useState('');
+            const [successMsg, setSuccessMsg] = useState('');
             const [loading, setLoading] = useState(false);
+
+            const switchMode = (nextMode) => {
+                setAuthMode(nextMode);
+                setError('');
+                setSuccessMsg('');
+            };
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 setError('');
-                if (!email || (authMode !== 'recovery' && !password)) return setError('Por favor, preencha todos os campos.');
-                
-                if (authMode !== 'recovery' && password.length < 6) return setError('A senha deve ter pelo menos 6 caracteres.');
+                setSuccessMsg('');
+
+                const cleanEmail = email.trim().toLowerCase();
+                if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
+                    return setError('Digite um e-mail válido.');
+                }
+                if (authMode !== 'recovery' && !password) {
+                    return setError('Por favor, digite sua senha.');
+                }
+                if (authMode !== 'recovery' && password.length < 6) {
+                    return setError('A senha deve ter pelo menos 6 caracteres.');
+                }
+
                 setLoading(true);
-
-                // Limpeza preventiva de estado antigo em novo cadastro
-                if (authMode === "register") {
-                    localStorage.removeItem('userProfile');
-                    localStorage.removeItem('completedLog');
-                    localStorage.removeItem('favoritedIds');
-                    localStorage.removeItem('challengeLog');
-                    localStorage.removeItem('xpBonus');
-                    localStorage.removeItem('metaProfile');
-                }
-
-                let res;
-                if (authMode === "recovery") {
-                    res = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
-                    if (!res.error) {
-                        setError('✅ Verifique sua caixa de entrada!');
-                        setLoading(false);
-                        return;
-                    }
-                } else if (authMode === "login") {
-                    res = await supabase.auth.signInWithPassword({ email, password });
-                } else {
-                    res = await supabase.auth.signUp({ email, password });
-                    
-                    if (!res.error && res.data && res.data.user) {
-                        // Verificação automática de compras pendentes da Hotmart
-                        const { data: pending } = await supabase
-                            .from('compras_pendentes')
-                            .select('*')
-                            .eq('email', email)
-                            .maybeSingle();
-
-                        let hasBaseAccess = false;
-                        let premiumFeatures = [];
-
-                        if (pending) {
-                            hasBaseAccess = pending.has_base_access;
-                            premiumFeatures = pending.premium_features;
-                            
-                            // Apagar da tabela de pendentes após cruzar dados
-                            await supabase.from('compras_pendentes').delete().eq('id', pending.id);
+                try {
+                    let res;
+                    if (authMode === "recovery") {
+                        res = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo: window.location.origin });
+                        if (!res.error) {
+                            setSuccessMsg('✅ Link enviado! Verifique sua caixa de entrada (e o spam).');
+                            setLoading(false);
+                            return;
                         }
-
-                        const { error: profileError } = await supabase.from('user_profiles').insert({
-                            id: res.data.user.id,
-                            has_base_access: hasBaseAccess,
-                            premium_features: premiumFeatures
-                        });
-                        if (profileError) {
-                            console.error('Erro ao criar perfil:', profileError);
+                    } else if (authMode === "login") {
+                        res = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+                    } else {
+                        res = await supabase.auth.signUp({ email: cleanEmail, password });
+                        if (!res.error && res.data?.user) {
+                            // Limpa cache de conta anterior apenas após sucesso real do cadastro
+                            try {
+                                ['userProfile', 'completedLog', 'favoritedIds', 'challengeLog', 'xpBonus', 'metaProfile', 'lastEvolucao'].forEach(k => localStorage.removeItem(k));
+                            } catch {}
                         }
                     }
-                }
 
-                if (res.error) {
-                    let msg = res.error.message;
-                    if (msg.includes('Invalid login credentials')) msg = 'Credenciais inválidas. Verifique o email e password.';
-                    if (msg.includes('User already registered')) msg = 'Este email já se encontra registado.';
-                    setError(msg);
-                } else if (authMode === "register" && !res.data.session) {
-                    setError('Cadastro bem-sucedido! Se não entrou, verifique o seu email.');
+                    if (res?.error) {
+                        const raw = res.error.message || '';
+                        let msg = raw;
+                        if (raw.includes('Invalid login credentials')) msg = 'E-mail ou senha incorretos. Confira seus dados ou clique em "Esqueci minha senha".';
+                        else if (raw.includes('User already registered')) msg = 'Este e-mail já está cadastrado. Toque em "Entrar" acima para acessar sua conta.';
+                        else if (raw.includes('Email not confirmed')) msg = 'Confirme seu e-mail clicando no link que enviamos na sua caixa de entrada.';
+                        else if (raw.includes('rate limit')) msg = 'Muitas tentativas seguidas. Aguarde um minuto e tente novamente.';
+                        setError(msg);
+                    } else if (authMode === "register" && !res?.data?.session) {
+                        setSuccessMsg('✅ Conta criada! Verifique sua caixa de entrada para confirmar seu e-mail e liberar o acesso.');
+                    }
+                } catch (err) {
+                    setError('Erro de conexão. Verifique sua internet e tente novamente.');
+                } finally {
+                    setLoading(false);
                 }
-                setLoading(false);
             };
 
             return (
-                <div className="auth-overlay">
+                <div className="auth-overlay" style={{ overflowY: 'auto', padding: '20px 16px' }}>
                     <div className="auth-card">
-                        <h2>{authMode === 'login' ? 'Iniciar Sessão' : authMode === 'register' ? 'Criar Conta' : 'Recuperar Acesso'}</h2>
+                        {authMode !== 'recovery' && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '14px', marginBottom: '20px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => switchMode('login')}
+                                    style={{
+                                        padding: '10px',
+                                        borderRadius: '10px',
+                                        fontWeight: '800',
+                                        fontSize: '13px',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        background: authMode === 'login' ? 'var(--accent)' : 'transparent',
+                                        color: authMode === 'login' ? '#fff' : 'rgba(255,255,255,0.65)',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    Entrar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => switchMode('register')}
+                                    style={{
+                                        padding: '10px',
+                                        borderRadius: '10px',
+                                        fontWeight: '800',
+                                        fontSize: '13px',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        background: authMode === 'register' ? 'var(--accent)' : 'transparent',
+                                        color: authMode === 'register' ? '#fff' : 'rgba(255,255,255,0.65)',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    Criar Conta
+                                </button>
+                            </div>
+                        )}
+
+                        <h2>{authMode === 'login' ? 'Bem-vindo(a) de volta!' : authMode === 'register' ? 'Criar sua Conta' : 'Recuperar Senha'}</h2>
                         <div className="auth-header-desc">
-                            {authMode === "recovery" ? "Insira seu email para receber o link de redefinição." : "Acesse seus desafios, guarde favoritos e acompanhe o seu progresso diariamente."}
+                            {authMode === "recovery"
+                                ? "Digite o mesmo e-mail usado na compra para receber o link de nova senha."
+                                : authMode === "register"
+                                ? "Use o mesmo e-mail da compra na Hotmart para liberar seus treinos e guias automaticamente."
+                                : "Entre com seu e-mail e senha para acessar seus treinos, evolução e Nutri-Scan IA."}
                         </div>
                         <form onSubmit={handleSubmit}>
                             <div className="input-group">
-                                <label>Email</label>
-                                <input type="email" className="ob-input" value={email} onChange={e => setEmail(e.target.value)} disabled={loading} placeholder="exemplo@gmail.com" />
+                                <label>E-mail</label>
+                                <input
+                                    type="email"
+                                    autoCapitalize="none"
+                                    autoCorrect="off"
+                                    autoComplete="email"
+                                    className="ob-input"
+                                    value={email}
+                                    onChange={e => setEmail(e.target.value)}
+                                    disabled={loading}
+                                    placeholder="seuemail@gmail.com"
+                                />
                             </div>
                             {authMode !== 'recovery' && (
-                            <div className="input-group">
-                                <label>Senha</label>
-                                <input type="password" className="ob-input" value={password} onChange={e => setPassword(e.target.value)} disabled={loading} placeholder="••••••" />
-                            </div>
-                        )}
-                            <div className="auth-error">{error}</div>
+                                <div className="input-group">
+                                    <label>Senha</label>
+                                    <div style={{ position: 'relative' }}>
+                                        <input
+                                            type={showPassword ? 'text' : 'password'}
+                                            autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
+                                            className="ob-input"
+                                            style={{ paddingRight: '46px' }}
+                                            value={password}
+                                            onChange={e => setPassword(e.target.value)}
+                                            disabled={loading}
+                                            placeholder="Mínimo 6 caracteres"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(v => !v)}
+                                            aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                                            style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'rgba(255,255,255,0.65)', cursor: 'pointer', fontSize: '16px', padding: '4px 6px' }}
+                                        >
+                                            {showPassword ? '🙈' : '👁️'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {error && <div className="auth-error" style={{ color: '#f87171', marginBottom: '10px' }}>{error}</div>}
+                            {successMsg && (
+                                <div style={{ background: 'rgba(16,185,129,0.14)', border: '1px solid rgba(16,185,129,0.35)', color: '#6ee7b7', padding: '10px 12px', borderRadius: '10px', fontSize: '12.5px', fontWeight: '700', marginBottom: '12px', textAlign: 'center' }}>
+                                    {successMsg}
+                                </div>
+                            )}
+
                             <button type="submit" className="ob-submit-btn" disabled={loading}>
-                                {loading ? "Carregando..." : (authMode === "login" ? "Entrar no Portal" : authMode === "register" ? "Concluir Cadastro" : "Enviar Link de Recuperação")}
+                                {loading ? "Carregando..." : (authMode === "login" ? "Entrar no Aplicativo" : authMode === "register" ? "Criar Minha Conta" : "Enviar Link de Recuperação")}
                             </button>
                         </form>
-                        {authMode === 'login' && (
-                            <div style={{ textAlign: 'right', marginTop: '12px' }}>
-                                <a href="#" onClick={(e) => { e.preventDefault(); setAuthMode('recovery'); setError(''); }} style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', textDecoration: 'underline' }}>Esqueci minha senha</a>
+
+                        {authMode !== 'recovery' ? (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', gap: '8px' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => switchMode('recovery')}
+                                    style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: '12px', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}
+                                >
+                                    Esqueci minha senha
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => switchMode(authMode === 'login' ? 'register' : 'login')}
+                                    style={{ background: 'none', border: 'none', color: 'var(--accent)', fontSize: '12px', fontWeight: '800', cursor: 'pointer', padding: 0 }}
+                                >
+                                    {authMode === 'login' ? 'Primeiro acesso? Criar conta' : 'Já tenho conta → Entrar'}
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="auth-toggle" onClick={() => switchMode('login')}>
+                                ← Voltar para <span>Entrar</span>
                             </div>
                         )}
-                        <div className="auth-toggle" onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setError(""); }}>
-                            {authMode === "login" ? <React.Fragment>Novo por aqui? <span>Criar Conta</span></React.Fragment> : <React.Fragment>Já tem uma conta? <span>Iniciar Sessão</span></React.Fragment>}
-                        </div>
                     </div>
                 </div>
             );
@@ -242,238 +323,237 @@ import { createClient } from '@supabase/supabase-js';
                 try {
                     const legacy = JSON.parse(localStorage.getItem('completedIds') || 'null');
                     const stored = JSON.parse(localStorage.getItem('completedLog') || 'null');
-                    if (stored) return stored;
+                    if (Array.isArray(stored)) return stored;
                     if (legacy && Array.isArray(legacy)) {
-                        // Migrate legacy string array to object array with current timestamp
                         const now = Date.now();
-                        const migrated = legacy.map(id => ({ id: typeof id === 'string' ? id : id.id, ts: now }));
-                        return migrated;
+                        return legacy.map(id => ({ id: typeof id === 'string' ? id : id.id, ts: now }));
                     }
                     return [];
                 } catch { return []; }
             });
-            const [favoritedIds, setF] = useState(() => { try { return JSON.parse(localStorage.getItem('favoritedIds') || '[]'); } catch { return []; } });
+            const [favoritedIds, setF] = useState(() => { try { const parsed = JSON.parse(localStorage.getItem('favoritedIds') || '[]'); return Array.isArray(parsed) ? parsed : []; } catch { return []; } });
             const [userProfile, setP] = useState(() => {
                 try {
-                    const stored = JSON.parse(localStorage.getItem('userProfile'));
-                    if (stored) {
-                        if (!stored.permissions) stored.permissions = { base: true, senior: false, pilates: false, gymnastics: false };
-                        // Sincronização Proativa (Anti-Amnésia)
-                        const extraUnlocked = JSON.parse(localStorage.getItem('app_unlocked_modules') || '[]');
-                        extraUnlocked.forEach(mod => { if(mod) stored.permissions[mod] = true; });
-
-                        // Bypass removed for production
-
-
-                        return stored;
-                    }
-                    return null;
+                    const stored = JSON.parse(localStorage.getItem('userProfile') || 'null');
+                    return stored && typeof stored === 'object' ? stored : null;
                 } catch { return null; }
             });
-            const [challengeLog, setChallengeLog] = useState(() => { try { return JSON.parse(localStorage.getItem('challengeLog') || '[]'); } catch { return []; } });
-            const [xpBonus, setXp] = useState(() => { try { return parseInt(localStorage.getItem('xpBonus')) || 0; } catch { return 0; } });
+            const [challengeLog, setChallengeLog] = useState(() => { try { const parsed = JSON.parse(localStorage.getItem('challengeLog') || '[]'); return Array.isArray(parsed) ? parsed : []; } catch { return []; } });
+            const [xpBonus, setXp] = useState(() => { try { return parseInt(localStorage.getItem('xpBonus'), 10) || 0; } catch { return 0; } });
             const [metaProfile, setMeta] = useState(() => { try { return JSON.parse(localStorage.getItem('metaProfile') || 'null'); } catch { return null; } });
+
+            // Server-synced Nutri-Scan trial quota (source of truth: ai_usage_logs via analyze-meal)
+            const [nutriQuota, setNutriQuota] = useState({
+                hasNutriScan: false,
+                freeScansUsed: 0,
+                freeScansRemaining: NUTRISCAN_FREE_LIMIT,
+                loaded: false
+            });
+
+            const refreshNutriQuota = useCallback(async (activeSession = session) => {
+                if (!activeSession) return;
+                try {
+                    const { data, error } = await supabase.functions.invoke('analyze-meal', {
+                        body: { action: 'status' }
+                    });
+                    if (!error && data) {
+                        setNutriQuota({
+                            hasNutriScan: Boolean(data.hasNutriScan),
+                            freeScansUsed: Number(data.freeScansUsed) || 0,
+                            freeScansRemaining: typeof data.freeScansRemaining === 'number' ? data.freeScansRemaining : NUTRISCAN_FREE_LIMIT,
+                            loaded: true
+                        });
+                    }
+                } catch (err) {
+                    console.warn('Falha ao consultar cota Nutri-Scan:', err);
+                }
+            }, [session]);
+
+            const syncToSupa = useCallback(async (updates) => {
+                if (!session) return { error: null };
+                const { error } = await supabase.from('user_profiles').update(updates).eq('id', session.user.id);
+                if (error) console.error('Erro ao sincronizar user_profiles:', error);
+                return { error };
+            }, [session]);
+
+            const hydrateFromSupabase = useCallback(async (activeSession) => {
+                if (!activeSession) return;
+                try {
+                    const [{ data, error }, favsRes, comprasRes] = await Promise.all([
+                        supabase.from('user_profiles').select('*').eq('id', activeSession.user.id).maybeSingle(),
+                        supabase.from('treinos_guardados').select('id_do_treino').eq('user_id', activeSession.user.id),
+                        supabase.from('compras_utilizadores').select('modulo_comprado, status').eq('user_id', activeSession.user.id)
+                    ]);
+
+                    if (favsRes.data) {
+                        setF(favsRes.data.map(row => row.id_do_treino));
+                    }
+
+                    const activeModules = Array.isArray(comprasRes.data)
+                        ? comprasRes.data.filter(c => !c.status || c.status === 'active').map(c => c.modulo_comprado)
+                        : [];
+
+                    if (data) {
+                        if (Array.isArray(data.completed_log)) setC(data.completed_log);
+                        if (Array.isArray(data.challenge_log)) setChallengeLog(data.challenge_log);
+                        if (typeof data.xp_bonus === 'number') setXp(data.xp_bonus);
+
+                        const mergedPermissions = {};
+                        (Array.isArray(data.premium_features) ? data.premium_features : []).forEach(m => { if (m) mergedPermissions[m] = true; });
+                        activeModules.forEach(m => { if (m) mergedPermissions[m] = true; });
+
+                        setP({
+                            ...data,
+                            age: data.idade ?? data.age ?? null,
+                            goal: data.goal || data.objetivo_principal || '',
+                            permissions: mergedPermissions
+                        });
+
+                        if (data.idade || data.objetivo_principal || data.peso_objetivo || data.daily_calorie_goal) {
+                            const mp = {
+                                idade: data.idade,
+                                objetivo_principal: data.objetivo_principal,
+                                peso_objetivo: data.peso_objetivo,
+                                daily_calorie_goal: data.daily_calorie_goal
+                            };
+                            setMeta(mp);
+                            try { localStorage.setItem('metaProfile', JSON.stringify(mp)); } catch {}
+                        }
+                    } else if (!error || error.code === 'PGRST116') {
+                        // Aguarda trigger criar user_profiles ou cria perfil mínimo sem entitlements
+                        setP(prev => prev && prev.id === activeSession.user.id ? prev : {
+                            id: activeSession.user.id,
+                            email: activeSession.user.email,
+                            permissions: {}
+                        });
+                    }
+                    setLocalSynced(true);
+                    refreshNutriQuota(activeSession);
+                } catch (err) {
+                    console.error('Erro ao carregar dados do Supabase:', err);
+                    setLocalSynced(true);
+                }
+            }, [refreshNutriQuota]);
 
             // Supabase Session Mgt
             useEffect(() => {
-                supabase.auth.getSession().then(({ data: { session } }) => {
-                    setSession(session);
+                supabase.auth.getSession().then(({ data: { session: s } }) => {
+                    setSession(s);
                     setAuthLoading(false);
                 });
 
-                const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+                const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
                     if (event === 'INITIAL_SESSION') return;
                     if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
-                    setSession(session);
+                    setSession(s);
                     setAuthLoading(false);
-                    
-                    // Reset total de estados ao mudar de conta ou fazer logout
-                    if (event === 'SIGNED_OUT' || (event === 'SIGNED_IN' && !session)) {
+
+                    if (event === 'SIGNED_OUT' || (event === 'SIGNED_IN' && !s)) {
                         setP(null);
                         setC([]);
                         setF([]);
                         setChallengeLog([]);
                         setXp(0);
                         setMeta(null);
-                        localStorage.clear();
+                        setNutriQuota({ hasNutriScan: false, freeScansUsed: 0, freeScansRemaining: NUTRISCAN_FREE_LIMIT, loaded: false });
+                        try { localStorage.clear(); } catch {}
+                        setLocalSynced(false);
+                    } else if (event === 'SIGNED_IN' && s) {
                         setLocalSynced(false);
                     }
                 });
                 return () => subscription.unsubscribe();
             }, []);
 
-            // Sync from DB when logged in
+            // Sync from DB once per session
             useEffect(() => {
                 if (session && !localSynced) {
-                    const fetchSupa = async () => {
-                        const { data, error } = await supabase.from('user_profiles').select('*').eq('id', session.user.id).maybeSingle();
-                        if (data) {
-                            if (data.completed_log) setC(data.completed_log);
-                            if (data.challenge_log) setChallengeLog(data.challenge_log);
-                            if (data.xp_bonus) setXp(data.xp_bonus);
-                            setP(prev => ({ ...(prev || {}), ...data }));
-                            if (data.idade || data.objetivo_principal || data.peso_objetivo || data.daily_calorie_goal) {
-                                const mp = { idade: data.idade, objetivo_principal: data.objetivo_principal, peso_objetivo: data.peso_objetivo, daily_calorie_goal: data.daily_calorie_goal };
-                                setMeta(mp);
-                                localStorage.setItem('metaProfile', JSON.stringify(mp));
-                            }
-                            
-                            // Carregar permissões da Hotmart
-                            if (data.has_base_access !== undefined || data.premium_features) {
-                                let hasBase = data.has_base_access;
-                                let features = data.premium_features || [];
-
-                                // Bypass removed for production
-
-
-                                setP(prev => ({
-                                    ...prev,
-                                    has_base_access: hasBase,
-                                    premium_features: features
-                                }));
-                            }
-
-                            const favsRes = await supabase.from('treinos_guardados').select('id_do_treino').eq('user_id', session.user.id);
-                            if (favsRes.data) {
-                                setF(favsRes.data.map(row => row.id_do_treino));
-                            }
-
-                            const comprasRes = await supabase.from('compras_utilizadores').select('modulo_comprado').eq('user_id', session.user.id);
-                            if (comprasRes.data && comprasRes.data.length > 0) {
-                                setP(prev => {
-                                    if (!prev) return prev;
-                                    const newPerms = { ...prev.permissions };
-                                    comprasRes.data.forEach(c => { newPerms[c.modulo_comprado] = true; });
-                                    return { ...prev, permissions: newPerms };
-                                });
-                            }
-                            setLocalSynced(true);
-                        } else if (!data || (error && error.code === 'PGRST116')) {
-                            // First time login - seed with local storage data
-                            await supabase.from('user_profiles').update({
-                                completed_log: completedLog,
-                                challenge_log: challengeLog,
-                                xp_bonus: xpBonus
-                            }).eq('id', session.user.id);
-
-                            if (favoritedIds.length > 0) {
-                                const inserts = favoritedIds.map(fid => ({ user_id: session.user.id, id_do_treino: fid }));
-                                await supabase.from('treinos_guardados').insert(inserts);
-                            }
-
-                            setLocalSynced(true);
-                        }
-                    };
-                    fetchSupa();
+                    hydrateFromSupabase(session);
                 } else if (!session) {
                     setLocalSynced(false);
                 }
-            }, [session, localSynced]);
+            }, [session, localSynced, hydrateFromSupabase]);
 
-            // Unified Supabase Write Wrapper
-            const syncToSupa = useCallback(async (updates) => {
-                if (session) {
-                    await supabase.from('user_profiles').update(updates).eq('id', session.user.id);
-                }
-            }, [session]);
-
-            useEffect(() => {
-                localStorage.setItem('completedLog', JSON.stringify(completedLog));
-                if (localSynced) syncToSupa({ completed_log: completedLog });
-            }, [completedLog, localSynced, syncToSupa]);
-
-            useEffect(() => {
-                localStorage.setItem('favoritedIds', JSON.stringify(favoritedIds));
-            }, [favoritedIds]);
-
-            useEffect(() => {
-                if (userProfile) {
-                    localStorage.setItem('userProfile', JSON.stringify(userProfile));
-                    if (localSynced) {
-                        const resolvedGoal = userProfile.goal || userProfile.objetivo_principal || null;
-                        const resolvedAge = userProfile.age || userProfile.idade || null;
-                        syncToSupa({ 
-                            name: userProfile.name || null, 
-                            objetivo_principal: resolvedGoal,
-                            goal: resolvedGoal,
-                            gender: userProfile.gender || null,
-                            idade: resolvedAge ? parseInt(resolvedAge, 10) : null,
-                            estado: userProfile.estado || null,
-                            whatsapp: userProfile.whatsapp || null,
-                            has_base_access: userProfile.has_base_access,
-                            premium_features: userProfile.premium_features
-                        });
-                    }
-                }
-            }, [userProfile, localSynced, syncToSupa]);
-
-            useEffect(() => {
-                localStorage.setItem('challengeLog', JSON.stringify(challengeLog));
-                if (localSynced) syncToSupa({ challenge_log: challengeLog });
-            }, [challengeLog, localSynced, syncToSupa]);
-
-            useEffect(() => {
-                localStorage.setItem('xpBonus', xpBonus.toString());
-                if (localSynced) syncToSupa({ xp_bonus: xpBonus });
-            }, [xpBonus, localSynced, syncToSupa]);
+            // Mirror state to localStorage safely (zero automatic Supabase cascades on load)
+            useEffect(() => { try { localStorage.setItem('completedLog', JSON.stringify(completedLog)); } catch {} }, [completedLog]);
+            useEffect(() => { try { localStorage.setItem('favoritedIds', JSON.stringify(favoritedIds)); } catch {} }, [favoritedIds]);
+            useEffect(() => { if (userProfile) { try { localStorage.setItem('userProfile', JSON.stringify(userProfile)); } catch {} } }, [userProfile]);
+            useEffect(() => { try { localStorage.setItem('challengeLog', JSON.stringify(challengeLog)); } catch {} }, [challengeLog]);
+            useEffect(() => { try { localStorage.setItem('xpBonus', String(xpBonus)); } catch {} }, [xpBonus]);
 
             const logout = useCallback(async () => {
                 await supabase.auth.signOut();
-                // Opcional: limpar local storage em public terminals
             }, []);
 
-            // Helper to check if an exercise is completed
             const isCompleted = useCallback(id => completedLog.some(x => x.id === id), [completedLog]);
 
             const toggleComplete = useCallback(id => {
-                setC(p => {
-                    const exists = p.some(x => x.id === id);
-                    if (exists) return p.filter(x => x.id !== id);
-                    return [...p, { id, ts: Date.now() }];
+                let added = false;
+                setC(prev => {
+                    const exists = prev.some(x => x.id === id);
+                    const next = exists ? prev.filter(x => x.id !== id) : [...prev, { id, ts: Date.now() }];
+                    added = !exists;
+                    syncToSupa({ completed_log: next });
+                    return next;
                 });
-                return !isCompleted(id);
-            }, [isCompleted]);
+                return added;
+            }, [syncToSupa]);
 
             const completeWorkout = useCallback((exerciseIds) => {
-                setC(p => {
-                    const newLogs = [...p];
-                    let added = false;
-                    exerciseIds.forEach(id => {
-                        if (!newLogs.some(x => x.id === id)) {
-                            newLogs.push({ id, ts: Date.now() });
-                            added = true;
+                setC(prev => {
+                    const next = [...prev];
+                    let changed = false;
+                    (exerciseIds || []).forEach(id => {
+                        if (!next.some(x => x.id === id)) {
+                            next.push({ id, ts: Date.now() });
+                            changed = true;
                         }
                     });
-                    return added ? newLogs : p;
+                    if (changed) syncToSupa({ completed_log: next });
+                    return changed ? next : prev;
                 });
-                setXp(x => x + 500);
+                setXp(prevXp => {
+                    const nextXp = prevXp + 500;
+                    syncToSupa({ xp_bonus: nextXp });
+                    return nextXp;
+                });
                 window.dispatchEvent(new CustomEvent('triggerNutriScanUpsell'));
-            }, []);
+            }, [syncToSupa]);
 
             const completeChallengeDay = useCallback((day) => {
-                setChallengeLog(p => p.includes(day) ? p : [...p, day]);
-                setXp(x => x + 1000);
+                setChallengeLog(prev => {
+                    if (prev.includes(day)) return prev;
+                    const next = [...prev, day];
+                    syncToSupa({ challenge_log: next });
+                    return next;
+                });
+                setXp(prevXp => {
+                    const nextXp = prevXp + 1000;
+                    syncToSupa({ xp_bonus: nextXp });
+                    return nextXp;
+                });
                 window.dispatchEvent(new CustomEvent('triggerNutriScanUpsell'));
-            }, []);
+            }, [syncToSupa]);
 
             const toggleFavorite = useCallback(async (id) => {
                 const isFav = favoritedIds.includes(id);
                 setF(p => isFav ? p.filter(x => x !== id) : [...p, id]);
 
                 if (session) {
-                    if (isFav) {
-                        await supabase.from('treinos_guardados').delete().match({ user_id: session.user.id, id_do_treino: id });
-                    } else {
-                        await supabase.from('treinos_guardados').insert({ user_id: session.user.id, id_do_treino: id });
-                    }
+                    const { error } = isFav
+                        ? await supabase.from('treinos_guardados').delete().match({ user_id: session.user.id, id_do_treino: id })
+                        : await supabase.from('treinos_guardados').insert({ user_id: session.user.id, id_do_treino: id });
+                    if (error) console.error('Erro ao atualizar favorito:', error);
                 }
 
                 return !isFav;
             }, [favoritedIds, session]);
+
             const saveProfile = useCallback(async (name, goal, gender, age, estado, whatsapp) => {
                 const parsedAge = age ? parseInt(age, 10) : null;
                 setP(prev => ({
-                    ...prev,
+                    ...(prev || {}),
+                    id: session?.user?.id || prev?.id,
                     name,
                     goal,
                     objetivo_principal: goal,
@@ -481,13 +561,10 @@ import { createClient } from '@supabase/supabase-js';
                     age: parsedAge,
                     idade: parsedAge,
                     estado,
-                    whatsapp,
-                    has_base_access: prev?.has_base_access ?? true,
-                    premium_features: prev?.premium_features ?? [],
-                    permissions: prev?.permissions || { base: true, senior: false, pilates: false, gymnastics: false, desafio30: false }
+                    whatsapp
                 }));
                 if (session) {
-                    await supabase.from('user_profiles').upsert({
+                    const { error } = await supabase.from('user_profiles').upsert({
                         id: session.user.id,
                         name,
                         goal,
@@ -497,61 +574,65 @@ import { createClient } from '@supabase/supabase-js';
                         estado,
                         whatsapp
                     }, { onConflict: 'id' });
+                    if (error) {
+                        console.error('Erro ao salvar perfil:', error);
+                        return { error };
+                    }
                 }
+                return { error: null };
             }, [session]);
 
-            const unlockModule = useCallback(async (moduleName) => {
-                setP(prev => {
-                    if (!prev) return prev;
-                    return { ...prev, permissions: { ...prev.permissions, [moduleName]: true } };
+            const redeemPromoCode = useCallback(async (rawCode) => {
+                if (!session) return { ok: false, error: 'Faça login para ativar seu código.' };
+                const { data, error } = await supabase.functions.invoke('redeem-code', {
+                    body: { code: rawCode }
                 });
-                if (session) {
-                    // Backup Anti-Amnésia (Redundância de Persistência)
+                if (error) {
+                    let msg = 'Código inválido ou expirado. Verifique o e-mail da Hotmart.';
                     try {
-                        const extra = JSON.parse(localStorage.getItem('app_unlocked_modules') || '[]');
-                        if (!extra.includes(moduleName)) {
-                            localStorage.setItem('app_unlocked_modules', JSON.stringify([...extra, moduleName]));
+                        if (error.context) {
+                            const body = await error.context.json();
+                            if (body?.error) msg = body.error;
                         }
-                    } catch(e) {}
-                    await supabase.from('compras_utilizadores').upsert({ user_id: session.user.id, modulo_comprado: moduleName }, { onConflict: 'user_id,modulo_comprado' });
+                    } catch {}
+                    return { ok: false, error: msg };
                 }
-            }, [session]);
-
-            const unlockAll = useCallback(async () => {
-                setP(prev => {
-                    if (!prev) return prev;
-                    return { ...prev, permissions: { ...prev.permissions, senior: true, pilates: true, gymnastics: true, desafio30: true, vip: true, gold: true, vip_gold: true, scanner_ia: true, musculacao: true } };
-                });
-                if (session) {
-                    const mods = ['senior', 'pilates', 'gymnastics', 'desafio30', 'vip', 'gold'];
-                    const inserts = mods.map(m => ({ user_id: session.user.id, modulo_comprado: m }));
-                    await supabase.from('compras_utilizadores').upsert(inserts, { onConflict: 'user_id,modulo_comprado' });
+                if (!data?.success) {
+                    return { ok: false, error: data?.error || 'Código inválido ou expirado.' };
                 }
-            }, [session]);
+                await hydrateFromSupabase(session);
+                return { ok: true, data };
+            }, [session, hydrateFromSupabase]);
 
             const saveMetaProfile = useCallback(async ({ idade, objetivo_principal, peso_objetivo }) => {
                 const mp = { idade, objetivo_principal, peso_objetivo };
                 setMeta(mp);
-                localStorage.setItem('metaProfile', JSON.stringify(mp));
+                try { localStorage.setItem('metaProfile', JSON.stringify(mp)); } catch {}
                 if (session) {
-                    await supabase.from('user_profiles').update({ idade, objetivo_principal, peso_objetivo }).eq('id', session.user.id);
+                    const { error } = await supabase.from('user_profiles').update({ idade, objetivo_principal, peso_objetivo }).eq('id', session.user.id);
+                    if (error) console.error('Erro ao salvar perfil metabólico:', error);
                 }
             }, [session]);
 
-            // --- Audio Logic for Sleep Module ---
+            // --- Audio Logic for Sleep Module (with proper cleanup) ---
             const [currentAudioId, setCurrentAudioId] = React.useState(null);
-            const [audioTimer, setAudioTimer] = React.useState(null);
+            const audioTimerRef = React.useRef(null);
             const audioRef = React.useRef(null);
 
-            const playAudio = React.useCallback((id, file, durationMs = null) => {
+            const stopAudio = React.useCallback(() => {
                 if (audioRef.current) {
                     audioRef.current.pause();
+                    audioRef.current = null;
                 }
-                if (audioTimer) {
-                    clearTimeout(audioTimer);
-                    setAudioTimer(null);
+                if (audioTimerRef.current) {
+                    clearTimeout(audioTimerRef.current);
+                    audioTimerRef.current = null;
                 }
+                setCurrentAudioId(null);
+            }, []);
 
+            const playAudio = React.useCallback((id, file, durationMs = null) => {
+                stopAudio();
                 const audio = new Audio(file);
                 audio.loop = true;
                 audio.play().catch(e => console.error("Audio play error:", e));
@@ -559,39 +640,26 @@ import { createClient } from '@supabase/supabase-js';
                 setCurrentAudioId(id);
 
                 if (durationMs) {
-                    const timer = setTimeout(() => {
-                        if (audioRef.current) {
-                            audioRef.current.pause();
-                            audioRef.current = null;
-                        }
-                        setCurrentAudioId(null);
-                        setAudioTimer(null);
+                    audioTimerRef.current = setTimeout(() => {
+                        stopAudio();
                     }, durationMs);
-                    setAudioTimer(timer);
                 }
-            }, [audioTimer]);
+            }, [stopAudio]);
 
-            const stopAudio = React.useCallback(() => {
-                if (audioRef.current) {
-                    audioRef.current.pause();
-                    audioRef.current = null;
-                }
-                if (audioTimer) {
-                    clearTimeout(audioTimer);
-                    setAudioTimer(null);
-                }
-                setCurrentAudioId(null);
-            }, [audioTimer]);
+            useEffect(() => {
+                return () => stopAudio();
+            }, [stopAudio]);
 
             return React.useMemo(() => ({
                 recoveryMode, setRecoveryMode,
                 session, authLoading, localSynced, logout,
                 completedLog, favoritedIds, userProfile, challengeLog, xpBonus,
                 metaProfile, saveMetaProfile,
+                nutriQuota, setNutriQuota, refreshNutriQuota,
                 isCompleted, toggleComplete, completeWorkout, completeChallengeDay,
-                toggleFavorite, saveProfile, unlockModule, unlockAll,
+                toggleFavorite, saveProfile, redeemPromoCode,
                 currentAudioId, playAudio, stopAudio
-            }), [session, authLoading, localSynced, recoveryMode, completedLog, favoritedIds, userProfile, challengeLog, xpBonus, metaProfile, saveMetaProfile, isCompleted, toggleComplete, completeWorkout, completeChallengeDay, toggleFavorite, saveProfile, unlockModule, unlockAll, currentAudioId, playAudio, stopAudio]);
+            }), [session, authLoading, localSynced, recoveryMode, logout, completedLog, favoritedIds, userProfile, challengeLog, xpBonus, metaProfile, saveMetaProfile, nutriQuota, refreshNutriQuota, isCompleted, toggleComplete, completeWorkout, completeChallengeDay, toggleFavorite, saveProfile, redeemPromoCode, currentAudioId, playAudio, stopAudio]);
         }
 
 
@@ -695,11 +763,12 @@ import { createClient } from '@supabase/supabase-js';
 
             let targetKcal = null;
             if (hasProfile && evolData?.peso && evolData?.altura_cm) {
-                const genero = evolData.genero || 'masculino';
+                const generoRaw = String(evolData.genero || 'masculino').toLowerCase();
+                const isMale = generoRaw === 'm' || generoRaw === 'masculino' || generoRaw === 'male';
                 const peso = parseFloat(evolData.peso);
                 const altura = parseFloat(evolData.altura_cm);
-                const idade = parseInt(mp.idade);
-                const bmr = genero === 'masculino'
+                const idade = parseInt(mp.idade, 10);
+                const bmr = isMale
                     ? (10 * peso) + (6.25 * altura) - (5 * idade) + 5
                     : (10 * peso) + (6.25 * altura) - (5 * idade) - 161;
                 const tdee = bmr * 1.55;
@@ -825,15 +894,9 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function Sidebar({ page, onNav, userProfile }) {
-            const hasAccess = (mod) => {
-                if (!userProfile?.permissions) return false;
-                if (userProfile.permissions.gold || userProfile.permissions.vip) return true;
-                if (userProfile.permissions.senior && userProfile.permissions.pilates && userProfile.permissions.gymnastics && userProfile.permissions.desafio30) return true;
-                return userProfile.permissions[mod];
-            };
-
-            const hasAnyPremium = hasAccess('senior') || hasAccess('pilates') || hasAccess('gymnastics');
+        function Sidebar({ page, onNav, userProfile, onLogout }) {
+            const ent = resolveEntitlements(userProfile);
+            const hasAnyPremium = ent.hasSenior || ent.hasPilates || ent.hasGymnastics;
 
             return (<aside className="sidebar">
                 <div className="sidebar-logo"><span>🏋️</span><span className="accent">+500 Exercícios</span></div>
@@ -841,15 +904,12 @@ import { createClient } from '@supabase/supabase-js';
                     Olá, <strong style={{ color: 'var(--text-primary)' }}>{userProfile.name}</strong>
                 </div>}
                 <nav className="sidebar-nav">
-                    {NAV.map(n => {
-                        if (n.requiresAccess && !hasAccess(n.requiresAccess)) return null;
-                        return (
-                            <button key={n.id} className={`sidebar-link ${page === n.id ? 'active' : ''}`} onClick={() => onNav(n.id)}>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d={n.d} strokeLinecap="round" strokeLinejoin="round" /></svg>
-                                {n.label}
-                            </button>
-                        );
-                    })}
+                    {NAV.map(n => (
+                        <button key={n.id} className={`sidebar-link ${page === n.id ? 'active' : ''}`} onClick={() => onNav(n.id)}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d={n.d} strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            {n.label}
+                        </button>
+                    ))}
 
                     <button className={`sidebar-link ${page === 'guardados' ? 'active' : ''}`} onClick={() => onNav('guardados')}>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -861,26 +921,26 @@ import { createClient } from '@supabase/supabase-js';
                             <div style={{ padding: '0 20px', fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '12px' }}>
                                 Meus Módulos
                             </div>
-                            {hasAccess('senior') && (
-                                <button className={`sidebar-link ${page === 'treinos_senior' ? 'active' : ''}`} onClick={() => onNav('explorar_senior')} style={{ color: 'var(--accent)' }}>
-                                    <span style={{ fontSize: '18px', marginRight: '8px' }}>👵</span> Idosos
+                            {ent.hasSenior && (
+                                <button className={`sidebar-link ${page === 'explorar_senior' ? 'active' : ''}`} onClick={() => onNav('explorar_senior')} style={{ color: 'var(--accent)' }}>
+                                    <span style={{ fontSize: '18px', marginRight: '8px' }}>👵</span> Recuperação Ativa
                                 </button>
                             )}
-                            {hasAccess('pilates') && (
+                            {ent.hasPilates && (
                                 <button className={`sidebar-link ${page === 'explorar_pilates' ? 'active' : ''}`} onClick={() => onNav('explorar_pilates')} style={{ color: 'var(--accent)' }}>
                                     <span style={{ fontSize: '18px', marginRight: '8px' }}>🧘‍♀️</span> Pilates
                                 </button>
                             )}
-                            {hasAccess('gymnastics') && (
+                            {ent.hasGymnastics && (
                                 <button className={`sidebar-link ${page === 'explorar_gymnastics' ? 'active' : ''}`} onClick={() => onNav('explorar_gymnastics')} style={{ color: 'var(--accent)' }}>
-                                    <span style={{ fontSize: '18px', marginRight: '8px' }}>🤸‍♂️</span> Ginástica
+                                    <span style={{ fontSize: '18px', marginRight: '8px' }}>🤸‍♂️</span> Mini-Bands
                                 </button>
                             )}
                         </div>
                     )}
 
                     <div style={{ marginTop: 'auto', paddingTop: '24px' }}>
-                        <button className="sidebar-link" onClick={window.supabase.auth.signOut.bind(window.supabase.auth)} style={{ color: 'var(--text-muted)' }}>
+                        <button className="sidebar-link" onClick={() => onLogout ? onLogout() : supabase.auth.signOut()} style={{ color: 'var(--text-muted)' }}>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" strokeLinecap="round" strokeLinejoin="round" /></svg>
                             Sair da Conta
                         </button>
@@ -889,45 +949,16 @@ import { createClient } from '@supabase/supabase-js';
             </aside>);
         }
 
-        const ALIEN_SPRITES_GLOBAL = "./image_11.png";
+        function Onboarding({ onComplete, initialProfile = null, onCancel = null }) {
+            const [name, setName] = useState(initialProfile?.name || '');
+            const [goal, setGoal] = useState(initialProfile?.goal || initialProfile?.objetivo_principal || '');
+            const [age, setAge] = useState(initialProfile?.idade || initialProfile?.age || 38);
+            const [selectedGender, setSelectedGender] = useState(initialProfile?.gender || '');
+            const [estado, setEstado] = useState(initialProfile?.estado || '');
+            const [whatsapp, setWhatsapp] = useState(initialProfile?.whatsapp || '');
+            const [validationErr, setValidationErr] = useState('');
+            const [saving, setSaving] = useState(false);
 
-        function Header({ search, onSearch, userProfile }) {
-            const renderAvatar = () => {
-                if (!userProfile) return null;
-                const isMale = userProfile?.gender === 'male' || userProfile?.gender === 'Masculino';
-                const isFemale = userProfile?.gender === 'female' || userProfile?.gender === 'Feminino';
-
-                return (
-                    <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center bg-gray-800 shrink-0 border border-white/10 shadow-lg">
-                        {isFemale ? (
-                            <img src={ALIEN_SPRITES_GLOBAL} alt="Avatar" className="w-full h-full object-cover" style={{ objectPosition: '105% 0%', transform: 'scale(2.2)' }} />
-                        ) : isMale ? (
-                            <img src={ALIEN_SPRITES_GLOBAL} alt="Avatar" className="w-full h-full object-cover" style={{ objectPosition: '20% 0%', transform: 'scale(2.2)' }} />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-cyan-500 to-blue-600">
-                                <span className="text-white font-bold text-lg">
-                                    {userProfile?.name?.charAt(0)?.toUpperCase() || 'U'}
-                                </span>
-                            </div>
-                        )}
-                    </div>
-                );
-            };
-
-            return (<header className="header">
-                {userProfile && <div className="header-user" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    {renderAvatar()}
-                </div>}
-            </header>);
-        }
-
-        function Onboarding({ onComplete }) {
-            const [name, setName] = useState('');
-            const [goal, setGoal] = useState('');
-            const [age, setAge] = useState(38);
-            const [selectedGender, setSelectedGender] = useState('');
-            const [estado, setEstado] = useState('');
-            const [whatsapp, setWhatsapp] = useState('');
             const ESTADOS_BR = ["Acre", "Alagoas", "Amapá", "Amazonas", "Bahia", "Ceará", "Distrito Federal", "Espírito Santo", "Goiás", "Maranhão", "Mato Grosso", "Mato Grosso do Sul", "Minas Gerais", "Pará", "Paraíba", "Paraná", "Pernambuco", "Piauí", "Rio de Janeiro", "Rio Grande do Norte", "Rio Grande do Sul", "Rondônia", "Roraima", "Santa Catarina", "São Paulo", "Sergipe", "Tocantins"];
             const GOALS = ['Perder Peso', 'Tonificar e Definir', 'Ganhar Massa', 'Saúde e Mobilidade'];
             const GENDERS = [
@@ -939,8 +970,6 @@ import { createClient } from '@supabase/supabase-js';
             const handlePhoneChange = (e) => {
                 let value = e.target.value.replace(/\D/g, "");
                 if (value.length > 11) value = value.slice(0, 11);
-                
-                // Mascara: (99) 99999-9999
                 if (value.length > 10) {
                     value = value.replace(/^(\d{2})(\d{5})(\d{4}).*/, "($1) $2-$3");
                 } else if (value.length > 6) {
@@ -953,21 +982,43 @@ import { createClient } from '@supabase/supabase-js';
                 setWhatsapp(value);
             };
 
-            const handleSubmit = (e) => {
+            const handleSubmit = async (e) => {
                 e.preventDefault();
-                if (name.trim() && goal && selectedGender && estado) {
-                    onComplete(name.trim(), goal, selectedGender, age, estado, whatsapp);
+                setValidationErr('');
+                if (!name.trim()) return setValidationErr('Digite como você gostaria de ser chamado(a).');
+                if (!estado) return setValidationErr('Selecione o seu estado.');
+                if (!selectedGender) return setValidationErr('Escolha seu perfil (Feminino, Masculino ou Outro).');
+                if (!goal) return setValidationErr('Escolha seu objetivo principal.');
+                setSaving(true);
+                try {
+                    await onComplete(name.trim(), goal, selectedGender, age, estado, whatsapp);
+                } finally {
+                    setSaving(false);
                 }
             };
 
+            const isReady = Boolean(name.trim() && goal && selectedGender && estado);
+
             return (
-                <div className="onboarding-overlay" style={{ animation: 'fade-in 0.4s ease-out' }}>
-                    <div className="onboarding-card">
+                <div className="onboarding-overlay" style={{ animation: 'fade-in 0.4s ease-out', overflowY: 'auto', alignItems: 'flex-start', padding: '24px 16px 40px' }}>
+                    <div className="onboarding-card" style={{ margin: 'auto', position: 'relative' }}>
+                        {onCancel && (
+                            <button
+                                type="button"
+                                onClick={onCancel}
+                                aria-label="Fechar"
+                                style={{ position: 'absolute', top: '14px', right: '14px', width: '34px', height: '34px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            >&times;</button>
+                        )}
                         <div className="onboarding-header flex flex-col items-center">
-                            <h1 style={{ fontSize: '26px', fontWeight: '900', marginBottom: '6px', textAlign: 'center' }}>Bem-vindo(a) ao <span style={{ color: 'var(--accent)' }}>+500 Exercícios</span></h1>
-                            <p style={{ color: 'var(--text-secondary)', fontSize: '13.5px', marginBottom: '8px', textAlign: 'center' }}>Personalize seu perfil em 20 segundos para adaptarmos seus treinos e suas metas em casa.</p>
+                            <h1 style={{ fontSize: '24px', fontWeight: '900', marginBottom: '6px', textAlign: 'center' }}>
+                                {initialProfile ? '✏️ Editar Meu Perfil' : <>Bem-vindo(a) ao <span style={{ color: 'var(--accent)' }}>+500 Exercícios</span></>}
+                            </h1>
+                            <p style={{ color: 'var(--text-secondary)', fontSize: '13.5px', marginBottom: '8px', textAlign: 'center' }}>
+                                {initialProfile ? 'Atualize seus dados para manter seus treinos e metas personalizados.' : 'Personalize seu perfil em 20 segundos para adaptarmos seus treinos e suas metas em casa.'}
+                            </p>
                         </div>
-                        <form onSubmit={handleSubmit} className="onboarding-form">
+                        <form onSubmit={handleSubmit} className="onboarding-form" noValidate>
                             <div className="input-group">
                                 <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>COMO VOCÊ GOSTARIA DE SER CHAMADO(A)?</label>
                                 <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Ana Paula" required className="ob-input" style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px', transition: 'all 0.3s' }} />
@@ -981,19 +1032,19 @@ import { createClient } from '@supabase/supabase-js';
                                     min="14" 
                                     max="90" 
                                     value={age} 
-                                    onChange={(e) => setAge(e.target.value)} 
+                                    onChange={(e) => setAge(Number(e.target.value))} 
                                     className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
                                 />
                             </div>
                             <div className="input-group" style={{ marginTop: '16px' }}>
                                 <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU ESTADO</label>
-                                <select className="ob-input" value={estado} onChange={e => setEstado(e.target.value)} required style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px' }}>
-                                    <option value="" disabled>Selecione o seu estado...</option>
-                                    {ESTADOS_BR.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                                <select className="ob-input" value={estado} onChange={e => setEstado(e.target.value)} required style={{ width: '100%', background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px', colorScheme: 'dark' }}>
+                                    <option value="" disabled style={{ background: '#0f172a', color: '#94a3b8' }}>Selecione o seu estado...</option>
+                                    {ESTADOS_BR.map(uf => <option key={uf} value={uf} style={{ background: '#0f172a', color: '#fff' }}>{uf}</option>)}
                                 </select>
                             </div>
                             <div className="input-group" style={{ marginTop: '16px' }}>
-                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU WHATSAPP (PARA DICAS E SUPORTE)</label>
+                                <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU WHATSAPP <span style={{ opacity: 0.65 }}>(OPCIONAL)</span></label>
                                 <input 
                                     type="tel" 
                                     value={whatsapp} 
@@ -1019,16 +1070,16 @@ import { createClient } from '@supabase/supabase-js';
                                                 gap: '4px', 
                                                 alignItems: 'center',
                                                 borderRadius: '12px',
-                                                borderWidth: selectedGender === g.id ? '3px' : '1.5px',
+                                                borderWidth: selectedGender === g.id ? '2px' : '1.5px',
                                                 borderStyle: 'solid',
                                                 borderColor: selectedGender === g.id ? '#f97316' : 'rgba(255,255,255,0.1)',
-                                                background: selectedGender === g.id ? 'rgba(249,115,22,0.15)' : 'rgba(255,255,255,0.03)',
+                                                background: selectedGender === g.id ? 'rgba(249,115,22,0.18)' : 'rgba(255,255,255,0.03)',
                                                 color: selectedGender === g.id ? '#fff' : 'var(--text-secondary)',
-                                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                                transition: 'all 0.25s',
                                                 transform: selectedGender === g.id ? 'scale(1.03)' : 'scale(1)'
                                             }}
                                         >
-                                            <span style={{ fontSize: '24px', filter: selectedGender === g.id ? 'grayscale(0)' : 'grayscale(1) brightness(0.8)', transition: '0.4s' }}>{g.emoji}</span>
+                                            <span style={{ fontSize: '24px', filter: selectedGender === g.id ? 'grayscale(0)' : 'grayscale(1) brightness(0.8)', transition: '0.3s' }}>{g.emoji}</span>
                                             <span style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', color: selectedGender === g.id ? '#f97316' : 'inherit' }}>{g.label}</span>
                                         </button>
                                     ))}
@@ -1046,12 +1097,11 @@ import { createClient } from '@supabase/supabase-js';
                                             style={{
                                                 padding: '10px',
                                                 borderRadius: '12px',
-                                                border: '1px solid',
-                                                borderColor: goal === g ? 'var(--accent)' : 'rgba(255,255,255,0.1)',
-                                                background: goal === g ? 'rgba(var(--accent-rgb), 0.1)' : 'rgba(255,255,255,0.03)',
+                                                border: goal === g ? '2px solid #f97316' : '1px solid rgba(255,255,255,0.1)',
+                                                background: goal === g ? 'rgba(249, 115, 22, 0.18)' : 'rgba(255,255,255,0.03)',
                                                 color: goal === g ? '#fff' : 'var(--text-secondary)',
                                                 fontSize: '13px',
-                                                fontWeight: '600'
+                                                fontWeight: '700'
                                             }}
                                         >
                                             {g}
@@ -1059,8 +1109,15 @@ import { createClient } from '@supabase/supabase-js';
                                     ))}
                                 </div>
                             </div>
-                            <button type="submit" className="ob-submit-btn" disabled={!name.trim() || !goal || !selectedGender || !estado} style={{ width: '100%', marginTop: '16px', padding: '14px', background: 'var(--accent)', color: '#fff', borderRadius: '14px', fontWeight: '900', border: 'none', cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: (!name.trim() || !goal || !selectedGender || !estado) ? 0.5 : 1 }}>
-                                MONTAR MEU PLANO <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
+
+                            {validationErr && (
+                                <div style={{ marginTop: '12px', padding: '10px 12px', borderRadius: '10px', background: 'rgba(239,68,68,0.14)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5', fontSize: '12px', fontWeight: '700', textAlign: 'center' }}>
+                                    {validationErr}
+                                </div>
+                            )}
+
+                            <button type="submit" className="ob-submit-btn" disabled={saving} style={{ width: '100%', marginTop: '16px', padding: '14px', background: 'var(--accent)', color: '#fff', borderRadius: '14px', fontWeight: '900', border: 'none', cursor: 'pointer', transition: 'all 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: (!isReady || saving) ? 0.65 : 1 }}>
+                                {saving ? 'SALVANDO...' : (initialProfile ? 'SALVAR ALTERAÇÕES' : 'MONTAR MEU PLANO')} <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
                             </button>
                         </form>
                     </div>
@@ -1097,167 +1154,179 @@ import { createClient } from '@supabase/supabase-js';
         }
 
         function VideoModal({ exercise: ex, isCompleted, onClose, onToggle }) {
-            if (!ex) return null;
-
             const videoRef = React.useRef(null);
+            const onCloseRef = React.useRef(onClose);
             const [isPlaying, setIsPlaying] = React.useState(false);
             const [videoQuality, setVideoQuality] = React.useState('720p');
+            const [videoError, setVideoError] = React.useState(false);
+
+            useEffect(() => {
+                onCloseRef.current = onClose;
+            }, [onClose]);
 
             useEffect(() => {
                 setVideoQuality('720p');
-            }, [ex]);
-
-            const togglePlay = () => {
-                if (!videoRef.current) return;
-
-                if (videoRef.current.paused) {
-                    const playPromise = videoRef.current.play();
-                    if (playPromise !== undefined) {
-                        playPromise
-                            .then(() => setIsPlaying(true))
-                            .catch(error => {
-                                console.error("Erro ao carregar vídeo do Bunny:", error);
-                                setIsPlaying(false); // Devolve o botão à tela
-                            });
-                    }
-                } else {
-                    videoRef.current.pause();
-                    setIsPlaying(false);
-                }
-            };
-
-            const defDesc = "1. Mantenha o foco. 2. Siga o movimento demonstrado com técnica. 3. Respire de forma controlada.";
-            const actualDesc = ex.description || defDesc;
-            const isGuide = actualDesc.match(/^\d+\./);
-            const steps = isGuide ? actualDesc.match(/\d+\.\s*(.*?)(?=\d+\.|$)/g)?.map(s => s.replace(/^\d+\.\s*/, '').trim()) : [actualDesc];
-
-            const videoSrc = ex.media || ex.videoUrl || ex.video_url;
-            const guidMatch = videoSrc?.match(/net\/([^\/]+)\/play/);
+                setIsPlaying(false);
+                setVideoError(false);
+            }, [ex?.id]);
 
             useEffect(() => {
+                if (!ex) return;
                 document.body.style.overflow = 'hidden';
-                const handleCapture = (e) => {
-                    const btn = e.target.closest('.modal-close');
-                    if (btn) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        btn.style.background = '#ff0000'; // Feedback visual imediato "RED"
-                        
-                        // Limpar buffer de vídeo (Garbage Collection)
-                        if (videoRef.current) {
-                            videoRef.current.pause();
-                            videoRef.current.removeAttribute('src');
-                            videoRef.current.load();
-                        }
-                        
-                        onClose();
-                    }
+                const handleKeyDown = (e) => {
+                    if (e.key === 'Escape') onCloseRef.current?.();
                 };
-                window.addEventListener('mousedown', handleCapture, true);
-                window.addEventListener('touchend', handleCapture, true);
-                window.addEventListener('click', handleCapture, true);
+                window.addEventListener('keydown', handleKeyDown);
                 return () => {
                     document.body.style.overflow = 'unset';
-                    window.removeEventListener('mousedown', handleCapture, true);
-                    window.removeEventListener('touchend', handleCapture, true);
-                    window.removeEventListener('click', handleCapture, true);
-                    
-                    // Limpar buffer de vídeo no unmount do modal
+                    window.removeEventListener('keydown', handleKeyDown);
                     if (videoRef.current) {
                         videoRef.current.pause();
                         videoRef.current.removeAttribute('src');
                         videoRef.current.load();
                     }
                 };
-            }, [onClose]);
+            }, [ex?.id]);
+
+            if (!ex) return null;
+
+            const handleClose = () => {
+                if (videoRef.current) {
+                    videoRef.current.pause();
+                    videoRef.current.removeAttribute('src');
+                    videoRef.current.load();
+                }
+                onClose?.();
+            };
+
+            const startPlayback = () => {
+                if (!videoRef.current) return;
+                const playPromise = videoRef.current.play();
+                if (playPromise !== undefined) {
+                    playPromise
+                        .then(() => setIsPlaying(true))
+                        .catch(error => {
+                            console.error("Erro ao reproduzir vídeo:", error);
+                            setIsPlaying(false);
+                        });
+                }
+            };
+
+            const title = ex.title || ex.nome || 'Exercício';
+            const category = ex.category || ex.target_muscle || '';
+            const difficulty = ex.difficulty || '';
+            const defDesc = "1. Posicione o elástico com firmeza mantendo a postura alinhada. 2. Execute o movimento de forma controlada sem pressa. 3. Respire durante o esforço e contraia o abdômen.";
+            const actualDesc = ex.description || defDesc;
+            const isGuide = /^\d+\./.test(actualDesc);
+            const steps = isGuide ? actualDesc.match(/\d+\.\s*(.*?)(?=\d+\.|$)/g)?.map(s => s.replace(/^\d+\.\s*/, '').trim()) : [actualDesc];
+
+            const videoSrc = ex.video_url || ex.media || ex.videoUrl || '';
+            const guidMatch = videoSrc?.match(/net\/([^\/]+)\/play/) || videoSrc?.match(/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i);
 
             const handleVideoError = () => {
-                if (videoQuality === '720p') setVideoQuality('480p');
-                else if (videoQuality === '480p') setVideoQuality('360p');
-                else if (videoQuality === '360p') setVideoQuality('240p');
-                else console.error("Nenhuma resolução disponível para este vídeo.");
+                if (guidMatch) {
+                    if (videoQuality === '720p') { setVideoQuality('480p'); return; }
+                    if (videoQuality === '480p') { setVideoQuality('360p'); return; }
+                    if (videoQuality === '360p') { setVideoQuality('240p'); return; }
+                }
+                setVideoError(true);
+                setIsPlaying(false);
             };
+
+            const modalTarget = document.getElementById('modal-root') || document.body;
 
             return createPortal(
                 <div
                     className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 pointer-events-auto overscroll-none modal-overlay"
                     style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: 'rgba(0,0,0,0.8)', pointerEvents: 'auto', overscrollBehavior: 'none' }}
-                    onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+                    onClick={e => { if (e.target === e.currentTarget) handleClose(); }}
                 >
                     <div
                         className="relative w-full max-w-md max-h-[90vh] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl pointer-events-auto isolation-auto modal"
                         style={{ position: 'relative', width: '100%', maxWidth: '28rem', maxHeight: '90vh', background: '#0f172a', borderRadius: '1rem', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', pointerEvents: 'auto', isolation: 'auto' }}
                         onClick={e => e.stopPropagation()}
                     >
-                        {/* Botão Fechar (O "X") */}
+                        {/* Botão Fechar */}
                         <button
-                            className="absolute top-3 right-3 z-[100] p-2 bg-black/50 hover:bg-black/80 rounded-full text-white cursor-pointer pointer-events-auto modal-close"
-                            style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 100, padding: '8px', background: 'rgba(0,0,0,0.5)', borderRadius: '9999px', color: '#fff', cursor: 'pointer', pointerEvents: 'auto', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}
-                            onClick={onClose}
+                            type="button"
+                            aria-label="Fechar vídeo"
+                            className="absolute top-3 right-3 z-[600] p-2 bg-black/65 hover:bg-black/90 rounded-full text-white cursor-pointer pointer-events-auto modal-close"
+                            style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 600, padding: '8px', background: 'rgba(0,0,0,0.65)', borderRadius: '9999px', color: '#fff', cursor: 'pointer', pointerEvents: 'auto', border: '1px solid rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}
+                            onClick={handleClose}
                         >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '24px', height: '24px' }}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '22px', height: '22px' }}>
                                 <line x1="18" y1="6" x2="6" y2="18" />
                                 <line x1="6" y1="6" x2="18" y2="18" />
                             </svg>
                         </button>
 
-                        {/* Novo Wrapper de Scroll Único para Vídeo e Texto juntos */}
+                        {/* Wrapper de Scroll Único */}
                         <div className="w-full h-full max-h-[90vh] overflow-y-auto overscroll-contain pb-10" style={{ width: '100%', height: '100%', maxHeight: '90vh', overflowY: 'auto', overscrollBehavior: 'contain', paddingBottom: '40px' }}>
-
-                            {/* Wrapper do Vídeo (Solução Nativa HTML5 com Custom Play Button) */}
+                            {/* Wrapper do Vídeo */}
                             <div
                                 className="relative w-full aspect-video flex-shrink-0 z-[500] pointer-events-auto bg-black"
                                 style={{ position: 'relative', width: '100%', aspectRatio: '16/9', flexShrink: 0, zIndex: 500, pointerEvents: 'auto', background: '#000' }}
                             >
-                                {videoSrc && guidMatch ? (
+                                {videoError ? (
+                                    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#0b1120', padding: '16px', textAlign: 'center' }}>
+                                        <span style={{ fontSize: '28px' }}>📡</span>
+                                        <span style={{ color: '#e2e8f0', fontSize: '13px', fontWeight: '700' }}>Não foi possível carregar o vídeo agora.</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setVideoError(false); setVideoQuality('720p'); }}
+                                            style={{ background: '#f97316', color: '#fff', border: 'none', borderRadius: '10px', padding: '8px 14px', fontSize: '12px', fontWeight: '800', cursor: 'pointer' }}
+                                        >
+                                            🔄 Tentar novamente
+                                        </button>
+                                    </div>
+                                ) : videoSrc && guidMatch ? (
                                     <video
                                         ref={videoRef}
-                                        key={guidMatch[1] + videoQuality}
+                                        key={`${guidMatch[1]}-${videoQuality}`}
                                         src={`https://vz-f56588b2-589.b-cdn.net/${guidMatch[1]}/play_${videoQuality}.mp4`}
                                         poster={`https://vz-f56588b2-589.b-cdn.net/${guidMatch[1]}/thumbnail.jpg`}
-                                        className="w-full aspect-video bg-black object-contain cursor-pointer pointer-events-auto relative z-[500]"
-                                        style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'relative', zIndex: 500, pointerEvents: 'auto', cursor: 'pointer' }}
-                                        onClick={togglePlay}
+                                        className="w-full aspect-video bg-black object-contain pointer-events-auto relative z-[500]"
+                                        style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'relative', zIndex: 500, pointerEvents: 'auto' }}
                                         onPlay={() => setIsPlaying(true)}
                                         onPause={() => setIsPlaying(false)}
                                         onError={handleVideoError}
                                         controls
                                         playsInline
-                                        webkit-playsinline="true"
-                                        preload="none"
-                                    ></video>
+                                        preload="metadata"
+                                    />
                                 ) : videoSrc ? (
                                     <video
                                         ref={videoRef}
                                         key={videoSrc}
                                         src={videoSrc}
                                         poster="https://images.unsplash.com/photo-1594882645126-14020914d58d?auto=format&fit=crop&w=600&q=80"
-                                        className="w-full aspect-video bg-black object-contain cursor-pointer pointer-events-auto relative z-[500]"
-                                        style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'relative', zIndex: 500, pointerEvents: 'auto', cursor: 'pointer' }}
-                                        onClick={togglePlay}
+                                        className="w-full aspect-video bg-black object-contain pointer-events-auto relative z-[500]"
+                                        style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'relative', zIndex: 500, pointerEvents: 'auto' }}
                                         onPlay={() => setIsPlaying(true)}
                                         onPause={() => setIsPlaying(false)}
+                                        onError={handleVideoError}
                                         controls
                                         playsInline
-                                        webkit-playsinline="true"
-                                        preload="none"
-                                    ></video>
+                                        preload="metadata"
+                                    />
                                 ) : (
                                     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000', position: 'absolute', top: 0, left: 0 }}>
                                         <span style={{ color: 'var(--text-muted)' }}>Sem Vídeo Associado</span>
                                     </div>
                                 )}
 
-                                {/* Botão de Play Gigante Overlay */}
-                                {videoSrc && !isPlaying && (
+                                {/* Botão de Play Overlay apenas antes de iniciar */}
+                                {videoSrc && !isPlaying && !videoError && (
                                     <div
                                         className="absolute inset-0 flex items-center justify-center pointer-events-none"
                                         style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 510 }}
                                     >
                                         <button
-                                            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                                            type="button"
+                                            aria-label="Reproduzir exercício"
+                                            onClick={(e) => { e.stopPropagation(); startPlayback(); }}
                                             className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center text-white shadow-lg outline-none focus:outline-none select-none pointer-events-auto hover:bg-orange-600 transition-transform hover:scale-105"
-                                            style={{ width: '64px', height: '64px', background: '#f97316', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.5)', pointerEvents: 'auto', border: 'none', cursor: 'pointer', transition: 'transform 0.2s, background-color 0.2s', WebkitTapHighlightColor: 'transparent' }}
+                                            style={{ width: '64px', height: '64px', background: '#f97316', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)', pointerEvents: 'auto', border: 'none', cursor: 'pointer', transition: 'transform 0.2s, background-color 0.2s', WebkitTapHighlightColor: 'transparent' }}
                                         >
                                             <svg className="w-8 h-8 ml-1" style={{ width: '32px', height: '32px', marginLeft: '4px' }} fill="currentColor" viewBox="0 0 20 20">
                                                 <path d="M4 4l12 6-12 6z" />
@@ -1272,232 +1341,64 @@ import { createClient } from '@supabase/supabase-js';
                                 className="p-5 relative z-10 pointer-events-auto bg-slate-900 modal-body"
                                 style={{ padding: '20px', position: 'relative', zIndex: 10, pointerEvents: 'auto', background: '#0f172a', margin: 0, marginTop: 0 }}
                             >
-                                <h2 className="modal-title" style={{ fontSize: '32px', lineHeight: '1.2' }}>{ex.title}</h2>
-                                <div className="card-meta" style={{ marginBottom: '32px', display: 'flex', gap: '8px' }}>
-                                    <span className="card-category-tag" style={{ margin: 0, fontSize: '14px', padding: '6px 12px' }}>{ex.category}</span>
-                                    <span className={`card-diff-badge ${ex.difficulty}`} style={{ position: 'static', margin: 0, padding: '6px 12px', fontSize: '13px' }}>{ex.difficulty}</span>
-                                </div>
+                                <h2 className="modal-title" style={{ fontSize: '26px', lineHeight: '1.2' }}>{title}</h2>
+                                {(category || difficulty) && (
+                                    <div className="card-meta" style={{ marginBottom: '24px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        {category && <span className="card-category-tag" style={{ margin: 0, fontSize: '13px', padding: '5px 11px' }}>{category}</span>}
+                                        {difficulty && <span className={`card-diff-badge ${difficulty}`} style={{ position: 'static', margin: 0, padding: '5px 11px', fontSize: '12px' }}>{difficulty}</span>}
+                                    </div>
+                                )}
 
-                                <div style={{ padding: '24px', background: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '32px' }}>
-                                    <h3 style={{ fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--accent)', marginBottom: '16px', fontWeight: '800' }}>Guia Técnico</h3>
+                                <div style={{ padding: '20px', background: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '24px' }}>
+                                    <h3 style={{ fontSize: '13px', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--accent)', marginBottom: '14px', fontWeight: '800' }}>Guia Técnico</h3>
                                     {isGuide && steps && steps.length > 0 ? (
-                                        <div className="guide-steps" style={{ gap: '20px', display: 'flex', flexDirection: 'column' }}>
+                                        <div className="guide-steps" style={{ gap: '16px', display: 'flex', flexDirection: 'column' }}>
                                             {steps.map((step, idx) => {
                                                 const labels = ["Preparação", "Execução", "Dica de Segurança"];
                                                 const icons = ["🎯", "⚡", "🛡️"];
                                                 return (
-                                                    <div key={idx} className="guide-step" style={{ background: 'rgba(255,255,255,0.03)', padding: '16px', borderRadius: '8px', borderLeft: '3px solid var(--accent)' }}>
-                                                        <div className="guide-step-number" style={{ width: '30px', height: '30px', fontSize: '14px' }}>{icons[idx] || (idx + 1)}</div>
+                                                    <div key={idx} className="guide-step" style={{ background: 'rgba(255,255,255,0.03)', padding: '14px', borderRadius: '8px', borderLeft: '3px solid var(--accent)' }}>
+                                                        <div className="guide-step-number" style={{ width: '28px', height: '28px', fontSize: '14px' }}>{icons[idx] || (idx + 1)}</div>
                                                         <div className="guide-step-content" style={{ paddingLeft: '12px' }}>
-                                                            <div className="guide-step-label" style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '8px' }}>Passo {idx + 1}: {labels[idx] || "Instrução"}</div>
-                                                            <div className="guide-step-text" style={{ fontSize: '18px', lineHeight: '1.6', color: 'var(--text-primary)', fontWeight: '500' }}>{step}</div>
+                                                            <div className="guide-step-label" style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '6px' }}>Passo {idx + 1}: {labels[idx] || "Instrução"}</div>
+                                                            <div className="guide-step-text" style={{ fontSize: '15px', lineHeight: '1.55', color: 'var(--text-primary)', fontWeight: '500' }}>{step}</div>
                                                         </div>
                                                     </div>
                                                 );
                                             })}
                                         </div>
                                     ) : (
-                                        <div className="modal-desc" style={{ fontSize: '18px', lineHeight: '1.7', color: 'var(--text-primary)', fontWeight: '500', padding: '0', background: 'transparent', border: 'none', margin: '0' }}>{ex.description}</div>
+                                        <div className="modal-desc" style={{ fontSize: '15px', lineHeight: '1.65', color: 'var(--text-primary)', fontWeight: '500', padding: '0', background: 'transparent', border: 'none', margin: '0' }}>{actualDesc}</div>
                                     )}
                                 </div>
 
-                                {!['cardio', 'outros'].includes(ex.category?.toLowerCase() || '') && (
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', width: '100%', marginTop: '20px', padding: '0 10px' }}>
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100px', borderRadius: '16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(74, 222, 128, 0.3)' }}>
-                                            <span style={{ color: '#4ade80', fontSize: '14px', fontWeight: 'bold' }}>Séries</span>
-                                            <span style={{ color: '#ffffff', fontSize: '24px', fontWeight: '800', margin: '4px 0' }}>{ex.sets || '3'}</span>
-                                            <span style={{ color: '#94a3b8', fontSize: '12px' }}>Blocos</span>
+                                {!['cardio', 'outros'].includes(category.toLowerCase()) && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', width: '100%', marginTop: '16px' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '94px', borderRadius: '16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(74, 222, 128, 0.3)' }}>
+                                            <span style={{ color: '#4ade80', fontSize: '13px', fontWeight: 'bold' }}>Séries</span>
+                                            <span style={{ color: '#ffffff', fontSize: '22px', fontWeight: '800', margin: '4px 0' }}>{ex.sets || '3'}</span>
+                                            <span style={{ color: '#94a3b8', fontSize: '11px' }}>Blocos</span>
                                         </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100px', borderRadius: '16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(250, 204, 21, 0.3)' }}>
-                                            <span style={{ color: '#facc15', fontSize: '14px', fontWeight: 'bold' }}>Repetições</span>
-                                            <span style={{ color: '#ffffff', fontSize: '24px', fontWeight: '800', margin: '4px 0' }}>{ex.reps ? ex.reps.replace(/reps|movimentos/gi, '').trim() : '15'}</span>
-                                            <span style={{ color: '#94a3b8', fontSize: '12px' }}>Movimentos</span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '94px', borderRadius: '16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(250, 204, 21, 0.3)' }}>
+                                            <span style={{ color: '#facc15', fontSize: '13px', fontWeight: 'bold' }}>Repetições</span>
+                                            <span style={{ color: '#ffffff', fontSize: '22px', fontWeight: '800', margin: '4px 0' }}>{ex.reps ? String(ex.reps).replace(/reps|movimentos/gi, '').trim() : '15'}</span>
+                                            <span style={{ color: '#94a3b8', fontSize: '11px' }}>Movimentos</span>
                                         </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100px', borderRadius: '16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(248, 113, 113, 0.3)' }}>
-                                            <span style={{ color: '#f87171', fontSize: '14px', fontWeight: 'bold' }}>Descanso</span>
-                                            <span style={{ color: '#ffffff', fontSize: '24px', fontWeight: '800', margin: '4px 0' }}>{ex.rest ? String(ex.rest).replace(/s|seg|segundos/gi, '').trim() : '60'}</span>
-                                            <span style={{ color: '#94a3b8', fontSize: '12px' }}>Segundos</span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '94px', borderRadius: '16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(248, 113, 113, 0.3)' }}>
+                                            <span style={{ color: '#f87171', fontSize: '13px', fontWeight: 'bold' }}>Descanso</span>
+                                            <span style={{ color: '#ffffff', fontSize: '22px', fontWeight: '800', margin: '4px 0' }}>{ex.rest ? String(ex.rest).replace(/s|seg|segundos/gi, '').trim() : '60'}</span>
+                                            <span style={{ color: '#94a3b8', fontSize: '11px' }}>Segundos</span>
                                         </div>
                                     </div>
                                 )}
-                                <button className={`btn-complete ${isCompleted ? 'done' : 'pending'}`} style={{ marginTop: '24px', fontSize: '18px', padding: '20px' }} onClick={() => onToggle(ex.id)}>
+                                <button className={`btn-complete ${isCompleted ? 'done' : 'pending'}`} style={{ marginTop: '24px', fontSize: '16px', padding: '18px' }} onClick={() => onToggle(ex.id)}>
                                     {isCompleted ? '✓ Exercício Concluído' : '✔️ Marcar como Concluído'}
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>,
-                document.getElementById('modal-root')
-            );
-        }
-
-        function SmartSuggestion({ userProfile, isCompleted, isFavorited, onClick, onFav, onCompleteWorkout }) {
-            const [suggestionKey, setSuggestionKey] = useState(Date.now());
-            const [workout, setWorkout] = useState([]);
-            const [isLoading, setIsLoading] = useState(true);
-
-            const getRandom = useCallback((arr, n) => {
-                const shuffled = [...arr].sort(() => 0.5 - Math.random());
-                return shuffled.slice(0, n);
-            }, []);
-
-            useEffect(() => {
-                if (!userProfile) return;
-                setIsLoading(true);
-
-                // Simulate calculation time for premium feel and to prevent blocking
-                const timer = setTimeout(() => {
-                    const goal = userProfile.goal;
-                    let pick = [];
-
-                    // Only use exercises from unlocked modules
-                    const isVipUser = userProfile?.permissions?.gold || userProfile?.permissions?.vip || (userProfile?.permissions?.senior && userProfile?.permissions?.pilates && userProfile?.permissions?.gymnastics);
-                    const unlockedEx = EXERCISES.filter(e => {
-                        const mod = e.moduleId || 'base';
-                        return isVipUser || userProfile?.permissions?.[mod] === true || mod === 'base';
-                    });
-
-                    const byCat = (c) => unlockedEx.filter(e => e.category === c);
-
-                    if (goal === 'Perder Peso') {
-                        pick = [...getRandom(byCat("Cardio"), 4), ...getRandom(byCat("Membros Inferiores"), 2)];
-                    } else if (goal === 'Ganhar Massa') {
-                        pick = [...getRandom(byCat("Membros Superiores"), 3), ...getRandom(byCat("Membros Inferiores"), 2), ...getRandom(byCat("Braços"), 1)];
-                    } else if (goal === 'Tonificar e Definir') {
-                        pick = [
-                            ...getRandom(byCat("Membros Inferiores"), 2),
-                            ...getRandom(byCat("Membros Superiores"), 1),
-                            ...getRandom(byCat("Braços"), 1),
-                            ...getRandom(byCat("Cardio"), 1),
-                            ...getRandom(byCat("Mobilidade"), 1)
-                        ];
-                    } else { // Saúde e Mobilidade
-                        pick = [...getRandom(byCat("Mobilidade"), 3), ...getRandom(byCat("Cardio"), 1), ...getRandom(byCat("Membros Inferiores"), 2)];
-                    }
-
-                    setWorkout(pick);
-                    setIsLoading(false);
-                }, 600);
-
-                return () => clearTimeout(timer);
-            }, [userProfile, suggestionKey, getRandom]);
-
-            return (
-                <div className="smart-suggestion-wrapper">
-                    <div className="page-header suggestion-header">
-                        <h1>💡 Nossa Sugestão</h1>
-                        <button className="btn-reshuffle" onClick={() => setSuggestionKey(Date.now())} disabled={isLoading}>
-                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="1 4 1 10 7 10" /><polyline points="23 20 23 14 17 14" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10M23 14l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
-                            Gerar Novamente
-                        </button>
-                    </div>
-
-                    {isLoading ? (
-                        <div className="empty-state" style={{ minHeight: '300px' }}>
-                            <div style={{ animation: 'pulse-glow 1.5s infinite alternate', fontSize: '32px', marginBottom: '16px' }}>🤖</div>
-                            <h3 style={{ margin: 0 }}>Preparando o seu treino ideal...</h3>
-                            <p style={{ color: 'var(--text-muted)' }}>Analisando exercícios para o objetivo: {userProfile?.goal}</p>
-                        </div>
-                    ) : (
-                        <>
-                            <div className="playlist-container">
-                                {workout.map((ex, index) => (
-                                    <div key={ex.id + index + suggestionKey} className="playlist-item">
-                                        <div className="step-badge">Passo {index + 1}</div>
-                                        <div style={{ flex: 1 }}>
-                                            <ExerciseCard exercise={ex} isCompleted={isCompleted(ex.id)} isFavorited={isFavorited(ex.id)} onClick={onClick} onFav={onFav} />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <button className="btn-massive-success" onClick={() => {
-                                onCompleteWorkout(workout.map(e => e.id));
-                                setSuggestionKey(Date.now());
-                            }}>
-                                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12" /></svg>
-                                Concluir Treino (+500 XP)
-                            </button>
-                        </>
-                    )}
-                </div>
-            );
-        }
-
-        function TeaserScannerPage({ onGoToExtras }) {
-            return (
-                <div className="teaser-container">
-                    <div className="teaser-badge">⚡ 7 DIAS GRÁTIS</div>
-                    
-                    <div className="teaser-ia-icon-wrapper">
-                        <div className="teaser-ia-icon-bg"></div>
-                        <div className="teaser-ia-icon">📸🥗</div>
-                    </div>
-                    
-                    <h1 className="teaser-title">
-                        DESCUBRA AS CALORIAS DO SEU PRATO <span className="highlight">EM 3 SEGUNDOS.</span>
-                    </h1>
-                    
-                    <p className="teaser-subtitle">
-                        Você não precisa mais de balança de cozinha nem de ficar pesquisando alimentos um por um. O Nutri-Scan™ IA identifica seu prato pela foto ou texto na hora.
-                    </p>
-        
-                    <div className="teaser-benefits">
-                        {[
-                            { 
-                                icon: "📸", 
-                                title: "Análise pela Foto:", 
-                                text: "Tire uma foto da sua refeição e veja calorias, proteínas, carboidratos e gorduras na hora." 
-                            },
-                            { 
-                                icon: "✍️", 
-                                title: "Ou Digite o que Comeu:", 
-                                text: "Esqueceu de tirar foto? Basta escrever o que comeu e a IA calcula tudo para você." 
-                            },
-                            { 
-                                icon: "🎯", 
-                                title: "Meta Diária Personalizada:", 
-                                text: "Saiba exatamente quanto falta para bater sua meta de emagrecimento ou definição." 
-                            },
-                            { 
-                                icon: "📈", 
-                                title: "Histórico & Consistência:", 
-                                text: "Cada refeição salva atualiza seu calendário diário automaticamente." 
-                            }
-                        ].map((b, i) => (
-                            <div key={i} className="benefit-card" style={{ animationDelay: `${0.1 * i}s` }}>
-                                <span className="benefit-icon">{b.icon}</span>
-                                <div className="benefit-content">
-                                    <div className="benefit-text"><b>{b.title}</b> {b.text}</div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-        
-                    <div className="fixed-cta-container">
-                        <div style={{ width: '100%', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '8px', margin: '0 auto' }}>
-                            <a 
-                                href="https://pay.hotmart.com/H106107115U?checkoutMode=10"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="w-full text-center font-bold uppercase px-8 py-4 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg hover:shadow-xl hover:scale-[1.02] transition-transform duration-300 block no-underline"
-                            >
-                                👉 LIBERAR 7 DIAS GRÁTIS (R$ 9,90/MÊS)
-                            </a>
-                            {onGoToExtras && (
-                                <button
-                                    onClick={onGoToExtras}
-                                    className="w-full py-2 text-xs text-slate-300 hover:text-white underline font-semibold"
-                                >
-                                    Já comprou? Ativar com código • Ou ver Acesso Total sem mensalidade
-                                </button>
-                            )}
-                            <p style={{ textAlign: 'center', color: 'rgba(255,255,255,0.45)', fontSize: '10px', letterSpacing: '0.5px', fontWeight: '600', padding: '0 10px' }}>
-                                🔒 Teste por 7 dias grátis na Hotmart. Cancele quando quiser sem burocracia.
-                            </p>
-                        </div>
-                    </div>
-                </div>
+                modalTarget
             );
         }
 
@@ -1728,118 +1629,13 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function ModuleViewer({ title, url, onClose }) {
-            const isGuiaMusculacao = title && (title.toLowerCase().includes('musculação') || title.toLowerCase().includes('musculacao'));
-            const finalUrl = isGuiaMusculacao 
-                ? url + "#toolbar=0" 
-                : `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
+        const ExtraCard = ({ title, desc, price, oldPrice, badge, ribbon, icon, unlocked, isMonthly, onAction, ctaLabel, secondaryCta, onSecondaryAction, subPrice, pdfs, onOpenPdf, glow, glowColor = 'orange' }) => {
+            const isGreen = glowColor === 'green';
+            const glowClass = isGreen 
+                ? 'shadow-[0_0_35px_-6px_rgba(16,185,129,0.45)] border-2 border-emerald-500/50' 
+                : 'shadow-[0_0_35px_-6px_rgba(249,115,22,0.45)] border-2 border-orange-500/50';
 
             return (
-                <div className="fixed inset-0 z-[100000] bg-black flex flex-col animate-in fade-in duration-500">
-                    <header className="fixed top-0 left-0 right-0 h-20 bg-slate-900 border-b border-white/10 flex items-center justify-between px-6 z-10">
-                        <div className="flex flex-col">
-                            <span className="text-[10px] text-orange-400 font-bold uppercase tracking-widest">A Visualizar Guia</span>
-                            <h2 className="text-white font-black text-sm uppercase truncate max-w-[150px] sm:max-w-none">{title}</h2>
-                        </div>
-                        <div className="flex gap-4 items-center">
-                            <a 
-                                href={url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 text-[10px] text-white font-black uppercase bg-orange-600 hover:bg-orange-700 transition-all px-4 py-3 rounded-xl shadow-lg shadow-orange-600/20 active:scale-95"
-                            >
-                                <span className="hidden xs:inline">🔗 Não consegue clicar?</span> Abrir no Navegador
-                            </a>
-                            <button onClick={onClose} className="text-white bg-white/10 w-11 h-11 rounded-full flex items-center justify-center hover:bg-red-500 transition-colors shadow-lg active:scale-90">
-                                <span className="text-2xl font-light">&times;</span>
-                            </button>
-                        </div>
-                    </header>
-                    <div className="flex-1 mt-20 bg-slate-950 overflow-hidden">
-                        <iframe 
-                            src={finalUrl} 
-                            className="w-full h-full border-none"
-                            title={title}
-                            allow="fullscreen"
-                            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation allow-top-navigation-by-user-activation"
-                        />
-                    </div>
-                </div>
-            );
-        }
-
-        function ExtrasHub({ ud, onNav, freeScansRemaining = 0, onOpenNutriScan }) {
-            const [activeTab, setActiveTab] = React.useState('combos');
-            const [localUnlocked, setLocalUnlocked] = React.useState(() => {
-                try { return JSON.parse(localStorage.getItem('app_unlocked_modules') || '[]'); } catch (e) { return []; }
-            });
-            const [redeemCode, setRedeemCode] = React.useState('');
-            const [viewingPdf, setViewingPdf] = React.useState(null);
-
-            const profile = ud.userProfile;
-            const hasTotalVip = profile?.permissions?.total_vip || localUnlocked.includes('total_vip') || profile?.is_vip;
-            const hasGold = profile?.acesso_combo_ouro || profile?.permissions?.vip_gold || profile?.permissions?.gold || localUnlocked.includes('vip_gold') || hasTotalVip;
-            const hasScannerIA = profile?.assinatura_scanner_ia_ativa || profile?.permissions?.scanner_ia || profile?.permissions?.pacote_elite || localUnlocked.includes('scanner_ia') || localUnlocked.includes('pacote_elite') || localStorage.getItem('acessoScannerIA') === 'true' || hasTotalVip;
-            const hasDesafio = profile?.permissions?.desafio30 || localUnlocked.includes('desafio30') || hasGold || hasTotalVip;
-            const hasSono = profile?.permissions?.sono || localUnlocked.includes('sono') || hasGold || hasTotalVip;
-            const hasComunidade = profile?.permissions?.comunidade_vip || profile?.permissions?.pacote_elite || localUnlocked.includes('comunidade_vip') || localUnlocked.includes('pacote_elite') || hasTotalVip;
-            const hasMusculacao = profile?.permissions?.musculacao || localUnlocked.includes('musculacao') || hasGold || hasTotalVip;
-            const hasSenior = profile?.permissions?.senior || localUnlocked.includes('senior') || hasGold || hasTotalVip;
-            const hasPilates = profile?.permissions?.pilates || localUnlocked.includes('pilates') || hasGold || hasTotalVip;
-            const hasGymnastics = profile?.permissions?.gymnastics || localUnlocked.includes('gymnastics') || hasGold || hasTotalVip;
-
-            const ALL_GUIDES = [
-                { title: "Musculação em Casa", unlocked: hasMusculacao, url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" },
-                { title: "Pilates Modelador", unlocked: hasPilates, url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf" },
-                { title: "Recuperação Ativa", unlocked: hasSenior, url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Protocolo%20de%20Recuperacao%20Ativa.pdf" },
-                { title: "Guia Mini-Bands", unlocked: hasGymnastics, url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Treinamento%20Mini-Faixas%20(Mini-Bands).pdf" }
-            ];
-
-            const handleRedeemCode = async () => {
-                const code = redeemCode.trim().toUpperCase();
-                if (!code) return;
-
-                const mapping = {
-                    'VIPGOLD2024': 'vip_gold',
-                    'DESAFIO30VIP': 'desafio30',
-                    'IA2026': 'scanner_ia',
-                    'COMUNIDADEVIPMB': 'comunidade_vip',
-                    'TOTALVIP69': 'total_vip',
-                    'SONOMILITARVIP': 'sono',
-                    'ELITE2026': 'pacote_elite',
-                    'MUSCULACAO2026': 'musculacao'
-                };
-
-                if (mapping[code]) {
-                    const moduleSlug = mapping[code];
-                    const newUnlocked = Array.from(new Set([...localUnlocked, moduleSlug]));
-                    setLocalUnlocked(newUnlocked);
-                    localStorage.setItem('app_unlocked_modules', JSON.stringify(newUnlocked));
-                    if (moduleSlug === 'scanner_ia' || moduleSlug === 'total_vip' || moduleSlug === 'pacote_elite') {
-                        localStorage.setItem('acessoScannerIA', 'true');
-                    }
-                    try {
-                        if (ud?.unlockModule) {
-                            await ud.unlockModule(moduleSlug);
-                        }
-                    } catch (e) {
-                        console.warn('Sync módulo Supabase:', e);
-                    }
-                    setRedeemCode('');
-                    alert("Acesso liberado com sucesso! ✅");
-                    window.location.reload();
-                } else {
-                    alert("Código inválido ou expirado. Verifique o e-mail da Hotmart ou fale com o suporte.");
-                }
-            };
-
-            const ExtraCard = ({ title, desc, price, oldPrice, badge, ribbon, icon, unlocked, isMonthly, onAction, ctaLabel, secondaryCta, onSecondaryAction, subPrice, pdfs, glow, glowColor = 'orange' }) => {
-                const isGreen = glowColor === 'green';
-                const glowClass = isGreen 
-                    ? 'shadow-[0_0_35px_-6px_rgba(16,185,129,0.45)] border-2 border-emerald-500/50' 
-                    : 'shadow-[0_0_35px_-6px_rgba(249,115,22,0.45)] border-2 border-orange-500/50';
-
-                return (
                 <div className={`p-6 rounded-[24px] bg-[#1e2330] flex flex-col relative overflow-hidden transition-all duration-300 ${glow ? glowClass : 'border border-white/10 hover:bg-[#252b3a]'}`}>
                     {ribbon && (
                         <div className="absolute top-0 right-0 w-28 h-28 overflow-hidden pointer-events-none z-20">
@@ -1889,31 +1685,24 @@ import { createClient } from '@supabase/supabase-js';
                         {unlocked && pdfs && pdfs.length > 0 && (
                             <div className="grid grid-cols-2 gap-2 mb-5">
                                 {pdfs.map((pdf, idx) => (
-                                    <div 
+                                    <button
+                                        type="button"
                                         key={idx} 
-                                        onClick={(e) => { 
-                                            e.preventDefault();
-                                            if(!pdf.url) { 
-                                                alert("Este PDF está sendo processado e será liberado na sua conta em breve."); 
-                                            } else if (pdf.title.toLowerCase().includes('musculação')) {
-                                                window.open(pdf.url, '_blank');
-                                            } else {
-                                                setViewingPdf(pdf);
-                                            }
-                                        }}
+                                        onClick={() => onOpenPdf && onOpenPdf(pdf)}
                                         className="bg-white/5 hover:bg-white/10 border border-white/10 p-3 rounded-xl flex flex-col items-center gap-1.5 transition-all group/pdf active:scale-95 cursor-pointer hover:border-orange-500/30"
                                     >
                                         <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center text-red-400 text-sm group-hover/pdf:bg-red-500/20">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                                         </div>
                                         <span className="text-[8px] font-black uppercase text-slate-300 group-hover/pdf:text-white text-center leading-tight tracking-wider">{pdf.title}</span>
-                                    </div>
+                                    </button>
                                 ))}
                             </div>
                         )}
 
                         <div className="flex flex-col gap-2">
                             <button 
+                                type="button"
                                 onClick={onAction}
                                 className={`w-full py-4 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all active:scale-95 ${unlocked ? 'bg-white/10 hover:bg-white/15 text-white' : (isGreen ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-lg shadow-emerald-600/20' : 'bg-orange-600 text-white hover:bg-orange-500 shadow-lg shadow-orange-600/20')}`}
                             >
@@ -1921,6 +1710,7 @@ import { createClient } from '@supabase/supabase-js';
                             </button>
                             {!unlocked && secondaryCta && onSecondaryAction && (
                                 <button
+                                    type="button"
                                     onClick={onSecondaryAction}
                                     className="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-emerald-300 border border-emerald-500/20 text-[11px] font-bold transition-all"
                                 >
@@ -1931,7 +1721,76 @@ import { createClient } from '@supabase/supabase-js';
                     </div>
                 </div>
             );
-            }
+        };
+
+        function ExtrasHub({ ud, onNav, onAccessModule, freeScansRemaining = 0, onOpenNutriScan, focusRedeem = false, onClearFocusRedeem }) {
+            const [activeTab, setActiveTab] = React.useState('combos');
+            const [redeemCode, setRedeemCode] = React.useState('');
+            const [redeeming, setRedeeming] = React.useState(false);
+            const [redeemFeedback, setRedeemFeedback] = React.useState(null); // { type: 'ok'|'err', msg }
+            const [viewingPdf, setViewingPdf] = React.useState(null);
+            const [pdfLoading, setPdfLoading] = React.useState(false);
+            const redeemSectionRef = React.useRef(null);
+
+            React.useEffect(() => {
+                if (focusRedeem && redeemSectionRef.current) {
+                    redeemSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    onClearFocusRedeem?.();
+                }
+            }, [focusRedeem, onClearFocusRedeem]);
+
+            const ent = resolveEntitlements(ud.userProfile);
+            const { hasTotalVip, hasGold, hasScannerIA, hasDesafio, hasSono, hasComunidade, hasMusculacao, hasSenior, hasPilates, hasGymnastics } = ent;
+
+            const ALL_GUIDES = [
+                { title: "Musculação em Casa", unlocked: hasMusculacao, url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" },
+                { title: "Pilates Modelador", unlocked: hasPilates, url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf" },
+                { title: "Recuperação Ativa", unlocked: hasSenior, url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Protocolo%20de%20Recuperacao%20Ativa.pdf" },
+                { title: "Guia Mini-Bands", unlocked: hasGymnastics, url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Treinamento%20Mini-Faixas%20(Mini-Bands).pdf" }
+            ];
+
+            const openPdfViewer = (pdf) => {
+                if (!pdf?.url) {
+                    setRedeemFeedback({ type: 'err', msg: 'Este guia está sendo preparado e será liberado em breve.' });
+                    return;
+                }
+                setPdfLoading(true);
+                setViewingPdf(pdf);
+            };
+
+            const openCommunityVip = async () => {
+                try {
+                    const { data, error } = await window.supabase.functions.invoke('redeem-code', {
+                        body: { action: 'get_community_link' }
+                    });
+                    if (!error && data?.url) {
+                        safeOpenExternal(data.url);
+                        return;
+                    }
+                } catch (e) {
+                    console.error('Erro ao abrir Comunidade VIP:', e);
+                }
+                setRedeemFeedback({ type: 'err', msg: 'Não foi possível abrir o link da Comunidade VIP. Verifique sua conexão e tente novamente.' });
+            };
+
+            const handleRedeemCode = async (e) => {
+                if (e && e.preventDefault) e.preventDefault();
+                const cleaned = redeemCode.replace(/\s+/g, '').toUpperCase();
+                if (!cleaned) return;
+                setRedeeming(true);
+                setRedeemFeedback(null);
+                try {
+                    const res = await ud.redeemPromoCode(cleaned);
+                    if (res.ok) {
+                        setRedeemCode('');
+                        setRedeemFeedback({ type: 'ok', msg: '✅ Acesso liberado na sua conta com sucesso! Já pode abrir seus conteúdos.' });
+                    } else {
+                        setRedeemFeedback({ type: 'err', msg: res.error || 'Código inválido ou expirado. Confira o e-mail da Hotmart.' });
+                    }
+                } finally {
+                    setRedeeming(false);
+                }
+            };
 
             const unlockedGuides = ALL_GUIDES.filter(g => g.unlocked);
 
@@ -1949,7 +1808,8 @@ import { createClient } from '@supabase/supabase-js';
                                 {unlockedGuides.map((pdf, idx) => (
                                     <button
                                         key={idx}
-                                        onClick={() => pdf.title.toLowerCase().includes('musculação') ? window.open(pdf.url, '_blank') : setViewingPdf(pdf)}
+                                        type="button"
+                                        onClick={() => openPdfViewer(pdf)}
                                         className="bg-slate-900/60 hover:bg-slate-800 border border-white/10 p-3 rounded-xl flex items-center gap-2 text-left transition-all"
                                     >
                                         <span className="text-red-400 text-base">📄</span>
@@ -1962,12 +1822,14 @@ import { createClient } from '@supabase/supabase-js';
 
                     <div className="flex gap-2 mb-7 bg-white/5 p-1 rounded-[20px] border border-white/5">
                         <button 
+                            type="button"
                             onClick={() => setActiveTab('combos')}
                             className={`flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.16em] transition-all ${activeTab === 'combos' ? 'bg-orange-600 text-white shadow-xl shadow-orange-600/20' : 'text-slate-400 hover:text-white'}`}
                         >
                             🔥 Mais Vendidos (3)
                         </button>
                         <button 
+                            type="button"
                             onClick={() => setActiveTab('separados')}
                             className={`flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.16em] transition-all ${activeTab === 'separados' ? 'bg-orange-600 text-white shadow-xl shadow-orange-600/20' : 'text-slate-400 hover:text-white'}`}
                         >
@@ -2007,7 +1869,8 @@ import { createClient } from '@supabase/supabase-js';
                                 ctaLabel="Quero o Combo de Ouro"
                                 unlocked={hasGold}
                                 pdfs={ALL_GUIDES}
-                                onAction={() => hasGold ? onNav('arsenal-vip') : window.open('https://pay.hotmart.com/O106106388F?checkoutMode=10', '_blank')}
+                                onOpenPdf={openPdfViewer}
+                                onAction={() => hasGold ? (onAccessModule ? onAccessModule('desafio30') : onNav('arsenal-vip')) : safeOpenExternal('https://pay.hotmart.com/O106106388F?checkoutMode=10')}
                             />
 
                             <ExtraCard 
@@ -2033,7 +1896,7 @@ import { createClient } from '@supabase/supabase-js';
                                 secondaryCta={!hasScannerIA && freeScansRemaining > 0 && onOpenNutriScan ? `🎁 Usar teste grátis no app (${freeScansRemaining} restante)` : null}
                                 onSecondaryAction={onOpenNutriScan}
                                 unlocked={hasScannerIA}
-                                onAction={() => hasScannerIA ? (onOpenNutriScan ? onOpenNutriScan() : onNav('arsenal-vip')) : window.open('https://pay.hotmart.com/H106107115U?checkoutMode=10', '_blank')}
+                                onAction={() => hasScannerIA ? (onOpenNutriScan ? onOpenNutriScan() : onNav('arsenal-vip')) : safeOpenExternal('https://pay.hotmart.com/H106107115U?checkoutMode=10')}
                             />
 
                             <ExtraCard 
@@ -2058,7 +1921,8 @@ import { createClient } from '@supabase/supabase-js';
                                 ctaLabel="Quero Acesso Total Vitalício"
                                 unlocked={hasTotalVip}
                                 pdfs={ALL_GUIDES}
-                                onAction={() => hasTotalVip ? onNav('inicio') : window.open('https://pay.hotmart.com/E105939718I?checkoutMode=10', '_blank')}
+                                onOpenPdf={openPdfViewer}
+                                onAction={() => hasTotalVip ? onNav('inicio') : safeOpenExternal('https://pay.hotmart.com/E105939718I?checkoutMode=10')}
                             />
                         </div>
                     ) : (
@@ -2083,8 +1947,9 @@ import { createClient } from '@supabase/supabase-js';
                                     badge="GUIA EM PDF"
                                     subPrice="Pagamento único vitalício"
                                     unlocked={hasMusculacao}
-                                    pdfs={[{ title: "Musculação em Casa", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf" }]}
-                                    onAction={() => hasMusculacao ? window.open('https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf', '_blank') : window.open('https://pay.hotmart.com/N105939399C?checkoutMode=10', '_blank')}
+                                    pdfs={[ALL_GUIDES[0]]}
+                                    onOpenPdf={openPdfViewer}
+                                    onAction={() => hasMusculacao ? openPdfViewer(ALL_GUIDES[0]) : safeOpenExternal('https://pay.hotmart.com/N105939399C?checkoutMode=10')}
                                 />
                                 <ExtraCard 
                                     title="Desafio 30 Dias"
@@ -2093,7 +1958,7 @@ import { createClient } from '@supabase/supabase-js';
                                     icon="🔥"
                                     subPrice="Pagamento único vitalício"
                                     unlocked={hasDesafio}
-                                    onAction={() => hasDesafio ? onNav('arsenal-vip') : window.open('https://pay.hotmart.com/R106106925S?checkoutMode=10', '_blank')}
+                                    onAction={() => hasDesafio ? (onAccessModule ? onAccessModule('desafio30') : onNav('arsenal-vip')) : safeOpenExternal('https://pay.hotmart.com/R106106925S?checkoutMode=10')}
                                 />
                                 <ExtraCard 
                                     title="Nutri-Scan™ IA"
@@ -2103,7 +1968,7 @@ import { createClient } from '@supabase/supabase-js';
                                     subPrice="7 Dias Grátis na Hotmart"
                                     icon="📸"
                                     unlocked={hasScannerIA}
-                                    onAction={() => hasScannerIA ? (onOpenNutriScan ? onOpenNutriScan() : onNav('arsenal-vip')) : window.open('https://pay.hotmart.com/H106107115U?checkoutMode=10', '_blank')}
+                                    onAction={() => hasScannerIA ? (onOpenNutriScan ? onOpenNutriScan() : onNav('arsenal-vip')) : safeOpenExternal('https://pay.hotmart.com/H106107115U?checkoutMode=10')}
                                 />
                                 <ExtraCard 
                                     title="Pilates Modelador"
@@ -2112,8 +1977,9 @@ import { createClient } from '@supabase/supabase-js';
                                     icon="🧘‍♀️"
                                     subPrice="Pagamento único vitalício"
                                     unlocked={hasPilates}
-                                    pdfs={[{ title: "Pilates Modelador", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf" }]}
-                                    onAction={() => hasPilates ? setViewingPdf({ title: "Pilates Modelador", url: "https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf" }) : window.open('https://pay.hotmart.com/E105938855Y?checkoutMode=10', '_blank')}
+                                    pdfs={[ALL_GUIDES[1]]}
+                                    onOpenPdf={openPdfViewer}
+                                    onAction={() => hasPilates ? openPdfViewer(ALL_GUIDES[1]) : safeOpenExternal('https://pay.hotmart.com/E105938855Y?checkoutMode=10')}
                                 />
                                 <ExtraCard 
                                     title="Pacote de Elite (IA + Comunidade)"
@@ -2123,59 +1989,86 @@ import { createClient } from '@supabase/supabase-js';
                                     isMonthly={true}
                                     icon="💬"
                                     unlocked={hasScannerIA && hasComunidade}
-                                    onAction={() => (hasScannerIA && hasComunidade) ? window.open('https://t.me/+KiOxeuwQ8a40ZWM8', '_blank') : window.open('https://pay.hotmart.com/I105940414O?checkoutMode=10', '_blank')}
+                                    onAction={() => (hasScannerIA && hasComunidade) ? openCommunityVip() : safeOpenExternal('https://pay.hotmart.com/I105940414O?checkoutMode=10')}
                                 />
                             </div>
                         </div>
                     )}
 
-                    <div className="mt-12 p-7 bg-[#1e2330] rounded-[28px] border border-dashed border-white/15 text-center">
+                    <div id="redeem-code-section" ref={redeemSectionRef} className="mt-12 p-7 bg-[#1e2330] rounded-[28px] border border-dashed border-white/15 text-center">
                         <h3 className="text-white font-black uppercase tracking-[0.2em] text-xs mb-2">Já comprou na Hotmart? Ative seu código aqui</h3>
                         <p className="text-slate-400 text-xs mb-5">Digite o código que você recebeu por e-mail para liberar imediatamente na sua conta.</p>
-                        <div className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto">
+                        <form onSubmit={handleRedeemCode} className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto">
                             <input 
                                 type="text" 
                                 value={redeemCode}
                                 onChange={(e) => setRedeemCode(e.target.value)}
+                                disabled={redeeming}
                                 placeholder="DIGITE SEU CÓDIGO AQUI"
-                                className="flex-1 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-white font-black text-xs focus:border-orange-500 outline-none transition-all placeholder:text-slate-600"
+                                className="flex-1 bg-black/40 border border-white/10 rounded-2xl px-6 py-4 text-white font-black text-xs focus:border-orange-500 outline-none transition-all placeholder:text-slate-600 uppercase"
                             />
                             <button 
-                                onClick={handleRedeemCode}
-                                className="bg-white text-black px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-orange-600 hover:text-white transition-all active:scale-95 shadow-xl"
+                                type="submit"
+                                disabled={redeeming || !redeemCode.trim()}
+                                className="bg-white text-black px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-orange-600 hover:text-white transition-all active:scale-95 shadow-xl disabled:opacity-50"
                             >
-                                Liberar
+                                {redeeming ? 'Validando...' : 'Liberar'}
                             </button>
-                        </div>
+                        </form>
+                        {redeemFeedback && (
+                            <div className={`mt-4 max-w-lg mx-auto p-3 rounded-xl text-xs font-bold ${redeemFeedback.type === 'ok' ? 'bg-emerald-500/15 border border-emerald-500/35 text-emerald-300' : 'bg-red-500/15 border border-red-500/35 text-red-300'}`}>
+                                {redeemFeedback.msg}
+                            </div>
+                        )}
                     </div>
 
                     {viewingPdf && (
                         <div className="fixed inset-0 z-[20000] bg-slate-950 flex flex-col animate-in fade-in zoom-in-95 duration-300">
-                            <div className="flex items-center justify-between p-4 bg-slate-900 border-b border-white/5">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center text-red-500">
+                            <div className="flex items-center justify-between gap-2 p-4 bg-slate-900 border-b border-white/10">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center text-red-500 shrink-0">
                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
                                     </div>
-                                    <h3 className="text-white font-black uppercase tracking-widest text-[11px]">{viewingPdf.title}</h3>
+                                    <h3 className="text-white font-black uppercase tracking-wider text-[11px] truncate">{viewingPdf.title}</h3>
                                 </div>
-                                <button 
-                                    onClick={() => setViewingPdf(null)}
-                                    className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-white text-2xl hover:bg-white/10"
-                                >
-                                    &times;
-                                </button>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <a
+                                        href={viewingPdf.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-3 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-black text-[10px] uppercase tracking-wider transition-all"
+                                    >
+                                        📥 Baixar / Abrir
+                                    </a>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setViewingPdf(null)}
+                                        aria-label="Fechar guia"
+                                        className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white text-2xl hover:bg-white/20"
+                                    >
+                                        &times;
+                                    </button>
+                                </div>
                             </div>
                             <div className="flex-1 bg-slate-950 overflow-hidden relative">
+                                {pdfLoading && (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 z-10 pointer-events-none">
+                                        <div className="w-10 h-10 border-4 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mb-3"></div>
+                                        <p className="text-xs font-bold text-slate-300">Carregando guia PDF...</p>
+                                    </div>
+                                )}
                                 <iframe 
-                                    src={`https://docs.google.com/viewer?url=${encodeURIComponent(viewingPdf.url)}&embedded=true`}
+                                    src={`https://docs.google.com/gview?url=${encodeURIComponent(viewingPdf.url)}&embedded=true`}
                                     className="w-full h-full border-none"
                                     style={{ background: '#0f172a' }}
                                     title={viewingPdf.title}
+                                    onLoad={() => setPdfLoading(false)}
                                 />
-                                <div className="absolute inset-0 pointer-events-none border-[1px] border-white/5"></div>
                             </div>
-                            <div className="p-4 bg-slate-900 border-t border-white/5 text-center">
-                                <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest">Visualização Segura - Modo Elite</p>
+                            <div className="p-3 bg-slate-900 border-t border-white/10 text-center">
+                                <p className="text-[10px] text-slate-400 font-semibold">
+                                    Não abriu no visualizador? Toque em <strong className="text-orange-400">"📥 Baixar / Abrir"</strong> no canto superior direito.
+                                </p>
                             </div>
                         </div>
                     )}
@@ -2187,7 +2080,7 @@ import { createClient } from '@supabase/supabase-js';
            COMPONENTES DE NUTRIÇÃO (MODULARIZADOS)
            ========================================================================== */
 
-         function MealDetailsForm({ isOpen, onClose, onConfirm, aiData }) {
+        function MealDetailsForm({ isOpen, onClose, onConfirm, aiData, isSaving = false, saveError = '' }) {
             const [editableData, setEditableData] = React.useState({
                 mealName: '',
                 calories: 0,
@@ -2204,19 +2097,20 @@ import { createClient } from '@supabase/supabase-js';
                 soda: false
             });
 
-            // Sincronizar dados da IA com o estado editável
+            // Sincronizar dados da IA e resetar extras a cada nova refeição
             React.useEffect(() => {
-                if (aiData) {
+                if (aiData && isOpen) {
                     setEditableData({
                         mealName: aiData.mealName || '',
-                        calories: Number(aiData.calories) || 0,
-                        protein: Number(aiData.protein) || 0,
-                        carbs: Number(aiData.carbs) || 0,
-                        fat: Number(aiData.fat) || 0,
+                        calories: Math.max(0, Number(aiData.calories) || 0),
+                        protein: Math.max(0, Number(aiData.protein) || 0),
+                        carbs: Math.max(0, Number(aiData.carbs) || 0),
+                        fat: Math.max(0, Number(aiData.fat) || 0),
                         description: aiData.description || ''
                     });
+                    setSelectedExtras({ oil: false, vegoil: false, alcohol: false, soda: false });
                 }
-            }, [aiData]);
+            }, [aiData, isOpen]);
 
             if (!isOpen || !aiData) return null;
 
@@ -2232,27 +2126,31 @@ import { createClient } from '@supabase/supabase-js';
             };
 
             const handleInputChange = (field, value) => {
-                setEditableData(prev => ({ ...prev, [field]: value }));
+                if (field === 'mealName' || field === 'description') {
+                    setEditableData(prev => ({ ...prev, [field]: value }));
+                } else {
+                    const num = Math.max(0, Math.min(5000, parseInt(value, 10) || 0));
+                    setEditableData(prev => ({ ...prev, [field]: num }));
+                }
             };
 
             const extraKcal = Object.entries(selectedExtras)
                 .reduce((acc, [id, checked]) => acc + (checked ? EXTRAS_CONFIG[id].kcal : 0), 0);
 
             const totalKcal = Math.round((editableData.calories || 0) + extraKcal);
-
             const inputBaseClass = "bg-slate-800/50 hover:bg-slate-700/80 focus:ring-2 focus:ring-orange-500 rounded px-2 py-1 transition-all outline-none border-none text-white";
 
             return (
-                <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[200000] p-6 animate-in fade-in duration-300">
-                    <div className="bg-slate-900 border border-white/10 rounded-[32px] w-full max-w-md overflow-hidden shadow-2xl relative border-orange-500/20">
-                        <div className="p-8">
-                            <h2 className="text-2xl font-black text-white mb-6 uppercase tracking-tight">🍽️ Detalhes da Refeição</h2>
+                <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[200000] p-4 animate-in fade-in duration-300">
+                    <div className="bg-slate-900 border border-orange-500/25 rounded-[28px] w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl relative">
+                        <div className="p-6 sm:p-8">
+                            <h2 className="text-xl sm:text-2xl font-black text-white mb-5 uppercase tracking-tight">🍽️ Detalhes da Refeição</h2>
                             
-                            <div className="mb-8 p-5 bg-white/5 rounded-2xl border border-white/5">
+                            <div className="mb-6 p-4 bg-white/5 rounded-2xl border border-white/5">
                                 <div className="flex justify-between items-start mb-3">
                                     <div>
-                                        <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">O que a IA identificou</p>
-                                        <p className="text-[9px] text-slate-400 italic">(Podes editar os valores manualmente)</p>
+                                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">O que a IA identificou</p>
+                                        <p className="text-[10px] text-slate-400 italic">(Você pode editar os valores manualmente)</p>
                                     </div>
                                 </div>
                                 
@@ -2260,7 +2158,7 @@ import { createClient } from '@supabase/supabase-js';
                                     type="text"
                                     value={editableData.mealName}
                                     onChange={(e) => handleInputChange('mealName', e.target.value)}
-                                    className={`${inputBaseClass} w-full text-xl font-black mb-4 italic placeholder:text-slate-600`}
+                                    className={`${inputBaseClass} w-full text-lg font-black mb-4 italic placeholder:text-slate-600`}
                                     placeholder="Nome da refeição..."
                                 />
                                 
@@ -2269,8 +2167,10 @@ import { createClient } from '@supabase/supabase-js';
                                         <p className="text-[8px] text-orange-400 font-bold uppercase mb-1">Kcal</p>
                                         <input 
                                             type="number"
+                                            min="0"
+                                            max="5000"
                                             value={editableData.calories}
-                                            onChange={(e) => handleInputChange('calories', parseInt(e.target.value) || 0)}
+                                            onChange={(e) => handleInputChange('calories', e.target.value)}
                                             className={`${inputBaseClass} w-full text-sm font-black text-center p-0`}
                                         />
                                     </div>
@@ -2278,8 +2178,10 @@ import { createClient } from '@supabase/supabase-js';
                                         <p className="text-[8px] text-blue-400 font-bold uppercase mb-1">Prot(g)</p>
                                         <input 
                                             type="number"
+                                            min="0"
+                                            max="500"
                                             value={editableData.protein}
-                                            onChange={(e) => handleInputChange('protein', parseInt(e.target.value) || 0)}
+                                            onChange={(e) => handleInputChange('protein', e.target.value)}
                                             className={`${inputBaseClass} w-full text-sm font-black text-center p-0`}
                                         />
                                     </div>
@@ -2287,8 +2189,10 @@ import { createClient } from '@supabase/supabase-js';
                                         <p className="text-[8px] text-green-400 font-bold uppercase mb-1">Carb(g)</p>
                                         <input 
                                             type="number"
+                                            min="0"
+                                            max="700"
                                             value={editableData.carbs}
-                                            onChange={(e) => handleInputChange('carbs', parseInt(e.target.value) || 0)}
+                                            onChange={(e) => handleInputChange('carbs', e.target.value)}
                                             className={`${inputBaseClass} w-full text-sm font-black text-center p-0`}
                                         />
                                     </div>
@@ -2296,19 +2200,21 @@ import { createClient } from '@supabase/supabase-js';
                                         <p className="text-[8px] text-yellow-400 font-bold uppercase mb-1">Gord(g)</p>
                                         <input 
                                             type="number"
+                                            min="0"
+                                            max="400"
                                             value={editableData.fat}
-                                            onChange={(e) => handleInputChange('fat', parseInt(e.target.value) || 0)}
+                                            onChange={(e) => handleInputChange('fat', e.target.value)}
                                             className={`${inputBaseClass} w-full text-sm font-black text-center p-0`}
                                         />
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="space-y-3 mb-10">
+                            <div className="space-y-2.5 mb-6">
                                 <p className="text-[10px] text-orange-500 font-black uppercase tracking-widest mb-2">Adicionar Extras (O que a IA não vê)</p>
                                 
                                 {Object.entries(EXTRAS_CONFIG).map(([id, config]) => (
-                                    <label key={id} className={`flex items-center gap-3 p-4 rounded-2xl border transition-all cursor-pointer ${selectedExtras[id] ? 'bg-orange-500/10 border-orange-500/40 shadow-lg shadow-orange-500/5' : 'bg-white/5 border-white/5'}`}>
+                                    <label key={id} className={`flex items-center gap-3 p-3.5 rounded-2xl border transition-all cursor-pointer ${selectedExtras[id] ? 'bg-orange-500/10 border-orange-500/40 shadow-lg shadow-orange-500/5' : 'bg-white/5 border-white/5'}`}>
                                         <input 
                                             type="checkbox" 
                                             checked={selectedExtras[id]}
@@ -2320,18 +2226,28 @@ import { createClient } from '@supabase/supabase-js';
                                 ))}
                             </div>
 
-                            <div className="flex gap-4">
+                            {saveError && (
+                                <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/35 text-red-300 text-xs font-bold text-center">
+                                    {saveError}
+                                </div>
+                            )}
+
+                            <div className="flex gap-3">
                                 <button 
+                                    type="button"
                                     onClick={onClose}
-                                    className="flex-1 py-4 rounded-2xl bg-slate-800 text-white font-bold uppercase tracking-widest text-xs active:scale-95 transition-transform"
+                                    disabled={isSaving}
+                                    className="flex-1 py-4 rounded-2xl bg-slate-800 text-white font-bold uppercase tracking-widest text-xs active:scale-95 transition-transform disabled:opacity-50"
                                 >
                                     Cancelar
                                 </button>
                                 <button 
-                                    onClick={() => onConfirm(editableData.mealName, editableData.description, totalKcal, editableData.protein, editableData.carbs, editableData.fat)}
-                                    className="flex-1 py-4 rounded-2xl bg-orange-500 text-white font-black uppercase tracking-widest text-xs shadow-lg shadow-orange-500/20 active:scale-95 transition-transform"
+                                    type="button"
+                                    disabled={isSaving || totalKcal <= 0}
+                                    onClick={() => onConfirm(editableData.mealName || 'Refeição', editableData.description, totalKcal, editableData.protein, editableData.carbs, editableData.fat)}
+                                    className="flex-1 py-4 rounded-2xl bg-orange-500 text-white font-black uppercase tracking-widest text-xs shadow-lg shadow-orange-500/20 active:scale-95 transition-transform disabled:opacity-40"
                                 >
-                                    Salvar ({totalKcal} kcal)
+                                    {isSaving ? 'Salvando...' : `Salvar (${totalKcal} kcal)`}
                                 </button>
                             </div>
                         </div>
@@ -2346,44 +2262,36 @@ import { createClient } from '@supabase/supabase-js';
             const year = today.getFullYear();
             const month = today.getMonth();
             const totalDays = daysInMonth(month, year);
-            const firstDay = new Date(year, month, 1).getDay(); // 0 (Dom) a 6 (Sab)
-
-            // Ajustar para Segunda-feira ser o primeiro (0)
+            const firstDay = new Date(year, month, 1).getDay();
             const firstDayAdjusted = firstDay === 0 ? 6 : firstDay - 1;
 
             const days = [];
             for (let i = 0; i < firstDayAdjusted; i++) days.push(null);
             for (let i = 1; i <= totalDays; i++) days.push(i);
 
-            // Mapear logs por dia
-            const logsByDay = history.reduce((acc, log) => {
-                const date = new Date(log.created_at).getDate();
-                const monthLog = new Date(log.created_at).getMonth();
-                if (monthLog === month) {
-                    if (!acc[date]) acc[date] = { kcal: 0, protein: 0 };
-                    acc[date].kcal += log.calories || 0;
-                    acc[date].protein += log.protein || 0;
-                }
+            // Mapear logs por data local YYYY-MM-DD (evita bug na virada de mês dias 1-6)
+            const logsByDate = history.reduce((acc, log) => {
+                const key = safeFormatDate(log.created_at);
+                if (!key) return acc;
+                if (!acc[key]) acc[key] = { kcal: 0, protein: 0 };
+                acc[key].kcal += log.calories || 0;
+                acc[key].protein += log.protein || 0;
                 return acc;
             }, {});
 
-            // Cálculo Consistência Semanal (Apenas a partir do Dia 1)
             const firstLog = history.length > 0 ? history.reduce((min, p) => p.created_at < min.created_at ? p : min, history[0]) : null;
-            const firstLogDate = firstLog ? new Date(firstLog.created_at) : null;
-            
+            const firstLogStartKey = firstLog ? safeFormatDate(firstLog.created_at) : null;
+
             const last7Days = Array.from({ length: 7 }, (_, i) => {
                 const d = new Date();
-                d.setHours(0,0,0,0);
                 d.setDate(d.getDate() - i);
-                
-                if (firstLogDate && d < new Date(firstLogDate.setHours(0,0,0,0))) return null; // Ignora dias antes do Dia 1
-                
-                const day = d.getDate();
-                const dayLogs = logsByDay[day];
+                const key = safeFormatDate(d);
+                if (firstLogStartKey && key < firstLogStartKey) return null;
+                const dayLogs = logsByDate[key];
                 if (!dayLogs) return false;
                 return dayLogs.kcal > (metaKcal * 0.8) && dayLogs.kcal < (metaKcal * 1.2);
             });
-            
+
             const trackedDays = last7Days.filter(d => d !== null);
             const consistencyPct = trackedDays.length === 0 ? 0 : Math.round((trackedDays.filter(Boolean).length / trackedDays.length) * 100);
 
@@ -2392,7 +2300,7 @@ import { createClient } from '@supabase/supabase-js';
                     <div className="flex justify-between items-center mb-6">
                         <div>
                             <h3 className="text-white font-black uppercase tracking-tight text-sm">Mapa da Disciplina</h3>
-                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{new Intl.DateTimeFormat('pt-PT', { month: 'long', year: 'numeric' }).format(today)}</p>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(today)}</p>
                         </div>
                         <div className="flex items-center gap-2 bg-orange-500/10 px-3 py-1.5 rounded-full border border-orange-500/20">
                             <span className="text-sm">🔥</span>
@@ -2406,15 +2314,13 @@ import { createClient } from '@supabase/supabase-js';
                         ))}
                         {days.map((day, i) => {
                             if (!day) return <div key={i} className="aspect-square"></div>;
-                            
-                            const dayLogs = logsByDay[day];
-                            const isToday = day === today.getDate();
+
                             const dDate = new Date(year, month, day);
-                            dDate.setHours(0,0,0,0);
-                            
-                            // Neutro se antes do primeiro log
-                            const isBeforeStart = firstLogDate && dDate < new Date(new Date(firstLogDate).setHours(0,0,0,0));
-                            
+                            const key = safeFormatDate(dDate);
+                            const dayLogs = logsByDate[key];
+                            const isToday = day === today.getDate();
+                            const isBeforeStart = firstLogStartKey && key < firstLogStartKey;
+
                             let bgColor = "bg-white/5";
                             let border = "border-white/5";
                             let shadow = "";
@@ -2458,6 +2364,28 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
+        const MacroCard = ({ label, current, target, unit, barColor, isSelected, onSelect }) => (
+            <div 
+                onClick={onSelect}
+                className={`bg-slate-800/40 border ${isSelected ? 'border-orange-500/50 scale-105' : 'border-white/5'} rounded-2xl p-4 flex-1 cursor-pointer transition-all active:scale-95`}
+            >
+                <div className="flex justify-between items-start mb-1">
+                    <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest">{label}</p>
+                    <span className="text-[10px] text-slate-600">▼</span>
+                </div>
+                <div className="flex justify-between items-end mb-2">
+                    <span className="text-lg font-black text-white">{current}<span className="text-[10px] text-slate-500 ml-0.5">{unit}</span></span>
+                    <span className="text-[10px] text-slate-500 font-bold">/ {target}</span>
+                </div>
+                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                    <div 
+                        className={`h-full ${barColor} rounded-full shadow-sm transition-all duration-1000`} 
+                        style={{ width: `${Math.min(100, target > 0 ? (current / target) * 100 : 0)}%` }}
+                    ></div>
+                </div>
+            </div>
+        );
+
         function NutritionDashboardView({ 
             nutritionProfile, 
             metaKcal, 
@@ -2475,6 +2403,10 @@ import { createClient } from '@supabase/supabase-js';
             aiTextInput,
             setAiTextInput,
             onTextOnlyScan,
+            isAnalyzing,
+            scanError,
+            onDismissScanError,
+            onDeleteMeal,
             isTrialMode,
             freeScansRemaining,
             onOpenNutriUpsell,
@@ -2489,31 +2421,16 @@ import { createClient } from '@supabase/supabase-js';
                 'Gordura': 'Azeite Extra Virgem, Abacate, Castanhas, Amêndoas, Salmão.'
             };
 
-            const MacroCard = ({ label, current, target, unit, barColor }) => (
-                <div 
-                    onClick={() => setSelectedMacro(selectedMacro === label ? null : label)}
-                    className={`bg-slate-800/40 border ${selectedMacro === label ? 'border-orange-500/50 scale-105' : 'border-white/5'} rounded-2xl p-4 flex-1 cursor-pointer transition-all active:scale-95`}
-                >
-                    <div className="flex justify-between items-start mb-1">
-                        <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest">{label}</p>
-                        <span className="text-[10px] text-slate-600">▼</span>
-                    </div>
-                    <div className="flex justify-between items-end mb-2">
-                        <span className="text-lg font-black text-white">{current}<span className="text-[10px] text-slate-500 ml-0.5">{unit}</span></span>
-                        <span className="text-[10px] text-slate-500 font-bold">/ {target}</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                        <div 
-                            className={`h-full ${barColor} rounded-full shadow-sm transition-all duration-1000`} 
-                            style={{ width: `${Math.min(100, (current / target) * 100)}%` }}
-                        ></div>
-                    </div>
-                </div>
-            );
-
             return (
                 <div className="p-5 animate-in fade-in duration-500 pb-32">
                     <div className="page-header mb-4"><h1>📸 Nutri-Scan™ IA</h1></div>
+
+                    {scanError && (
+                        <div className="mb-5 p-4 rounded-2xl bg-red-500/15 border border-red-500/35 flex items-start justify-between gap-3">
+                            <p className="text-xs text-red-200 font-bold leading-relaxed">{scanError}</p>
+                            <button type="button" onClick={onDismissScanError} className="text-red-300 font-black text-base leading-none px-1">&times;</button>
+                        </div>
+                    )}
 
                     {isTrialMode && freeScansRemaining > 0 && (
                         <div className="bg-gradient-to-r from-emerald-600/20 via-emerald-500/15 to-teal-500/10 border border-emerald-500/35 rounded-3xl p-5 mb-6 shadow-xl">
@@ -2522,7 +2439,8 @@ import { createClient } from '@supabase/supabase-js';
                                     🎁 {freeScansRemaining === 1 ? '1 TESTE GRÁTIS RESTANTE' : `${freeScansRemaining} TESTES GRÁTIS LIBERADOS`}
                                 </span>
                                 <button
-                                    onClick={() => onNav && onNav('extras')}
+                                    type="button"
+                                    onClick={() => onNav && onNav('extras', { focusRedeem: true })}
                                     className="text-[10px] text-emerald-300 font-bold underline"
                                 >
                                     Já tenho código
@@ -2532,7 +2450,7 @@ import { createClient } from '@supabase/supabase-js';
                                 Teste agora na prática, sem pagar nada!
                             </p>
                             <p className="text-xs text-slate-300 leading-relaxed">
-                                Tire uma foto do seu prato ou digite o que você comeu abaixo e veja a IA calcular suas calorias e macros em segundos.
+                                Tire uma foto do seu prato, escolha da galeria ou digite o que você comeu abaixo e veja a IA calcular calorias e macros em segundos.
                             </p>
                         </div>
                     )}
@@ -2550,13 +2468,15 @@ import { createClient } from '@supabase/supabase-js';
                             </p>
                             <div className="flex flex-col gap-2">
                                 <button
+                                    type="button"
                                     onClick={() => onOpenNutriUpsell && onOpenNutriUpsell('limit_reached')}
                                     className="w-full py-4 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 rounded-2xl text-white font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-600/25 active:scale-95 transition-all"
                                 >
                                     👉 Liberar Nutri-Scan Ilimitado (7 Dias Grátis)
                                 </button>
                                 <button
-                                    onClick={() => onNav && onNav('extras')}
+                                    type="button"
+                                    onClick={() => onNav && onNav('extras', { focusRedeem: true })}
                                     className="w-full py-2.5 text-[11px] text-slate-400 hover:text-white font-bold underline"
                                 >
                                     Já assinou ou tem código? Ativar aqui • Ou veja o Acesso Total sem mensalidade
@@ -2565,24 +2485,26 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
                     )}
 
-                    {/* FERRAMENTAS DE REGISTRO (LOGO NO TOPO PARA CONVERSÃO IMEDIATA!) */}
+                    {/* FERRAMENTAS DE REGISTRO */}
                     <div className="space-y-4 mb-6">
                         <button 
+                            type="button"
+                            disabled={isAnalyzing}
                             onClick={onScanClick}
-                            className={`w-full relative overflow-hidden group rounded-[28px] p-6 shadow-2xl active:scale-95 transition-transform ${isTrialMode && freeScansRemaining === 0 ? 'bg-slate-800 border border-orange-500/40' : 'bg-gradient-to-r from-orange-500 to-orange-600 shadow-orange-500/30'}`}
+                            className={`w-full relative overflow-hidden group rounded-[28px] p-6 shadow-2xl active:scale-95 transition-transform disabled:opacity-60 ${isTrialMode && freeScansRemaining === 0 ? 'bg-slate-800 border border-orange-500/40' : 'bg-gradient-to-r from-orange-500 to-orange-600 shadow-orange-500/30'}`}
                         >
                             <div className="flex items-center justify-center gap-4">
                                 <span className="text-4xl text-white">{isTrialMode && freeScansRemaining === 0 ? '🔒' : '📸'}</span>
                                 <div className="text-left">
                                     <div className="text-white font-black text-lg sm:text-xl uppercase tracking-tighter">
-                                        {isTrialMode && freeScansRemaining === 0 ? 'Desbloquear Scanner por Foto' : 'Fotografar Meu Prato com IA'}
+                                        {isTrialMode && freeScansRemaining === 0 ? 'Desbloquear Scanner por Foto' : 'Fotografar ou Escolher Foto do Prato'}
                                     </div>
                                     <div className="text-white/80 text-[11px] font-bold">
                                         {isTrialMode && freeScansRemaining > 0
                                             ? `Grátis! Restam ${freeScansRemaining} de ${NUTRISCAN_FREE_LIMIT} testes`
                                             : isTrialMode
                                             ? 'Toque para liberar análises ilimitadas'
-                                            : 'Tire uma foto e descubra calorias e macros na hora'}
+                                            : 'Tire uma foto ou envie da galeria e descubra calorias na hora'}
                                     </div>
                                 </div>
                             </div>
@@ -2593,6 +2515,7 @@ import { createClient } from '@supabase/supabase-js';
                             <textarea 
                                 id="meal-description-input"
                                 value={aiTextInput}
+                                disabled={isAnalyzing}
                                 onChange={(e) => setAiTextInput(e.target.value)}
                                 placeholder="Ex: 2 ovos mexidos, 1 pão integral e 1 xícara de café com leite..."
                                 className="w-full bg-slate-900/60 border border-white/10 rounded-2xl p-4 text-white text-sm focus:ring-2 focus:ring-orange-500/50 outline-none transition-all placeholder:text-slate-500 mb-3"
@@ -2602,6 +2525,7 @@ import { createClient } from '@supabase/supabase-js';
                                 <div className="flex flex-wrap gap-2 mb-3">
                                     <button
                                         type="button"
+                                        disabled={isAnalyzing}
                                         onClick={() => setAiTextInput('2 ovos mexidos, 1 fatia de pão integral e 1 café com leite')}
                                         className="text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 px-3 py-1.5 rounded-full font-semibold transition-all"
                                     >
@@ -2609,6 +2533,7 @@ import { createClient } from '@supabase/supabase-js';
                                     </button>
                                     <button
                                         type="button"
+                                        disabled={isAnalyzing}
                                         onClick={() => setAiTextInput('150g de frango grelhado, 4 colheres de arroz, feijão e salada')}
                                         className="text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 px-3 py-1.5 rounded-full font-semibold transition-all"
                                     >
@@ -2618,10 +2543,12 @@ import { createClient } from '@supabase/supabase-js';
                             )}
                             {aiTextInput?.trim() && (
                                 <button 
+                                    type="button"
+                                    disabled={isAnalyzing}
                                     onClick={onTextOnlyScan}
-                                    className="w-full py-3.5 bg-orange-500 hover:bg-orange-400 rounded-xl text-white text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-orange-500/20"
+                                    className="w-full py-3.5 bg-orange-500 hover:bg-orange-400 rounded-xl text-white text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-orange-500/20 disabled:opacity-50"
                                 >
-                                    {isTrialMode && freeScansRemaining === 0 ? '🔒 Liberar para Analisar ➔' : 'Calcular Calorias com IA ➔'}
+                                    {isAnalyzing ? 'Analisando...' : (isTrialMode && freeScansRemaining === 0 ? '🔒 Liberar para Analisar ➔' : 'Calcular Calorias com IA ➔')}
                                 </button>
                             )}
                         </div>
@@ -2629,6 +2556,7 @@ import { createClient } from '@supabase/supabase-js';
 
                     {(!hasCustomProfile || nutritionProfile?.isProfileIncomplete) && (
                         <button
+                            type="button"
                             onClick={() => onNav && onNav('evolucao')}
                             className="w-full text-left bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/25 rounded-2xl p-4 mb-6 flex items-center justify-between gap-3 transition-all"
                         >
@@ -2665,12 +2593,11 @@ import { createClient } from '@supabase/supabase-js';
 
                     {/* Cartões de Macros */}
                     <div className="flex gap-3 mb-4">
-                        <MacroCard label="Proteína" current={proteinToday} target={metaProtein} unit="g" barColor="bg-blue-500" />
-                        <MacroCard label="Carboidratos" current={carbsToday} target={metaCarbs} unit="g" barColor="bg-green-500" />
-                        <MacroCard label="Gordura" current={fatToday} target={metaFat} unit="g" barColor="bg-yellow-500" />
+                        <MacroCard label="Proteína" current={proteinToday} target={metaProtein} unit="g" barColor="bg-blue-500" isSelected={selectedMacro === 'Proteína'} onSelect={() => setSelectedMacro(selectedMacro === 'Proteína' ? null : 'Proteína')} />
+                        <MacroCard label="Carboidratos" current={carbsToday} target={metaCarbs} unit="g" barColor="bg-green-500" isSelected={selectedMacro === 'Carboidratos'} onSelect={() => setSelectedMacro(selectedMacro === 'Carboidratos' ? null : 'Carboidratos')} />
+                        <MacroCard label="Gordura" current={fatToday} target={metaFat} unit="g" barColor="bg-yellow-500" isSelected={selectedMacro === 'Gordura'} onSelect={() => setSelectedMacro(selectedMacro === 'Gordura' ? null : 'Gordura')} />
                     </div>
 
-                    {/* Info Expandível de Fontes */}
                     {selectedMacro && (
                         <div className="mb-8 p-4 bg-orange-500/10 border border-orange-500/20 rounded-2xl animate-in zoom-in duration-300">
                             <div className="flex items-center gap-2 mb-2">
@@ -2681,10 +2608,9 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
                     )}
 
-                    {/* Calendário de Consistência */}
                     <ConsistencyCalendar history={localHistory} metaKcal={metaKcal} metaProtein={metaProtein} />
 
-                    {/* HISTÓRICO NO FUNDO */}
+                    {/* HISTÓRICO DE HOJE */}
                     <div className="mb-10">
                         <h2 className="text-lg font-black text-white uppercase tracking-tight mb-4 flex items-center gap-2">
                            🕒 Histórico de Hoje
@@ -2696,17 +2622,30 @@ import { createClient } from '@supabase/supabase-js';
                                 </div>
                             ) : (
                                 todayLogs.map((item, idx) => (
-                                    <div key={idx} className="bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className="text-xl">🍽️</div>
-                                            <div>
-                                                <div className="text-sm font-bold text-white">{item.meal_name || item.description || 'Refeição'}</div>
+                                    <div key={item.id || idx} className="bg-white/5 border border-white/5 rounded-2xl p-4 flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className="text-xl shrink-0">🍽️</div>
+                                            <div className="min-w-0">
+                                                <div className="text-sm font-bold text-white truncate">{item.meal_name || item.description || 'Refeição'}</div>
                                                 <div className="text-[10px] text-slate-500 uppercase font-black">{new Date(item.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</div>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <div className="text-orange-400 font-black">{item.calories} kcal</div>
-                                            <div className="text-[8px] text-slate-500 font-black uppercase">P: {item.protein}g | C: {item.carbs}g | G: {item.fat}g</div>
+                                        <div className="flex items-center gap-3 shrink-0">
+                                            <div className="text-right">
+                                                <div className="text-orange-400 font-black">{item.calories} kcal</div>
+                                                <div className="text-[8px] text-slate-500 font-black uppercase">P: {item.protein}g | C: {item.carbs}g | G: {item.fat}g</div>
+                                            </div>
+                                            {item.id && onDeleteMeal && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onDeleteMeal(item.id)}
+                                                    title="Excluir refeição"
+                                                    aria-label="Excluir refeição"
+                                                    className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 flex items-center justify-center text-xs transition-all"
+                                                >
+                                                    🗑️
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 ))
@@ -2717,51 +2656,107 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function NutritionDashboard({ ud, onNav, hasNutriScanAccess = true, onOpenNutriUpsell }) {
-            const userId = ud?.session?.user?.id || ud?.userProfile?.id || 'guest';
+        function NutritionDashboard({ ud, onNav, hasNutriScanAccess = false, onOpenNutriUpsell }) {
             const [localHistory, setLocalHistory] = React.useState([]);
             const [nutritionProfile, setNutritionProfile] = React.useState(null);
             const [isLoading, setIsLoading] = React.useState(true);
             const [showMealDetails, setShowMealDetails] = React.useState(false);
             const [isAnalyzing, setIsAnalyzing] = React.useState(false);
+            const [isSavingMeal, setIsSavingMeal] = React.useState(false);
+            const [saveMealError, setSaveMealError] = React.useState('');
+            const [scanError, setScanError] = React.useState('');
             const [aiData, setAiData] = React.useState(null);
             const [aiTextInput, setAiTextInput] = React.useState('');
-            const [freeScansUsed, setFreeScansUsed] = React.useState(() => getFreeScansUsed(userId));
+            const isScanningRef = React.useRef(false);
+            const scanCancelIdRef = React.useRef(0);
+
+            const quota = ud?.nutriQuota || { hasNutriScan: false, freeScansUsed: 0, freeScansRemaining: NUTRISCAN_FREE_LIMIT };
+            const isPaid = Boolean(hasNutriScanAccess || quota.hasNutriScan);
+            const freeScansRemaining = isPaid ? Infinity : Math.max(0, quota.freeScansRemaining ?? NUTRISCAN_FREE_LIMIT);
+            const isTrialMode = !isPaid;
 
             React.useEffect(() => {
-                const syncFreeUses = () => setFreeScansUsed(getFreeScansUsed(userId));
-                syncFreeUses();
-                window.addEventListener('nutriscan-free-uses-updated', syncFreeUses);
-                return () => window.removeEventListener('nutriscan-free-uses-updated', syncFreeUses);
-            }, [userId]);
+                ud?.refreshNutriQuota?.();
+            }, []);
 
-            const effectiveUsed = Math.max(freeScansUsed, localHistory.length);
-            const freeScansRemaining = hasNutriScanAccess ? Infinity : Math.max(0, NUTRISCAN_FREE_LIMIT - effectiveUsed);
-            const isTrialMode = !hasNutriScanAccess;
+            const parseFunctionError = async (error) => {
+                let status = error?.context?.status || 0;
+                let code = '';
+                let message = '';
+                try {
+                    if (error?.context) {
+                        const body = await error.context.json();
+                        code = body?.code || '';
+                        message = body?.error || '';
+                    }
+                } catch {}
+                return { status, code, message };
+            };
 
-            async function handleAIScan(event) {
-                const file = event.target ? event.target.files[0] : event;
-                if (!file) return;
-                executeScan(file);
-            }
+            const handleApiFailure = async (error) => {
+                const { status, code, message } = await parseFunctionError(error);
+                if (status === 401 || code === 'UNAUTHORIZED') {
+                    setScanError('Sua sessão expirou. Saia e entre novamente na sua conta para usar o Nutri-Scan.');
+                    return;
+                }
+                if (status === 403 || code === 'TRIAL_EXHAUSTED') {
+                    ud?.setNutriQuota?.(prev => ({ ...prev, freeScansUsed: NUTRISCAN_FREE_LIMIT, freeScansRemaining: 0, loaded: true }));
+                    if (onOpenNutriUpsell) onOpenNutriUpsell('limit_reached');
+                    return;
+                }
+                setScanError(message || 'Não conseguimos analisar esta refeição agora. Tente outra foto com mais luz ou descreva o prato (nenhum teste foi descontado).');
+            };
+
+            const applySuccessResponse = (data) => {
+                if (typeof data.freeScansRemaining === 'number') {
+                    ud?.setNutriQuota?.(prev => ({
+                        ...prev,
+                        hasNutriScan: Boolean(data.hasNutriScan ?? prev.hasNutriScan),
+                        freeScansUsed: typeof data.freeScansUsed === 'number' ? data.freeScansUsed : prev.freeScansUsed,
+                        freeScansRemaining: data.freeScansRemaining,
+                        loaded: true
+                    }));
+                }
+                setAiData(data);
+                setAiTextInput('');
+                setSaveMealError('');
+                setShowMealDetails(true);
+            };
+
+            const cancelCurrentScan = () => {
+                scanCancelIdRef.current += 1;
+                isScanningRef.current = false;
+                setIsAnalyzing(false);
+            };
 
             async function executeScan(file) {
+                if (isScanningRef.current) return;
                 if (isTrialMode && freeScansRemaining <= 0) {
                     if (onOpenNutriUpsell) onOpenNutriUpsell('limit_reached');
                     return;
                 }
+                setScanError('');
+                isScanningRef.current = true;
+                const myScanId = ++scanCancelIdRef.current;
                 setIsAnalyzing(true);
+
                 try {
-                    const reader = new FileReader();
-                    reader.onload = function(e) {
+                    const dataUrl = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => resolve(e.target?.result);
+                        reader.onerror = () => reject(new Error('Não foi possível ler a imagem selecionada.'));
+                        reader.readAsDataURL(file);
+                    });
+
+                    const base64String = await new Promise((resolve, reject) => {
                         const img = new Image();
-                        img.onload = async function() {
+                        img.onload = () => {
                             try {
                                 const canvas = document.createElement('canvas');
                                 const ctx = canvas.getContext('2d');
                                 const MAX_WIDTH = 800;
-                                let width = img.width;
-                                let height = img.height;
+                                let width = img.width || 800;
+                                let height = img.height || 600;
                                 if (width > MAX_WIDTH) {
                                     height = Math.round((height * MAX_WIDTH) / width);
                                     width = MAX_WIDTH;
@@ -2769,86 +2764,83 @@ import { createClient } from '@supabase/supabase-js';
                                 canvas.width = width;
                                 canvas.height = height;
                                 ctx.drawImage(img, 0, 0, width, height);
-                                
-                                const base64String = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
-                                
-                                const { data, error } = await window.supabase.functions.invoke('analyze-meal', {
-                                    body: { 
-                                        image: base64String, 
-                                        mimeType: 'image/jpeg',
-                                        textInput: aiTextInput
-                                    }
-                                });
-
-                                if (error || !data) throw new Error(error?.message || 'Erro IA');
-
-                                if (isTrialMode) {
-                                    setFreeScansUsed(incrementFreeScansUsed(userId));
-                                }
-                                setAiData(data);
-                                setAiTextInput('');
-                                setShowMealDetails(true);
-                            } catch (err) {
-                                setAiData({
-                                    mealName: "Refeição não identificada",
-                                    calories: 0, protein: 0, carbs: 0, fat: 0,
-                                    description: "Digite os valores manualmente ou tente outra foto."
-                                });
-                                setShowMealDetails(true);
-                            } finally {
-                                setIsAnalyzing(false);
+                                const b64 = canvas.toDataURL('image/jpeg', 0.65).split(',')[1];
+                                resolve(b64);
+                            } catch (canvasErr) {
+                                reject(new Error('Formato de foto não suportado. Tente tirar uma foto JPG ou PNG.'));
                             }
                         };
-                        img.src = e.target.result;
-                    };
-                    reader.readAsDataURL(file);
-                } catch (err) {
-                    setAiData({
-                        mealName: "Refeição não identificada",
-                        calories: 0, protein: 0, carbs: 0, fat: 0,
-                        description: "Digite os valores manualmente ou tente outra foto."
+                        img.onerror = () => reject(new Error('Não foi possível abrir esta foto (ex.: HEIC incompatível). Tire a foto direto pela câmera ou escolha JPG/PNG.'));
+                        img.src = dataUrl;
                     });
-                    setShowMealDetails(true);
-                    setIsAnalyzing(false);
+
+                    if (scanCancelIdRef.current !== myScanId) return;
+
+                    const { data, error } = await window.supabase.functions.invoke('analyze-meal', {
+                        body: {
+                            image: base64String,
+                            mimeType: 'image/jpeg',
+                            textInput: aiTextInput,
+                            lang: 'pt'
+                        }
+                    });
+
+                    if (scanCancelIdRef.current !== myScanId) return;
+                    if (error || !data) {
+                        await handleApiFailure(error);
+                        return;
+                    }
+                    applySuccessResponse(data);
+                } catch (err) {
+                    if (scanCancelIdRef.current === myScanId) {
+                        setScanError(err?.message || 'Erro ao processar a foto. Tente novamente.');
+                    }
+                } finally {
+                    if (scanCancelIdRef.current === myScanId) {
+                        isScanningRef.current = false;
+                        setIsAnalyzing(false);
+                    }
                 }
             }
 
             async function executeTextOnlyScan() {
-                if (!aiTextInput.trim()) return;
+                if (!aiTextInput.trim() || isScanningRef.current) return;
                 if (isTrialMode && freeScansRemaining <= 0) {
                     if (onOpenNutriUpsell) onOpenNutriUpsell('limit_reached');
                     return;
                 }
+                setScanError('');
+                isScanningRef.current = true;
+                const myScanId = ++scanCancelIdRef.current;
                 setIsAnalyzing(true);
                 try {
                     const { data, error } = await window.supabase.functions.invoke('analyze-meal', {
-                        body: { 
-                            image: null, 
-                            textInput: aiTextInput 
+                        body: {
+                            image: null,
+                            textInput: aiTextInput.trim(),
+                            lang: 'pt'
                         }
                     });
-
-                    if (error || !data) throw new Error(error?.message || 'Erro IA');
-
-                    if (isTrialMode) {
-                        setFreeScansUsed(incrementFreeScansUsed(userId));
+                    if (scanCancelIdRef.current !== myScanId) return;
+                    if (error || !data) {
+                        await handleApiFailure(error);
+                        return;
                     }
-                    setAiData(data);
-                    setAiTextInput('');
-                    setShowMealDetails(true);
+                    applySuccessResponse(data);
                 } catch (err) {
-                    setAiData({
-                        mealName: "Refeição não identificada",
-                        calories: 0, protein: 0, carbs: 0, fat: 0,
-                        description: "Digite os valores manualmente ou tente descrever novamente."
-                    });
-                    setShowMealDetails(true);
+                    if (scanCancelIdRef.current === myScanId) {
+                        setScanError('Erro de conexão ao analisar sua refeição. Tente novamente.');
+                    }
                 } finally {
-                    setIsAnalyzing(false);
+                    if (scanCancelIdRef.current === myScanId) {
+                        isScanningRef.current = false;
+                        setIsAnalyzing(false);
+                    }
                 }
             }
 
             const analyzeMealImage = () => {
+                if (isScanningRef.current) return;
                 if (isTrialMode && freeScansRemaining <= 0) {
                     if (onOpenNutriUpsell) onOpenNutriUpsell('limit_reached');
                     return;
@@ -2856,18 +2848,21 @@ import { createClient } from '@supabase/supabase-js';
                 const input = document.createElement('input');
                 input.type = 'file';
                 input.accept = 'image/*';
-                input.capture = 'environment';
-                input.onchange = (e) => handleAIScan(e);
+                input.onchange = (e) => {
+                    const file = e.target?.files?.[0];
+                    if (file) executeScan(file);
+                };
                 input.click();
             };
 
             const handleConfirmMeal = async (mealName, description, totalCalories, protein, carbs, fat) => {
-                if (!window.supabase) return;
-                setIsLoading(true);
+                if (!window.supabase || isSavingMeal) return;
+                setIsSavingMeal(true);
+                setSaveMealError('');
 
                 try {
                     const { data: { user } } = await window.supabase.auth.getUser();
-                    if (!user) throw new Error("Sessão expirada");
+                    if (!user) throw new Error("Sessão expirada. Entre novamente.");
 
                     const { error } = await window.supabase
                         .from('nutrition_logs')
@@ -2875,10 +2870,10 @@ import { createClient } from '@supabase/supabase-js';
                             user_id: user.id,
                             meal_name: mealName,
                             description: description,
-                            calories: Math.round(Number(totalCalories) || 0),
-                            protein: Math.round(Number(protein) || 0),
-                            carbs: Math.round(Number(carbs) || 0),
-                            fat: Math.round(Number(fat) || 0),
+                            calories: Math.max(0, Math.round(Number(totalCalories) || 0)),
+                            protein: Math.max(0, Math.round(Number(protein) || 0)),
+                            carbs: Math.max(0, Math.round(Number(carbs) || 0)),
+                            fat: Math.max(0, Math.round(Number(fat) || 0)),
                             created_at: new Date().toISOString()
                         }]);
 
@@ -2886,13 +2881,23 @@ import { createClient } from '@supabase/supabase-js';
 
                     setShowMealDetails(false);
                     window.dispatchEvent(new CustomEvent('nutrition-updated'));
-                    console.log("Refeição registrada!");
-
                 } catch (err) {
                     console.error("Erro ao gravar refeição:", err);
+                    setSaveMealError(err?.message || 'Não foi possível salvar a refeição. Tente novamente.');
                 } finally {
-                    setIsLoading(false);
+                    setIsSavingMeal(false);
                 }
+            };
+
+            const handleDeleteMeal = async (mealId) => {
+                if (!mealId || !window.supabase) return;
+                if (!window.confirm('Excluir esta refeição do seu histórico de hoje?')) return;
+                const { error } = await window.supabase.from('nutrition_logs').delete().eq('id', mealId);
+                if (error) {
+                    setScanError('Não foi possível excluir a refeição. Tente novamente.');
+                    return;
+                }
+                setLocalHistory(prev => prev.filter(item => item.id !== mealId));
             };
 
             const loadNutritionDashboard = React.useCallback(async () => {
@@ -2906,7 +2911,6 @@ import { createClient } from '@supabase/supabase-js';
                         return;
                     }
 
-                    // 1. DADOS DE PERFIL E EVOLUÇÃO
                     const { data: evoData } = await window.supabase
                         .from('evolucao_corporal')
                         .select('*')
@@ -2930,7 +2934,7 @@ import { createClient } from '@supabase/supabase-js';
                         setNutritionProfile({
                             peso: null,
                             altura: null,
-                            idade: parseInt(userAge),
+                            idade: parseInt(userAge, 10),
                             genero: userGender,
                             objetivo: userObjective,
                             isProfileIncomplete: true
@@ -2939,14 +2943,13 @@ import { createClient } from '@supabase/supabase-js';
                         setNutritionProfile({
                             peso: parseFloat(evoData.peso),
                             altura: parseFloat(evoData.altura_cm),
-                            idade: parseInt(userAge),
+                            idade: parseInt(userAge, 10),
                             genero: userGender,
                             objetivo: userObjective,
                             isProfileIncomplete: isProfileIncomplete
                         });
                     }
 
-                    // 2. BUSCA DE HISTÓRICO ALARGADO (30 DIAS PARA O CALENDÁRIO)
                     try {
                         const thirtyDaysAgo = new Date();
                         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -2962,7 +2965,6 @@ import { createClient } from '@supabase/supabase-js';
                     } catch (e) {
                         console.error("Erro histórico:", e);
                     }
-
                 } catch (err) {
                     console.error("Erro no carregamento nutrição:", err);
                 } finally {
@@ -2991,7 +2993,6 @@ import { createClient } from '@supabase/supabase-js';
             const weight = hasCustomProfile ? parseFloat(p.peso) : 68;
             const goal = p.objetivo || 'Perder Peso';
 
-            // --- CÁLCULOS DINÂMICOS (FÓRMULAS DE NUTRIÇÃO ESPORTIVA) ---
             let multiplier = 28;
             const lowerGoal = goal.toLowerCase();
             if (lowerGoal.includes('perder') || lowerGoal.includes('emagrecer') || lowerGoal.includes('seca')) {
@@ -3007,14 +3008,13 @@ import { createClient } from '@supabase/supabase-js';
             const kcalFromFat = metaFat * 9;
             const metaCarbs = Math.max(50, Math.round((metaKcal - kcalFromProt - kcalFromFat) / 4));
 
-            // --- TOTAIS DE HOJE ---
-            const todayLogs = localHistory.filter(h => new Date(h.created_at).toDateString() === new Date().toDateString());
+            const todayKey = safeFormatDate(new Date());
+            const todayLogs = localHistory.filter(h => safeFormatDate(h.created_at) === todayKey);
             const consumedToday = todayLogs.reduce((acc, curr) => acc + (curr.calories || 0), 0);
             const proteinToday = todayLogs.reduce((acc, curr) => acc + (curr.protein || 0), 0);
             const carbsToday = todayLogs.reduce((acc, curr) => acc + (curr.carbs || 0), 0);
             const fatToday = todayLogs.reduce((acc, curr) => acc + (curr.fat || 0), 0);
-            
-            const progressPct = Math.min(100, Math.round((consumedToday / metaKcal) * 100));
+            const progressPct = Math.min(100, metaKcal > 0 ? Math.round((consumedToday / metaKcal) * 100) : 0);
 
             return (
                 <React.Fragment>
@@ -3035,6 +3035,10 @@ import { createClient } from '@supabase/supabase-js';
                         aiTextInput={aiTextInput}
                         setAiTextInput={setAiTextInput}
                         onTextOnlyScan={executeTextOnlyScan}
+                        isAnalyzing={isAnalyzing}
+                        scanError={scanError}
+                        onDismissScanError={() => setScanError('')}
+                        onDeleteMeal={handleDeleteMeal}
                         isTrialMode={isTrialMode}
                         freeScansRemaining={freeScansRemaining}
                         onOpenNutriUpsell={onOpenNutriUpsell}
@@ -3043,10 +3047,17 @@ import { createClient } from '@supabase/supabase-js';
                     />
 
                     {isAnalyzing && (
-                        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-[250000] animate-in fade-in duration-300">
+                        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center z-[250000] p-6 text-center animate-in fade-in duration-300">
                             <div className="w-16 h-16 border-4 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mb-6 shadow-[0_0_30px_rgba(249,115,22,0.3)]"></div>
                             <p className="text-white font-black text-xl uppercase tracking-widest animate-pulse">IA Analisando...</p>
                             <p className="text-slate-400 text-xs mt-2 uppercase tracking-tight">Identificando os alimentos e calorias do seu prato</p>
+                            <button
+                                type="button"
+                                onClick={cancelCurrentScan}
+                                className="mt-6 px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-slate-300 text-xs font-bold"
+                            >
+                                Cancelar
+                            </button>
                         </div>
                     )}
 
@@ -3055,6 +3066,8 @@ import { createClient } from '@supabase/supabase-js';
                         onClose={() => setShowMealDetails(false)}
                         onConfirm={handleConfirmMeal}
                         aiData={aiData}
+                        isSaving={isSavingMeal}
+                        saveError={saveMealError}
                     />
 
                 </React.Fragment>
@@ -3132,9 +3145,12 @@ import { createClient } from '@supabase/supabase-js';
                 return Math.min(30, lastCompleted + 1);
             });
             const [evaluationData, setEvaluationData] = React.useState({ weight: '', feel: '' });
+            const [evalError, setEvalError] = React.useState('');
+            const [lockedHint, setLockedHint] = React.useState('');
             const [isSaving, setIsSaving] = React.useState(false);
             const [dbData, setDbData] = React.useState(null);
             const [initialWeight, setInitialWeight] = React.useState(null);
+            const [lastBioMeta, setLastBioMeta] = React.useState({ altura_cm: null, genero: null });
 
             // Sincronizar exercícios
             React.useEffect(() => {
@@ -3152,20 +3168,30 @@ import { createClient } from '@supabase/supabase-js';
                 return () => { mounted = false; };
             }, []);
 
-            // Carregar peso inicial para o Radar de Evolução
+            // Carregar peso inicial + última altura/gênero para não quebrar meta do Nutri-Scan
             React.useEffect(() => {
-                const fetchInitialWeight = async () => {
+                const fetchBio = async () => {
                     if (!window.supabase || !ud?.session?.user?.id) return;
-                    const { data } = await window.supabase
-                        .from('evolucao_corporal')
-                        .select('peso')
-                        .eq('user_id', ud.session.user.id)
-                        .order('data', { ascending: true })
-                        .limit(1)
-                        .maybeSingle();
-                    if (data) setInitialWeight(parseFloat(data.peso));
+                    const [{ data: firstRow }, { data: latestRow }] = await Promise.all([
+                        window.supabase
+                            .from('evolucao_corporal')
+                            .select('peso')
+                            .eq('user_id', ud.session.user.id)
+                            .order('data', { ascending: true })
+                            .limit(1)
+                            .maybeSingle(),
+                        window.supabase
+                            .from('evolucao_corporal')
+                            .select('altura_cm, genero')
+                            .eq('user_id', ud.session.user.id)
+                            .order('data', { ascending: false })
+                            .limit(1)
+                            .maybeSingle()
+                    ]);
+                    if (firstRow?.peso) setInitialWeight(parseFloat(firstRow.peso));
+                    if (latestRow) setLastBioMeta({ altura_cm: latestRow.altura_cm || null, genero: latestRow.genero || null });
                 };
-                fetchInitialWeight();
+                fetchBio();
             }, [ud?.session?.user?.id]);
 
             const completedCount = challengeLog.length;
@@ -3177,9 +3203,8 @@ import { createClient } from '@supabase/supabase-js';
             else if (completedCount >= 16) rank = { name: 'AVANÇADO', class: 'rank-guerreiro', icon: '🥇' };
             else if (completedCount >= 8) rank = { name: 'CONSTANTE', class: 'rank-elite', icon: '🥈' };
 
-            // Cálculo de Repetições (6 ex x 3 séries x 12 reps)
             const totalReps = completedCount * 6 * 3 * 12; 
-            const disciplinePct = Math.round((completedCount / (Math.max(1, selectedDay))) * 100);
+            const disciplinePct = Math.min(100, Math.round((completedCount / Math.max(1, selectedDay)) * 100));
 
             const isEvalDay = (day) => [7, 14, 21, 30].includes(day);
 
@@ -3225,34 +3250,49 @@ import { createClient } from '@supabase/supabase-js';
             const isCompleted = challengeLog.includes(selectedDay);
 
             const handleSaveEvaluation = async () => {
-                if (!evaluationData.weight) return;
+                setEvalError('');
+                const p = parseFloat(evaluationData.weight);
+                if (!p || p < 30 || p > 350) {
+                    setEvalError('Informe um peso válido entre 30 e 350 kg.');
+                    return;
+                }
                 setIsSaving(true);
                 
                 try {
-                    const p = parseFloat(evaluationData.weight);
                     if (ud?.session?.user?.id && window.supabase) {
-                        // 1. Record evolution
-                        await window.supabase.from('evolucao_corporal').insert({
-                            user_id: ud.session.user.id,
-                            peso: p,
-                            note: `Desafio 30 Dias - Dia ${selectedDay} (${evaluationData.feel})`
-                        });
+                        const fallbackGender = lastBioMeta.genero || (ud?.userProfile?.gender?.toLowerCase()?.startsWith('m') ? 'm' : 'f');
+                        const { data: savedEvo, error: evoErr } = await window.supabase
+                            .from('evolucao_corporal')
+                            .insert({
+                                user_id: ud.session.user.id,
+                                peso: p,
+                                altura_cm: lastBioMeta.altura_cm,
+                                genero: fallbackGender,
+                                note: `Desafio 30 Dias - Dia ${selectedDay}${evaluationData.feel ? ` (${evaluationData.feel})` : ''}`
+                            })
+                            .select()
+                            .single();
 
-                        // 2. Record check-in log
-                        await window.supabase.from('workout_logs').insert({
+                        if (evoErr) throw evoErr;
+                        if (savedEvo) {
+                            try { localStorage.setItem('lastEvolucao', JSON.stringify(savedEvo)); } catch {}
+                        }
+
+                        const { error: wlErr } = await window.supabase.from('workout_logs').insert({
                             user_id: ud.session.user.id,
                             exercise_id: `challenge-checkin-day-${selectedDay}`,
                             weight: p,
-                            reps: 0,
-                            set_number: 1,
-                            note: evaluationData.feel
+                            reps: 1,
+                            set_number: 1
                         });
+                        if (wlErr) console.warn('Aviso check-in workout_logs:', wlErr);
                     }
                     onCompleteDay(selectedDay);
                     if (selectedDay < 30) setSelectedDay(selectedDay + 1);
                     setEvaluationData({ weight: '', feel: '' });
                 } catch (err) {
                     console.error("Erro ao gravar check-in:", err);
+                    setEvalError('Não foi possível salvar sua avaliação. Verifique sua conexão e tente novamente.');
                 } finally {
                     setIsSaving(false);
                 }
@@ -3309,25 +3349,38 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
                     </div>
 
-                    {/* Grade de Progressão "Path to Glory" */}
+                    {lockedHint && (
+                        <div className="mb-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs font-bold text-center">
+                            🔒 {lockedHint}
+                        </div>
+                    )}
+
+                    {/* Grade de Progressão */}
                     <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-10 gap-3 mb-12">
                         {Array.from({ length: 30 }, (_, i) => i + 1).map(day => {
                             const isDone = challengeLog.includes(day);
                             const isActive = selectedDay === day;
                             const isLocked = day > (lastCompletedDay + 1);
-                            const isBoss = isEvalDay(day);
+                            const isBossDay = isEvalDay(day);
 
                             return (
                                 <button
                                     key={day}
-                                    disabled={isLocked}
-                                    onClick={() => setSelectedDay(day)}
+                                    type="button"
+                                    onClick={() => {
+                                        if (isLocked) {
+                                            setLockedHint(`Conclua o Dia ${lastCompletedDay + 1} primeiro para desbloquear o Dia ${day}!`);
+                                            return;
+                                        }
+                                        setLockedHint('');
+                                        setSelectedDay(day);
+                                    }}
                                     className={`aspect-square rounded-2xl flex flex-col items-center justify-center relative transition-all border-2 active:scale-90 ${
                                         isActive ? 'day-current' : 
                                         isDone ? 'day-completed border-green-500/40' : 
                                         isLocked ? 'day-locked border-white/5' : 
                                         'border-white/10 bg-white/5'
-                                    } ${isBoss ? 'boss-day' : ''}`}
+                                    } ${isBossDay ? 'boss-day' : ''}`}
                                 >
                                     <span className={`text-xl font-black italic ${isActive ? 'text-white' : isDone ? 'text-green-400' : 'text-slate-500'}`}>
                                         {day}
@@ -3339,7 +3392,7 @@ import { createClient } from '@supabase/supabase-js';
                                     )}
                                     {isLocked && (
                                         <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px] rounded-2xl">
-                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                                         </div>
                                     )}
                                 </button>
@@ -3353,10 +3406,10 @@ import { createClient } from '@supabase/supabase-js';
                             <div>
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
-                                    <span className="text-orange-500 font-black text-[10px] uppercase tracking-[0.3em] italic">Missão Ativa</span>
+                                    <span className="text-orange-500 font-black text-[10px] uppercase tracking-[0.3em] italic">Dia {selectedDay} de 30</span>
                                 </div>
                                 <h3 className="text-3xl font-black italic tracking-tighter uppercase leading-tight">
-                                    {isRestDay ? 'Descanso Ativo' : isBoss ? 'Dia de Avaliação Semanal' : 'Treino do Dia'}
+                                    {isBoss ? 'Dia de Avaliação Semanal' : isRestDay ? 'Descanso Ativo' : 'Treino do Dia'}
                                 </h3>
                             </div>
                             {isCompleted && (
@@ -3366,15 +3419,32 @@ import { createClient } from '@supabase/supabase-js';
                             )}
                         </div>
 
-                        {isBoss && !isCompleted ? (
-                            <div className="evolution-radar p-8 border border-orange-500/10">
+                        {isBoss && isCompleted ? (
+                            <div className="text-center py-10">
+                                <div className="w-20 h-20 bg-emerald-500/15 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto mb-5 text-4xl">🏆</div>
+                                <h4 className="text-xl font-black uppercase italic text-white mb-2">Avaliação do Dia {selectedDay} Concluída!</h4>
+                                <p className="text-sm text-slate-400 max-w-sm mx-auto mb-6">
+                                    Seu check-in já foi salvo na aba Evolução. Continue firme para os próximos dias do desafio!
+                                </p>
+                                {selectedDay < 30 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedDay(selectedDay + 1)}
+                                        className="px-6 py-3.5 bg-orange-600 hover:bg-orange-500 rounded-2xl text-white font-black text-xs uppercase tracking-widest transition-all"
+                                    >
+                                        Ir para o Dia {selectedDay + 1} ➔
+                                    </button>
+                                )}
+                            </div>
+                        ) : isBoss ? (
+                            <div className="evolution-radar p-6 sm:p-8 border border-orange-500/10">
                                 <div className="flex items-center gap-4 mb-8">
                                     <div className="w-14 h-14 bg-orange-600/20 rounded-2xl flex items-center justify-center text-orange-500 shadow-lg shadow-orange-600/10">
                                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
                                     </div>
                                     <div>
                                         <h4 className="text-xl font-black uppercase italic text-white">Radar de Evolução</h4>
-                                        <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Sincronize seus dados biométricos</p>
+                                        <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Sincronize seu peso da semana</p>
                                     </div>
                                 </div>
                                 
@@ -3397,6 +3467,7 @@ import { createClient } from '@supabase/supabase-js';
                                     <div className="relative">
                                         <input 
                                             type="number" 
+                                            step="0.1"
                                             value={evaluationData.weight}
                                             onChange={e => setEvaluationData({...evaluationData, weight: e.target.value})}
                                             className="w-full bg-black/40 border-none rounded-2xl px-6 py-5 text-white font-black italic text-xl placeholder:text-slate-700 outline-none focus:ring-2 focus:ring-orange-600 transition-all shadow-inner"
@@ -3410,7 +3481,11 @@ import { createClient } from '@supabase/supabase-js';
                                         className="w-full bg-black/40 border-none rounded-2xl px-6 py-5 text-white font-black italic text-lg placeholder:text-slate-700 outline-none focus:ring-2 focus:ring-orange-600 transition-all min-h-[140px] resize-none shadow-inner"
                                         placeholder="COMO VOCÊ ESTÁ SE SENTINDO ESTA SEMANA?"
                                     />
+                                    {evalError && (
+                                        <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/35 text-red-300 text-xs font-bold text-center">{evalError}</div>
+                                    )}
                                     <button 
+                                        type="button"
                                         onClick={handleSaveEvaluation}
                                         disabled={isSaving || !evaluationData.weight}
                                         className="w-full py-6 bg-gradient-to-r from-orange-600 via-orange-500 to-orange-600 rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl shadow-orange-600/30 active:scale-95 transition-all disabled:opacity-50 group"
@@ -3424,7 +3499,7 @@ import { createClient } from '@supabase/supabase-js';
                                     </button>
                                 </div>
                             </div>
-                        ) : isRestDay && !isBoss ? (
+                        ) : isRestDay ? (
                             <div className="text-center py-12">
                                 <div className="w-24 h-24 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-8 shadow-[0_0_40px_rgba(59,130,246,0.1)] border border-blue-500/20">
                                     <span className="text-5xl">🧘</span>
@@ -3435,6 +3510,7 @@ import { createClient } from '@supabase/supabase-js';
                                 </p>
                                 {!isCompleted && (
                                     <button 
+                                        type="button"
                                         onClick={() => { onCompleteDay(selectedDay); if(selectedDay < 30) setSelectedDay(selectedDay+1); }}
                                         className="w-full py-6 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl font-black text-xs uppercase tracking-[0.3em] transition-all text-white shadow-xl active:scale-95"
                                     >
@@ -3469,10 +3545,11 @@ import { createClient } from '@supabase/supabase-js';
 
                                 {!isCompleted && (
                                     <button 
+                                        type="button"
                                         onClick={() => { onCompleteDay(selectedDay); if(selectedDay < 30) setSelectedDay(selectedDay+1); }}
-                                        className="w-full py-7 mt-8 bg-orange-600 hover:bg-orange-500 rounded-[28px] font-black text-sm uppercase tracking-[0.4em] italic shadow-2xl shadow-orange-600/40 active:scale-95 transition-all text-white flex items-center justify-center gap-4"
+                                        className="w-full py-7 mt-8 bg-orange-600 hover:bg-orange-500 rounded-[28px] font-black text-sm uppercase tracking-[0.35em] italic shadow-2xl shadow-orange-600/40 active:scale-95 transition-all text-white flex items-center justify-center gap-4"
                                     >
-                                        CONCLUIR PROTOCOLO <span className="text-white/50 text-xs">+1500 XP</span>
+                                        CONCLUIR PROTOCOLO <span className="text-white/70 text-xs">+1000 XP</span>
                                     </button>
                                 )}
                             </div>
@@ -3628,13 +3705,15 @@ import { createClient } from '@supabase/supabase-js';
                             } catch (e) { }
                         }
                         try {
-                            const res = await fetch(`https://wttr.in/${userProfile.estado.replace(/ /g, '+')}?format=j1`);
+                            const res = await fetch(`https://wttr.in/${encodeURIComponent(userProfile.estado)}?format=j1`);
                             if (res.ok) {
                                 const data = await res.json();
                                 if (data?.current_condition?.[0]) {
-                                    const temp = parseInt(data.current_condition[0].temp_C);
-                                    setTemperature(temp);
-                                    localStorage.setItem(cacheKey, JSON.stringify({ temp, timestamp: Date.now() }));
+                                    const temp = parseInt(data.current_condition[0].temp_C, 10);
+                                    if (!isNaN(temp)) {
+                                        setTemperature(temp);
+                                        try { localStorage.setItem(cacheKey, JSON.stringify({ temp, timestamp: Date.now() })); } catch {}
+                                    }
                                 }
                             }
                         } catch (e) {}
@@ -3642,7 +3721,7 @@ import { createClient } from '@supabase/supabase-js';
                     setWeatherLoading(false);
                 };
                 fetchWeather();
-            }, [userProfile]);
+            }, [userProfile?.estado]);
 
             useEffect(() => {
                 let extra = 0;
@@ -3655,12 +3734,14 @@ import { createClient } from '@supabase/supabase-js';
 
             useEffect(() => {
                 if (session) {
-                    const todayStr = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+                    const now = new Date();
+                    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString();
+                    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
                     window.supabase.from('registos_hidratacao')
                         .select('*')
                         .eq('user_id', session.user.id)
-                        .gte('data', todayStr + 'T00:00:00Z')
-                        .lte('data', todayStr + 'T23:59:59Z')
+                        .gte('data', startOfDay)
+                        .lte('data', endOfDay)
                         .order('data', { ascending: false })
                         .then(({ data }) => {
                             if (data) {
@@ -3754,103 +3835,6 @@ import { createClient } from '@supabase/supabase-js';
                 </div>
             );
         };
-
-        
-                function ArsenalHub({ onNav, temAcessoPremium, ud, setSel, isVipUser }) {
-            const [activeTab, setActiveTab] = React.useState('nutriscan');
-
-            // Lógica de desbloqueio local para o desafio
-            const isDesafioUnlocked = React.useMemo(() => {
-                let local = false;
-                try { local = JSON.parse(localStorage.getItem('app_unlocked_modules') || '[]').includes('desafio30'); } catch(e) {}
-                return isVipUser || ud.userProfile?.permissions?.desafio30 || local;
-            }, [isVipUser, ud.userProfile?.permissions?.desafio30]);
-
-            return (
-                <div className="tab-content fade-in pb-24 px-1 sm:px-4">
-                    <div className="mb-6">
-                        <h2 className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
-                            <span className="text-orange-500">💼</span> Arsenal Premium
-                        </h2>
-                        <p className="text-slate-400 text-sm mt-1 font-medium">Ferramentas de elite para sua transformação.</p>
-                    </div>
-
-                    {/* Horizontal Navigation (Exactly like Bottom Nav style) */}
-                    <div className="flex bg-[#0f172a]/95 backdrop-blur-xl border-b border-white/5 -mx-4 px-2 py-3 mb-10 sticky top-0 z-50">
-                        <button 
-                            onClick={() => setActiveTab('nutriscan')}
-                            className={`flex-1 flex flex-col items-center justify-center gap-1.5 transition-all ${
-                                activeTab === 'nutriscan' ? 'text-[#f97316]' : 'text-[#94a3b8]'
-                            }`}
-                        >
-                            <div className="relative">
-                                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                                    <circle cx="12" cy="13" r="3" />
-                                </svg>
-                                {!temAcessoPremium && (
-                                    <div className="absolute -top-1 -right-2 text-[10px] opacity-70">🔒</div>
-                                )}
-                            </div>
-                            <span className="text-[10px] font-bold">📸 Nutri-Scan</span>
-                        </button>
-                        <button 
-                            onClick={() => setActiveTab('meudesafio')}
-                            className={`flex-1 flex flex-col items-center justify-center gap-1.5 transition-all ${
-                                activeTab === 'meudesafio' ? 'text-[#f97316]' : 'text-[#94a3b8]'
-                            }`}
-                        >
-                            <div className="relative">
-                                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                    <circle cx="12" cy="8" r="7" />
-                                    <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" />
-                                </svg>
-                                {!isDesafioUnlocked && (
-                                    <div className="absolute -top-1 -right-2 text-[10px] opacity-70">🔒</div>
-                                )}
-                            </div>
-                            <span className="text-[10px] font-bold">🏆 Meu Desafio</span>
-                        </button>
-                        <button 
-                            onClick={() => setActiveTab('sono')}
-                            className={`flex-1 flex flex-col items-center justify-center gap-1.5 transition-all ${
-                                activeTab === 'sono' ? 'text-[#f97316]' : 'text-[#94a3b8]'
-                            }`}
-                        >
-                            <div className="relative">
-                                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                                </svg>
-                            </div>
-                            <span className="text-[10px] font-bold">🌙 Sono Profundo</span>
-                        </button>
-                    </div>
-
-                    {/* Dynamic Content Area */}
-                    <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
-                        <div>
-                            {activeTab === 'nutriscan' ? (
-                                temAcessoPremium ? (
-                                    <NutritionDashboard ud={ud} onNav={onNav} />
-                                ) : (
-                                    <NutritionSalesPage onNav={onNav} />
-                                )
-                            ) : activeTab === 'meudesafio' ? (
-                                isDesafioUnlocked ? (
-                                    <Cronograma challengeLog={ud.challengeLog} onCompleteDay={ud.completeChallengeDay} onNav={onNav} ud={ud} onSelect={setSel} />
-                                ) : (
-                                    <DesafioSalesPage onNav={onNav} />
-                                )
-                            ) : (
-                                <SonoProfundo ud={ud} />
-                            )}
-                        </div>
-                    </div>
-
-                    <RestrictedAccessModal />
-                </div>
-            );
-        }
 
         function SonoProfundo({ ud }) {
             const [showModal, setShowModal] = useState(false);
@@ -3988,22 +3972,27 @@ import { createClient } from '@supabase/supabase-js';
                 fetchSleep();
             }, []);
 
-            const today = new Date().toISOString().split('T')[0];
+            const today = safeFormatDate(new Date());
             const todayLog = sleepLogs.find(l => l.data === today);
             const lastLog = todayLog || null;
 
-            // Lógica de Super-Compensação
-            const workoutsToday = ud.completedLog.filter(log => {
-                const logDate = new Date(log.ts).toDateString();
-                const todayDate = new Date().toDateString();
-                return logDate === todayDate;
-            }).length;
+            const workoutsToday = ud.completedLog.filter(log => safeFormatDate(log.ts) === today).length;
 
-            let statusBadge = { icon: '🧘', color: 'slate', title: 'Recuperação Otimizada', text: 'Sem carga detetada hoje. Foco em regeneração celular e descanso.' };
-            if (workoutsToday >= 3) { statusBadge = { icon: '🔥', color: 'orange', title: 'Super-Compensação Necessária', text: 'Treino intenso detetado. O corpo pede +1h de sono para reparação muscular.' }; } 
-            else if (workoutsToday > 0) { statusBadge = { icon: '⚡', color: 'orange', title: 'Manutenção de Ritmo', text: 'Carga moderada detetada. Mantém a meta de 8h para consolidar ganhos.' }; }
+            const statusBadgeStyles = {
+                slate: { box: 'bg-slate-500/10 border-slate-500/30', iconBg: 'bg-slate-500/20', title: 'text-slate-200', text: 'text-slate-400' },
+                orange: { box: 'bg-orange-500/10 border-orange-500/30', iconBg: 'bg-orange-500/20', title: 'text-orange-200', text: 'text-orange-400' }
+            };
 
-            const consistency = sleepLogs.length > 2 ? '94%' : '--';
+            let statusBadge = { icon: '🧘', styleKey: 'slate', title: 'Recuperação Otimizada', text: 'Sem carga intensa hoje. Foco em regeneração celular e descanso.' };
+            if (workoutsToday >= 3) { statusBadge = { icon: '🔥', styleKey: 'orange', title: 'Super-Compensação Necessária', text: 'Treino intenso detectado. O corpo pede +1h de sono para reparação muscular.' }; } 
+            else if (workoutsToday > 0) { statusBadge = { icon: '⚡', styleKey: 'orange', title: 'Manutenção de Ritmo', text: 'Carga moderada detectada. Mantenha a meta de 8h para consolidar seus ganhos.' }; }
+
+            const badgeCls = statusBadgeStyles[statusBadge.styleKey];
+            const recentSleepDays = sleepLogs.filter(l => {
+                const diff = (Date.now() - new Date(l.data + 'T12:00:00').getTime()) / (1000 * 60 * 60 * 24);
+                return diff >= 0 && diff <= 7;
+            });
+            const consistency = recentSleepDays.length > 0 ? `${Math.min(100, Math.round((recentSleepDays.length / 7) * 100))}%` : '--';
 
             return (
                 <div className={`max-w-xl mx-auto py-2 pb-40 animate-in fade-in slide-in-from-bottom-6 duration-700 px-4 transition-all`}>
@@ -4014,7 +4003,7 @@ import { createClient } from '@supabase/supabase-js';
                             <div className="bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-2xl flex items-center gap-3">
                                 <div className="text-xl">{chronoData.type === 'Leão' ? '🦁' : chronoData.type === 'Lobo' ? '🐺' : '🐻'}</div>
                                 <div>
-                                    <p className="text-[8px] font-black text-orange-500 uppercase tracking-widest">Cronotipo Detetado</p>
+                                    <p className="text-[8px] font-black text-orange-500 uppercase tracking-widest">Cronotipo Detectado</p>
                                     <p className="text-xs font-black text-white italic">{chronoData.type}</p>
                                 </div>
                             </div>
@@ -4025,11 +4014,11 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
 
                         {/* Alerta de Status de Recuperação */}
-                        <div className={`bg-${statusBadge.color}-500/10 border border-${statusBadge.color}-500/30 rounded-[32px] p-5 flex items-center gap-4 animate-in slide-in-from-top-4 duration-1000`}>
-                            <div className={`w-12 h-12 bg-${statusBadge.color}-500/20 rounded-2xl flex items-center justify-center text-2xl shadow-inner`}>{statusBadge.icon}</div>
+                        <div className={`${badgeCls.box} border rounded-[32px] p-5 flex items-center gap-4 animate-in slide-in-from-top-4 duration-1000`}>
+                            <div className={`w-12 h-12 ${badgeCls.iconBg} rounded-2xl flex items-center justify-center text-2xl shadow-inner shrink-0`}>{statusBadge.icon}</div>
                             <div>
-                                <p className={`text-${statusBadge.color}-200 text-[12px] font-black uppercase tracking-tight leading-tight`}>{statusBadge.title}</p>
-                                <p className={`text-${statusBadge.color}-500/80 text-[10px] font-bold mt-1`}>{statusBadge.text}</p>
+                                <p className={`${badgeCls.title} text-[12px] font-black uppercase tracking-tight leading-tight`}>{statusBadge.title}</p>
+                                <p className={`${badgeCls.text} text-[10px] font-bold mt-1`}>{statusBadge.text}</p>
                             </div>
                         </div>
                     </div>
@@ -4344,15 +4333,15 @@ import { createClient } from '@supabase/supabase-js';
 
         function SleepLogModal({ onClose, onSave }) {
             const [form, setForm] = useState({ 
-                data: new Date().toISOString().split('T')[0], 
+                data: safeFormatDate(new Date()), 
                 deitar: '23:00', 
                 acordar: '07:30', 
                 qualidade: 8, 
                 feeling: 'Normal' 
             });
             const [loading, setLoading] = useState(false);
+            const [saveErr, setSaveErr] = useState('');
 
-            // Cálculo automático de horas
             const calculateHours = () => {
                 const [dHours, dMins] = form.deitar.split(':').map(Number);
                 const [aHours, aMins] = form.acordar.split(':').map(Number);
@@ -4365,35 +4354,51 @@ import { createClient } from '@supabase/supabase-js';
 
             const handleSave = async () => {
                 setLoading(true);
-                const { data: { session } } = await window.supabase.auth.getSession();
-                if (!session) return;
-                
-                const horas = calculateHours();
-                
-                const { error } = await window.supabase.from('registos_sono').insert({
-                    user_id: session.user.id,
-                    data: form.data,
-                    hora_deitar: form.deitar,
-                    hora_acordar: form.acordar,
-                    horas_dormidas: parseFloat(horas),
-                    qualidade: parseInt(form.qualidade) * 10,
-                    feeling: form.feeling
-                });
-                
-                if (!error) onSave();
-                setLoading(false);
-                onClose();
+                setSaveErr('');
+                try {
+                    const { data: { session } } = await window.supabase.auth.getSession();
+                    if (!session) {
+                        setSaveErr('Sessão expirada. Entre novamente.');
+                        setLoading(false);
+                        return;
+                    }
+                    const horas = calculateHours();
+                    const { error } = await window.supabase.from('registos_sono').insert({
+                        user_id: session.user.id,
+                        data: form.data,
+                        hora_deitar: form.deitar,
+                        hora_acordar: form.acordar,
+                        horas_dormidas: parseFloat(horas),
+                        qualidade: parseInt(form.qualidade, 10) * 10,
+                        feeling: form.feeling
+                    });
+                    if (error) {
+                        setSaveErr('Erro ao salvar seu registro de sono. Tente novamente.');
+                        setLoading(false);
+                        return;
+                    }
+                    onSave();
+                } catch (err) {
+                    setSaveErr('Erro de conexão ao salvar.');
+                    setLoading(false);
+                }
             };
 
             const hoursTotal = calculateHours();
 
             return (
-                <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 animate-in fade-in duration-300">
                     <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md" onClick={onClose}></div>
-                    <div className="relative bg-gradient-to-br from-slate-900 to-slate-950 border border-white/10 rounded-[32px] p-8 w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-                        <h3 className="text-2xl font-black text-white italic uppercase tracking-tight mb-6">Registar <span className="text-orange-500">Sono</span></h3>
+                    <div className="relative bg-gradient-to-br from-slate-900 to-slate-950 border border-white/10 rounded-[32px] p-6 sm:p-8 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-300">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            aria-label="Fechar"
+                            className="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center"
+                        >&times;</button>
+                        <h3 className="text-2xl font-black text-white italic uppercase tracking-tight mb-6">Registrar <span className="text-orange-500">Sono</span></h3>
                         
-                        <div className="space-y-4 mb-8">
+                        <div className="space-y-4 mb-6">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Hora de Deitar</label>
@@ -4428,7 +4433,7 @@ import { createClient } from '@supabase/supabase-js';
                                 <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Qualidade do Sono (1-10)</label>
                                 <input type="range" min="1" max="10" value={form.qualidade} onChange={e => setForm({...form, qualidade: e.target.value})} className="w-full accent-orange-500" />
                                 <div className="flex justify-between mt-1">
-                                    <span className="text-[9px] text-slate-600 font-bold uppercase">Pobre</span>
+                                    <span className="text-[9px] text-slate-600 font-bold uppercase">Ruim</span>
                                     <span className="text-orange-500 font-black italic">{form.qualidade}/10</span>
                                     <span className="text-[9px] text-slate-600 font-bold uppercase">Excelente</span>
                                 </div>
@@ -4439,6 +4444,7 @@ import { createClient } from '@supabase/supabase-js';
                                 <div className="grid grid-cols-3 gap-2">
                                     {['Cansado', 'Normal', 'Revigorado'].map(f => (
                                         <button 
+                                            type="button"
                                             key={f}
                                             onClick={() => setForm({...form, feeling: f})}
                                             className={`py-3 rounded-xl text-[10px] font-black uppercase tracking-tighter transition-all border ${
@@ -4452,7 +4458,11 @@ import { createClient } from '@supabase/supabase-js';
                             </div>
                         </div>
 
-                        <button onClick={handleSave} disabled={loading} className="w-full py-5 bg-gradient-to-r from-orange-600 to-amber-600 rounded-2xl font-black text-white text-xs uppercase tracking-widest shadow-xl shadow-orange-600/20 active:scale-95 transition-all">
+                        {saveErr && (
+                            <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/35 text-red-300 text-xs font-bold text-center">{saveErr}</div>
+                        )}
+
+                        <button type="button" onClick={handleSave} disabled={loading} className="w-full py-5 bg-gradient-to-r from-orange-600 to-amber-600 rounded-2xl font-black text-white text-xs uppercase tracking-widest shadow-xl shadow-orange-600/20 active:scale-95 transition-all disabled:opacity-50">
                             {loading ? 'SALVANDO...' : 'SALVAR DESCANSO'}
                         </button>
                     </div>
@@ -4460,147 +4470,73 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function RestrictedAccessModal() {
-            const [show, setShow] = useState(false);
-            
-            useEffect(() => {
-                const handleOpen = () => setShow(true);
-                window.addEventListener('open-restricted-modal', handleOpen);
-                return () => window.removeEventListener('open-restricted-modal', handleOpen);
-            }, []);
-
-            if (!show) return null;
-
-            return (
-                <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md" onClick={() => setShow(false)}></div>
-                    <div className="relative bg-gradient-to-br from-slate-900 to-slate-950 border border-white/10 rounded-[32px] p-8 w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-                        <div className="absolute top-0 right-0 p-6">
-                            <button onClick={() => setShow(false)} className="text-slate-500 hover:text-white transition-colors">
-                                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                            </button>
-                        </div>
-
-                        <div className="flex flex-col items-center text-center">
-                            <div className="w-20 h-20 bg-orange-500/10 rounded-3xl flex items-center justify-center mb-6 border border-orange-500/20">
-                                <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#f97316" strokeWidth="2">
-                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                                </svg>
-                            </div>
-
-                            <h3 className="text-2xl font-black text-white italic uppercase tracking-tight mb-3">
-                                Conteúdo Exclusivo <br/><span className="text-orange-500">Combo de Ouro</span>
-                            </h3>
-
-                            <p className="text-slate-300 font-medium text-sm leading-relaxed mb-8">
-                                Libere este e mais 5 programas completos no Combo de Ouro pagando uma única vez (R$ 24,90 vitalício).
-                            </p>
-
-                            <div className="w-full space-y-3">
-                                <button 
-                                    className="w-full py-5 bg-gradient-to-r from-orange-600 to-orange-500 rounded-2xl font-black text-white text-xs uppercase tracking-widest shadow-xl shadow-orange-600/20 active:scale-95 transition-all"
-                                    onClick={() => { setShow(false); window.open('https://pay.hotmart.com/O106106388F?checkoutMode=10', '_blank'); }}
-                                >
-                                    DESBLOQUEAR AGORA (R$ 24,90)
-                                </button>
-                                <button 
-                                    className="w-full py-4 text-slate-500 hover:text-white font-bold text-xs uppercase tracking-widest transition-all"
-                                    onClick={() => setShow(false)}
-                                >
-                                    Voltar
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        // Sub-componentes de Vendas para limpeza de código
-        function NutritionSalesPage({ onNav }) {
-            return (
-                <div className="max-w-xl mx-auto py-2 pb-40 animate-in fade-in slide-in-from-bottom-6 duration-700">
-                    <div className="flex justify-center mb-6">
-                        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[10px] font-black uppercase tracking-widest">
-                            <span className="animate-pulse">⚡</span> Oferta Especial
-                        </div>
-                    </div>
-                    <div className="flex justify-center gap-6 mb-8 drop-shadow-[0_0_25px_rgba(249,115,22,0.2)]">
-                        <span className="text-7xl sm:text-8xl">🤖</span>
-                        <span className="text-7xl sm:text-8xl">📸</span>
-                    </div>
-                    <h2 className="text-2xl sm:text-4xl font-black text-white leading-[1.15] mb-6 text-center tracking-tighter">
-                        Jogue a sua balança de cozinha <br/>
-                        <span className="text-orange-500 italic">no lixo hoje mesmo.</span>
-                    </h2>
-                    <p className="text-slate-400 text-sm sm:text-base max-w-md mx-auto mb-10 font-medium leading-relaxed text-center">
-                        Chega de pesar comida e somar calorias. O Algoritmo <span className="text-white font-bold">Nutri-Scan™</span> rastreia o seu prato e regista tudo no <span className="text-white font-bold">piloto automático em 3 segundos</span>.
-                    </p>
-                    <div className="fixed bottom-[64px] left-0 right-0 z-[500] px-4 py-4 bg-slate-950/80 backdrop-blur-2xl border-t border-white/5 sm:bottom-4 sm:left-auto sm:right-4 sm:w-[400px] sm:rounded-3xl sm:border">
-                        <button 
-                            onClick={() => onNav('extras')}
-                            className="w-full bg-gradient-to-r from-[#f97316] to-[#ea580c] text-white font-black py-5 rounded-2xl shadow-[0_12px_30px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all text-sm uppercase tracking-tighter"
-                        >
-                            👉 ATIVAR O NUTRI-SCAN™
-                        </button>
-                    </div>
-                </div>
-            );
-        }
-
-        function DesafioSalesPage({ onNav }) {
-            return (
-                <div className="max-w-xl mx-auto py-2 pb-40 animate-in fade-in slide-in-from-bottom-6 duration-700">
-                    <div className="flex justify-center mb-6">
-                        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[10px] font-black uppercase tracking-widest">
-                            🔥 Desafio VIP
-                        </div>
-                    </div>
-                    <div className="flex justify-center gap-6 mb-10 drop-shadow-[0_0_25px_rgba(249,115,22,0.2)]">
-                        <span className="text-7xl sm:text-8xl">🏆</span>
-                        <span className="text-7xl sm:text-8xl">📅</span>
-                    </div>
-                    <h2 className="text-2xl sm:text-4xl font-black text-white leading-[1.15] mb-6 text-center tracking-tighter">
-                        O Seu Novo Corpo <br/>
-                        <span className="text-orange-500 italic">em Apenas 30 Dias.</span>
-                    </h2>
-                    <div className="fixed bottom-[64px] left-0 right-0 z-[500] px-4 py-4 bg-slate-950/80 backdrop-blur-2xl border-t border-white/5 sm:bottom-4 sm:left-auto sm:right-4 sm:w-[400px] sm:rounded-3xl sm:border">
-                        <button 
-                            onClick={() => onNav('extras')}
-                            className="w-full bg-gradient-to-r from-[#f97316] to-[#ea580c] text-white font-black py-5 rounded-2xl shadow-[0_12px_30px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all text-sm uppercase tracking-tighter"
-                        >
-                            🚀 DESBLOQUEAR MEU DESAFIO
-                        </button>
-                    </div>
-                </div>
-            );
-        }
-
-
-        function RankingTab({ session, userProfile, currentXP, onGoToTreinos }) {
+        function RankingTab({ session, userProfile, currentXP, onGoToTreinos, onOpenEditProfile }) {
             return (
                 <div className="tab-content fade-in pb-24">
                     <div className="fade-in">
-                        <RankingView session={session} userProfile={userProfile} currentXP={currentXP} onGoToTreinos={onGoToTreinos} hideHeader={true} />
+                        <RankingView session={session} userProfile={userProfile} currentXP={currentXP} onGoToTreinos={onGoToTreinos} onOpenEditProfile={onOpenEditProfile} hideHeader={true} />
                     </div>
                 </div>
             );
         }
 
+        const Counter = ({ value, decimals = 1, suffix = '' }) => {
+            const [display, setDisplay] = useState(0);
+            useEffect(() => {
+                let rafId = null;
+                const end = parseFloat(value) || 0;
+                const duration = 800;
+                const startTime = performance.now();
 
+                const animate = (now) => {
+                    const elapsed = now - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    setDisplay(end * progress);
+                    if (progress < 1) {
+                        rafId = requestAnimationFrame(animate);
+                    }
+                };
+                rafId = requestAnimationFrame(animate);
+                return () => { if (rafId !== null) cancelAnimationFrame(rafId); };
+            }, [value]);
+            return <span className="font-technical">{display.toFixed(decimals)}{suffix}</span>;
+        };
 
+        const MetricCard = ({ title, value, delta, suffix, icon, decimals = 1 }) => (
+            <div className="stat-premium-card group relative overflow-hidden" style={{ flex: 1, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(249, 115, 22, 0.1)', padding: '20px', borderRadius: '24px', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+                <div className="absolute inset-0 shimmer opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity"></div>
+                <div className="flex justify-between items-start mb-4">
+                    <div style={{ background: 'rgba(249, 115, 22, 0.1)', color: 'var(--accent)', padding: '10px', borderRadius: '14px', boxShadow: '0 0 15px rgba(249, 115, 22, 0.2)' }}>
+                        {icon}
+                    </div>
+                    {delta !== 0 && (
+                        <div style={{ fontSize: '11px', fontWeight: '900', color: delta > 0 ? '#ef4444' : '#22c55e', display: 'flex', alignItems: 'center', gap: '4px', background: delta > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)', padding: '4px 8px', borderRadius: '8px' }}>
+                            <span>{delta > 0 ? '▲' : '▼'}</span>
+                            <span>{Math.abs(delta).toFixed(1)}</span>
+                        </div>
+                    )}
+                </div>
+                <div>
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>{title}</div>
+                    <div style={{ fontSize: '28px', color: '#fff', fontWeight: '900' }}>
+                        <Counter value={value} decimals={decimals} suffix={suffix} />
+                    </div>
+                </div>
+            </div>
+        );
 
-        function EvolucaoCorporal({ session, userProfile }) {
+        function EvolucaoCorporal({ session, userProfile, onOpenNutriScan }) {
             const [history, setHistory] = useState([]);
             const [genero, setGenero] = useState('');
-            const [abaGrafico, setAbaGrafico] = useState('peso'); // 'peso' ou 'bf'
+            const [abaGrafico, setAbaGrafico] = useState('peso');
             const [loading, setLoading] = useState(true);
+            const [saving, setSaving] = useState(false);
             const [formError, setFormError] = useState('');
+            const [saveSuccess, setSaveSuccess] = useState(false);
             const [sortField, setSortField] = useState('data');
             const [sortDir, setSortDir] = useState('desc');
             const [tooltip, setTooltip] = useState(null);
 
-            // Form state
             const [form, setForm] = useState({
                 peso: '', altura: '', peito: '', pescoco: '', cintura: '',
                 quadril: '', braco_esq: '', braco_dir: '',
@@ -4613,9 +4549,11 @@ import { createClient } from '@supabase/supabase-js';
                         .then(({ data }) => {
                             if (data && data.length > 0) {
                                 setHistory(data);
-                                if (data.length > 0) localStorage.setItem('lastEvolucao', JSON.stringify(data[data.length - 1]));
+                                try { localStorage.setItem('lastEvolucao', JSON.stringify(data[data.length - 1])); } catch {}
                                 const lastG = data.slice().reverse().find(h => h.genero)?.genero;
                                 if (lastG) setGenero(lastG);
+                                const lastH = data.slice().reverse().find(h => h.altura_cm)?.altura_cm;
+                                if (lastH) setForm(prev => ({ ...prev, altura: prev.altura || String(lastH) }));
                             } else if (userProfile && userProfile.gender) {
                                 const g = userProfile.gender.toLowerCase();
                                 if (g.startsWith('m')) setGenero('m');
@@ -4651,25 +4589,30 @@ import { createClient } from '@supabase/supabase-js';
 
             const handleGravar = async () => {
                 setFormError('');
+                setSaveSuccess(false);
                 const p = parseFloat(form.peso);
                 const h_cm = parseFloat(form.altura);
 
                 if (!p || p < 30 || p > 350) {
-                    setFormError('Peso inválido (30-350kg).');
+                    setFormError('Informe um peso válido entre 30 e 350 kg.');
+                    return;
+                }
+                if (form.altura && (h_cm < 100 || h_cm > 240)) {
+                    setFormError('Informe uma altura válida em cm (ex: 165).');
                     return;
                 }
 
                 const bf = calcBF(genero, form.pescoco, form.cintura, form.quadril, form.altura);
 
-                if (bf === null && (form.pescoco || form.cintura || form.altura)) {
-                    // Se o user preencheu algo mas o cálculo falhou
+                // Só exige quadril se a usuária estiver tentando calcular BF (preencheu pescoço ou cintura)
+                if (bf === null && (form.pescoco || form.cintura)) {
                     if (genero === 'f' && !form.quadril) {
-                        setFormError('Para mulheres, o perímetro do Quadril é obrigatório para o cálculo de BF.');
+                        setFormError('Para calcular o % de Gordura feminino com pescoço/cintura, informe também o Quadril (ou deixe pescoço e cintura em branco para salvar apenas Peso e Altura).');
                         return;
                     }
                 }
 
-
+                setSaving(true);
                 const record = {
                     user_id: session.user.id,
                     genero: genero,
@@ -4687,13 +4630,19 @@ import { createClient } from '@supabase/supabase-js';
                     bf_percentagem: (bf !== null && !isNaN(bf)) ? bf : null
                 };
 
-                const { data, error } = await window.supabase.from('evolucao_corporal').insert(record).select().single();
-                if (data) {
-                    setHistory(prev => [...prev, data]);
-                    setForm({ peso: '', altura: form.altura, peito: '', pescoco: '', cintura: '', quadril: '', braco_esq: '', braco_dir: '', perna_esq: '', perna_dir: '', panturrilha: '' });
-                } else {
-                    console.error("Erro Supabase:", error);
-                    setFormError('Erro ao salvar. Verifique a conexão.');
+                try {
+                    const { data, error } = await window.supabase.from('evolucao_corporal').insert(record).select().single();
+                    if (data) {
+                        setHistory(prev => [...prev, data]);
+                        try { localStorage.setItem('lastEvolucao', JSON.stringify(data)); } catch {}
+                        setForm({ peso: '', altura: form.altura, peito: '', pescoco: '', cintura: '', quadril: '', braco_esq: '', braco_dir: '', perna_esq: '', perna_dir: '', panturrilha: '' });
+                        setSaveSuccess(true);
+                    } else {
+                        console.error("Erro Supabase:", error);
+                        setFormError('Erro ao salvar. Verifique sua conexão e tente novamente.');
+                    }
+                } finally {
+                    setSaving(false);
                 }
             };
 
@@ -4703,9 +4652,18 @@ import { createClient } from '@supabase/supabase-js';
             const [selectedRegion, setSelectedRegion] = useState(null);
 
             const handleEliminar = async (id) => {
-                if (confirm('Eliminar este registo?')) {
-                    await window.supabase.from('evolucao_corporal').delete().eq('id', id);
-                    setHistory(prev => prev.filter(h => h.id !== id));
+                if (window.confirm('Excluir este registro?')) {
+                    const { error } = await window.supabase.from('evolucao_corporal').delete().eq('id', id);
+                    if (!error) {
+                        setHistory(prev => {
+                            const next = prev.filter(h => h.id !== id);
+                            try {
+                                if (next.length > 0) localStorage.setItem('lastEvolucao', JSON.stringify(next[next.length - 1]));
+                                else localStorage.removeItem('lastEvolucao');
+                            } catch {}
+                            return next;
+                        });
+                    }
                 }
             };
 
@@ -4726,18 +4684,12 @@ import { createClient } from '@supabase/supabase-js';
             const deltaPeso = lastLog && startLog ? (lastLog.peso - startLog.peso) : 0;
             const deltaBF = lastLog && startLog && lastLog.bf_percentagem !== null && startLog.bf_percentagem !== null ? (lastLog.bf_percentagem - startLog.bf_percentagem) : 0;
 
-            // Detector de Recomposição (Logic vs Previous for triggering celebration)
-            const isRecomp = lastLog && prevLog && lastLog.peso >= prevLog.peso && (lastLog.bf_percentagem < prevLog.bf_percentagem - 0.3);
-
-            const imcRaw = lastLog && lastLog.peso && lastLog.altura_cm ? (lastLog.peso / Math.pow(lastLog.altura_cm / 100, 2)) : 0;
-            const startImcRaw = startLog && startLog.peso && startLog.altura_cm ? (startLog.peso / Math.pow(startLog.altura_cm / 100, 2)) : 0;
-            const deltaIMC = imcRaw && startImcRaw ? (imcRaw - startImcRaw) : 0;
+            const isRecomp = lastLog && prevLog && lastLog.peso >= prevLog.peso && lastLog.bf_percentagem != null && prevLog.bf_percentagem != null && (lastLog.bf_percentagem < prevLog.bf_percentagem - 0.3);
 
             const massaGorda = (lastLog && lastLog.bf_percentagem) ? (lastLog.peso * (lastLog.bf_percentagem / 100)) : 0;
             const massaMagra = lastLog ? (lastLog.peso - massaGorda) : 0;
             const waistToHeight = lastLog && lastLog.cintura_cm && lastLog.altura_cm ? (lastLog.cintura_cm / lastLog.altura_cm) : 0;
 
-            // Body Regions Map Data (Inicio vs Agora)
             const getRegDiff = (field) => {
                 const vLast = lastLog ? parseFloat(lastLog[field]) : NaN;
                 const vStart = startLog ? parseFloat(startLog[field]) : NaN;
@@ -4752,85 +4704,30 @@ import { createClient } from '@supabase/supabase-js';
                 { id: 'arm', label: 'Braço', cx: 30, cy: 38, diff: getRegDiff('braco_dir_cm') },
                 { id: 'waist', label: 'Cintura', cx: 50, cy: 45, diff: getRegDiff('cintura_cm') },
                 { id: 'thigh', label: 'Coxa', cx: 42, cy: 70, diff: getRegDiff('perna_dir_cm') },
-                { id: 'calf', label: 'Gêmeos', cx: 42, cy: 88, diff: getRegDiff('panturrilha_cm') }
+                { id: 'calf', label: 'Panturrilha', cx: 42, cy: 88, diff: getRegDiff('panturrilha_cm') }
             ];
-
-            // Chart Logic
-            const chartData = history.slice(-10).map((h, i) => ({
-                x: i,
-                y: abaGrafico === 'peso' ? h.peso : (h.bf_percentagem || 0),
-                raw: h
-            }));
-
-            // Mini Components
-            const Counter = ({ value, decimals = 1, suffix = '' }) => {
-                const [display, setDisplay] = useState(0);
-                useEffect(() => {
-                    let start = 0;
-                    const end = parseFloat(value) || 0;
-                    const duration = 1000;
-                    const startTime = performance.now();
-
-                    const animate = (now) => {
-                        const elapsed = now - startTime;
-                        const progress = Math.min(elapsed / duration, 1);
-                        const current = start + (end - start) * progress;
-                        setDisplay(current);
-                        if (progress < 1) requestAnimationFrame(animate);
-                    };
-                    requestAnimationFrame(animate);
-                }, [value]);
-                return <span className="font-technical">{display.toFixed(decimals)}{suffix}</span>;
-            };
-
-            const MetricCard = ({ title, value, delta, suffix, icon, decimals = 1 }) => (
-                <div className="stat-premium-card group relative overflow-hidden" style={{ flex: 1, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(249, 115, 22, 0.1)', padding: '20px', borderRadius: '24px', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }}>
-                    <div className="absolute inset-0 shimmer opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity"></div>
-                    <div className="flex justify-between items-start mb-4">
-                        <div style={{ background: 'rgba(249, 115, 22, 0.1)', color: 'var(--accent)', padding: '10px', borderRadius: '14px', boxShadow: '0 0 15px rgba(249, 115, 22, 0.2)' }}>
-                            {icon}
-                        </div>
-                        {delta !== 0 && (
-                            <div style={{ fontSize: '11px', fontWeight: '900', color: delta > 0 ? '#ef4444' : '#22c55e', display: 'flex', alignItems: 'center', gap: '4px', background: delta > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)', padding: '4px 8px', borderRadius: '8px' }}>
-                                <span>{delta > 0 ? '▲' : '▼'}</span>
-                                <span>{Math.abs(delta).toFixed(1)}</span>
-                            </div>
-                        )}
-                    </div>
-                    <div>
-                        <div style={{ color: 'var(--text-secondary)', fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>{title}</div>
-                        <div style={{ fontSize: '28px', color: '#fff', fontWeight: '900' }}>
-                            <Counter value={value} decimals={decimals} suffix={suffix} />
-                        </div>
-                    </div>
-                </div>
-            );
 
             return (
                 <div className="progress-dashboard animate-in fade-in duration-700" style={{ paddingBottom: '100px', maxWidth: '1000px', margin: '0 auto' }}>
                     
-                    {/* Header Elite */}
+                    {/* Header */}
                     <div style={{ textAlign: 'center', marginBottom: '40px', marginTop: '20px' }}>
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '15px', background: 'rgba(249, 115, 22, 0.05)', padding: '12px 24px', borderRadius: '20px', border: '1px solid rgba(249, 115, 22, 0.1)', marginBottom: '16px' }}>
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5"><path d="M12 2v20M2 12h20M12 12l7.07-7.07M4.93 19.07L12 12" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', color: '#fff' }}>Evolução Corporal <span style={{ color: 'var(--accent)' }}>V5.0</span></h2>
+                            <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '900', letterSpacing: '2px', textTransform: 'uppercase', color: '#fff' }}>Evolução <span style={{ color: 'var(--accent)' }}>Corporal</span></h2>
                         </div>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '500' }}>Central de Biohacking: Inteligência Preditiva e Mapeamento Antropométrico.</p>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', fontWeight: '500' }}>Registre seu peso, altura e medidas para acompanhar seus resultados e calibrar o Nutri-Scan IA.</p>
                     </div>
 
-                    {/* Detector de Recomposição Corporal (Biohacking Insight) */}
                     {isRecomp && (
                         <div className="mb-8 p-6 bg-gradient-to-r from-green-500/20 via-green-500/5 to-transparent border border-green-500/30 rounded-[32px] flex items-center gap-6 shadow-[0_0_50px_rgba(34,197,94,0.15)] animate-bounce-subtle">
                             <div className="w-16 h-16 bg-green-500 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(34,197,94,0.4)] flex-shrink-0">
                                 <span className="text-3xl">✨</span>
                             </div>
                             <div>
-                                <div className="text-[10px] text-green-500 font-black uppercase tracking-[3px] mb-1">Bio-Insight Detetado</div>
+                                <div className="text-[10px] text-green-500 font-black uppercase tracking-[3px] mb-1">Bio-Insight Detectado</div>
                                 <h3 className="text-white text-lg font-black m-0 uppercase italic">Recomposição Corporal!</h3>
-                                <p className="text-slate-300 text-sm font-medium m-0 leading-relaxed">Você está trocando gordura por músculo real. Seu corpo está ficando mais denso e atlético.</p>
-                            </div>
-                            <div className="ml-auto opacity-20">
-                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                                <p className="text-slate-300 text-sm font-medium m-0 leading-relaxed">Você está trocando gordura por músculo real. Seu corpo está ficando mais firme e definido.</p>
                             </div>
                         </div>
                     )}
@@ -4851,8 +4748,13 @@ import { createClient } from '@supabase/supabase-js';
                                     <span className="text-[9px] text-slate-400 font-bold uppercase">Meta:</span>
                                     <input 
                                         type="number" 
+                                        min="5"
+                                        max="50"
                                         value={metaBF} 
-                                        onChange={(e) => setMetaBF(parseFloat(e.target.value))}
+                                        onChange={(e) => {
+                                            const v = parseFloat(e.target.value);
+                                            setMetaBF(Number.isFinite(v) ? Math.max(5, Math.min(50, v)) : 15);
+                                        }}
                                         className="bg-transparent border-none text-white text-[10px] font-black w-8 focus:outline-none"
                                     />
                                     <span className="text-[9px] text-white">%</span>
@@ -4863,46 +4765,40 @@ import { createClient } from '@supabase/supabase-js';
                                     if (!lastLog || history.length < 2) return (
                                         <div className="text-white text-lg font-black uppercase tracking-tight leading-tight">
                                             Aguardando mais dados...
-                                            <p className="text-[10px] text-slate-500 font-bold mt-1">Registe o seu progresso pelo menos 2 vezes para ativar a IA.</p>
+                                            <p className="text-[10px] text-slate-400 font-bold mt-1">Registre seu progresso pelo menos 2 vezes para ativar a previsão.</p>
                                         </div>
                                     );
 
                                     const hValid = [...history].filter(h => h.bf_percentagem !== null && h.bf_percentagem > 0).sort((a,b) => new Date(a.data) - new Date(b.data));
-                                    
                                     if (hValid.length < 2) {
-                                        const hasRecords = history.length > 0;
                                         return (
                                             <div className="text-white text-lg font-black uppercase tracking-tight leading-tight">
-                                                {hasRecords ? "Registos incompletos" : "Aguardando mais dados..."}
+                                                Registros incompletos para BF%
                                                 <p className="text-[10px] text-orange-400 font-bold mt-1">
-                                                    {hasRecords 
-                                                        ? "Os seus registos anteriores não têm Pescoço/Cintura. Faça 2 novos registos completos." 
-                                                        : "Registe o seu progresso pelo menos 2 vezes para ativar a IA."}
+                                                    Preencha Pescoço e Cintura (e Quadril para mulheres) em 2 registros para calcular a data estimada.
                                                 </p>
                                             </div>
                                         );
                                     }
 
-
                                     const oldest = hValid[0];
                                     const newest = hValid[hValid.length - 1];
-
                                     if (newest.bf_percentagem <= metaBF) return <div className="text-green-500 text-2xl font-black italic uppercase tracking-tighter">Meta Atingida! 🔥</div>;
 
                                     const diffBF = newest.bf_percentagem - oldest.bf_percentagem;
                                     const weeks = Math.max(0.1, (new Date(newest.data) - new Date(oldest.data)) / (1000*60*60*24*7));
-                                    const bfRate = diffBF / weeks; // Taxa semanal
+                                    const bfRate = diffBF / weeks;
 
                                     if (bfRate >= 0) return (
                                         <div className="text-white text-lg font-black uppercase tracking-tight leading-tight">
                                             Ritmo Estável / Subida
-                                            <p className="text-[10px] text-slate-500 font-bold mt-1">A sua gordura não baixou entre o 1º e o último registo. É necessário progresso para estimar data.</p>
+                                            <p className="text-[10px] text-slate-400 font-bold mt-1">Sua gordura ainda não reduziu entre o 1º e o último registro.</p>
                                         </div>
                                     );
 
                                     const weeksLeft = (newest.bf_percentagem - metaBF) / Math.abs(bfRate);
                                     const date = new Date(Date.now() + weeksLeft * 7 * 24 * 60 * 60 * 1000);
-                                    const dateStr = date.toLocaleDateString('pt-PT', { day: '2-digit', month: 'long', year: 'numeric' });
+                                    const dateStr = date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
                                     
                                     return (
                                         <div className="flex flex-col">
@@ -4914,10 +4810,7 @@ import { createClient } from '@supabase/supabase-js';
                                     );
                                 })()}
                             </div>
-                            <div className="text-slate-500 text-[10px] font-bold mt-4 max-w-[180px] leading-snug">Previsão baseada no seu ritmo real de queima de gordura entre o primeiro e o último registo válido.</div>
-                            <div className="absolute -bottom-6 -right-6 opacity-5 group-hover:rotate-12 transition-transform duration-700">
-                                <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                            </div>
+                            <div className="text-slate-500 text-[10px] font-bold mt-4 max-w-[200px] leading-snug">Estimativa baseada no seu ritmo real entre o primeiro e o último registro completo.</div>
                         </div>
                     </div>
 
@@ -4926,7 +4819,7 @@ import { createClient } from '@supabase/supabase-js';
                         <div className="progress-section-card bg-[#0f172a]/60 border border-white/5 rounded-[32px] p-8">
                             <div className="flex justify-between items-center mb-8">
                                 <div>
-                                    <h3 className="text-white text-lg font-black uppercase tracking-wider">Mapeamento Corporal 3D</h3>
+                                    <h3 className="text-white text-lg font-black uppercase tracking-wider">Mapeamento Corporal</h3>
                                     <p className="text-slate-500 text-[11px] font-bold">Toque nas zonas para ver a evolução local (cm)</p>
                                 </div>
                                 <div className="p-2 bg-orange-500/10 rounded-xl">
@@ -4942,9 +4835,7 @@ import { createClient } from '@supabase/supabase-js';
                                             <stop offset="100%" stopColor="rgba(255,255,255,0.02)" />
                                         </linearGradient>
                                     </defs>
-                                    {/* Stylized Performance Silhouette */}
                                     <path d="M50 5 Q55 5 55 12 L55 18 L68 28 L66 48 L56 58 L60 95 L52 95 L50 75 L48 95 L40 95 L44 58 L34 48 L32 28 L45 18 L45 12 Q45 5 50 5 Z" fill="url(#bodyGrad)" stroke="rgba(249,115,22,0.15)" strokeWidth="0.5" />
-                                    
                                     {regions.map(r => (
                                         <g key={r.id} onClick={() => setSelectedRegion(r)} className="cursor-pointer group">
                                             <circle cx={r.cx} cy={r.cy} r="2.5" fill={selectedRegion?.id === r.id ? '#f97316' : 'rgba(255,255,255,0.2)'} className="transition-all duration-300" />
@@ -4969,42 +4860,43 @@ import { createClient } from '@supabase/supabase-js';
                                     <>
                                         <div className="flex items-end gap-3 mb-6">
                                             <div className="text-4xl font-technical text-white">{selectedRegion.diff}</div>
-                                            <div className="text-xs text-slate-500 mb-2 uppercase font-black tracking-tighter">vs Start</div>
+                                            <div className="text-xs text-slate-500 mb-2 uppercase font-black tracking-tighter">vs Início</div>
                                         </div>
-                                        <p className="text-slate-400 text-xs leading-relaxed font-medium">A alteração de {selectedRegion.diff} nesta zona reflete a eficácia do treino focado em hipertrofia e definição localizada.</p>
+                                        <p className="text-slate-400 text-xs leading-relaxed font-medium">A variação de {selectedRegion.diff} nesta região acompanha a evolução entre sua primeira e última medição registrada.</p>
                                     </>
                                 ) : (
-                                    <div className="h-full flex items-center justify-center text-slate-600 text-xs font-bold italic uppercase tracking-widest">Toque no mapa para analisar perímetros</div>
+                                    <div className="h-full flex items-center justify-center text-slate-600 text-xs font-bold italic uppercase tracking-widest">Toque no mapa para analisar medidas</div>
                                 )}
                             </div>
                         </div>
                     </div>
 
-                    {/* Marcos e Conquistas (PT-IA) */}
+                    {/* Marcos e Conquistas */}
                     <div className="mb-8 p-6 bg-gradient-to-r from-orange-500/10 via-transparent to-transparent border border-orange-500/20 rounded-[32px] flex flex-col sm:flex-row items-center gap-6 shadow-[0_10px_40px_rgba(0,0,0,0.3)] animate-in slide-in-from-left duration-500">
                         <div className="w-16 h-16 bg-orange-500 rounded-2xl flex items-center justify-center shadow-[0_0_25px_rgba(249,115,22,0.4)] flex-shrink-0">
                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66V17c0 .55.45 1 1 1h2c.55 0 1-.45 1-1v-2.34c3.37-.3 6-3.14 6-6.66H4c0 3.52 2.63 6.36 6 6.66z"/></svg>
                         </div>
                         <div className="text-center sm:text-left flex-1">
-                            <div className="text-[10px] text-orange-500 font-black uppercase tracking-[3px] mb-1">Próximo Marco Elite</div>
+                            <div className="text-[10px] text-orange-500 font-black uppercase tracking-[3px] mb-1">Resumo da sua Jornada</div>
                             <p className="text-white text-sm font-bold m-0 leading-relaxed">
-                                {lastLog 
-                                    ? `Faltam apenas 1.2kg para você atingir a proporção ideal de definição muscular. Mantenha o foco no ganho limpo! 🧠`
-                                    : "Realize sua primeira avaliação técnica para desbloquear os marcos de performance."
-                                }
+                                {history.length >= 2
+                                    ? `Você já acumula ${history.length} avaliações registradas (variação total de ${deltaPeso > 0 ? '+' : ''}${deltaPeso.toFixed(1)}kg). Continue registrando semanalmente!`
+                                    : lastLog
+                                    ? `Primeiro registro salvo (${lastLog.peso}kg)! Faça um novo registro em 7 dias para acompanhar sua curva real de resultados.`
+                                    : "Faça seu primeiro registro de peso e altura abaixo para personalizar suas metas no app e no Nutri-Scan IA."}
                             </p>
                         </div>
                         <div className="w-full sm:w-auto flex flex-col items-center gap-2">
-                            <button onClick={() => alert('🔥 SNAPSHOT GERADO!\n\nInstruções de Elite:\n1. Tire um print desta tela agora.\n2. Compartilhe nos seus Stories.\n3. Marque @_.mariana_barros_\n\nNós vamos repostar os melhores resultados na nossa página oficial! 🚀')} className="w-full sm:w-auto bg-white/5 hover:bg-white/10 p-3 rounded-xl border border-white/10 text-white transition-all flex items-center justify-center gap-2 group">
+                            <button type="button" onClick={() => alert('🔥 COMPARTILHE SUA EVOLUÇÃO!\n\n1. Tire um print desta tela.\n2. Poste nos seus Stories.\n3. Marque @_.mariana_barros_\n\nAdoramos acompanhar os resultados da nossa comunidade! 🚀')} className="w-full sm:w-auto bg-white/5 hover:bg-white/10 p-3 rounded-xl border border-white/10 text-white transition-all flex items-center justify-center gap-2 group">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="group-hover:rotate-12 transition-transform"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
-                                <span className="text-[11px] font-black uppercase tracking-wider">Exportar Relatório</span>
+                                <span className="text-[11px] font-black uppercase tracking-wider">Compartilhar</span>
                             </button>
                             <div className="text-[8px] text-orange-500/60 font-black uppercase tracking-tighter">Marque a gente e seja repostado 📸</div>
                         </div>
                     </div>
 
-                    {/* Gráfico Ultra-Premium */}
-                    <div className="progress-section-card relative" style={{ background: 'linear-gradient(180deg, #111827 0%, #0a0a0c 100%)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '32px', padding: '24px sm:32px', marginBottom: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
+                    {/* Gráfico de Tendência */}
+                    <div className="progress-section-card relative" style={{ background: 'linear-gradient(180deg, #111827 0%, #0a0a0c 100%)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '32px', padding: '24px', marginBottom: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }}>
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-10">
                             <div>
                                 <h3 className="ps-title" style={{ margin: 0, fontSize: '18px' }}>Análise de Tendência</h3>
@@ -5012,7 +4904,7 @@ import { createClient } from '@supabase/supabase-js';
                                     <div className="px-2.5 py-1 bg-white/5 rounded-lg border border-white/10 flex items-center gap-2">
                                         {(() => {
                                             const h30 = history.filter(h => (new Date() - new Date(h.data)) / (1000*60*60*24) <= 30).sort((a,b) => new Date(a.data) - new Date(b.data));
-                                            if (h30.length < 2) return <span className="text-[10px] text-slate-500 font-bold uppercase">Tendência: Analisando...</span>;
+                                            if (h30.length < 2) return <span className="text-[10px] text-slate-500 font-bold uppercase">Tendência: Aguardando 2º registro...</span>;
                                             const diff = h30[h30.length-1].peso - h30[0].peso;
                                             const weeks = Math.max(1, (new Date(h30[h30.length-1].data) - new Date(h30[0].data)) / (1000*60*60*24*7));
                                             const rate = diff / weeks;
@@ -5029,105 +4921,104 @@ import { createClient } from '@supabase/supabase-js';
                                 </div>
                             </div>
                             <div className="flex p-1 bg-black/40 rounded-xl border border-white/5">
-                                <button onClick={() => setAbaGrafico('peso')} style={{ padding: '8px 20px', borderRadius: '10px', fontSize: '11px', fontWeight: '900', transition: 'all 0.3s', background: abaGrafico === 'peso' ? 'var(--accent)' : 'transparent', color: '#fff', textTransform: 'uppercase' }}>Peso</button>
-                                <button onClick={() => setAbaGrafico('bf')} style={{ padding: '8px 20px', borderRadius: '10px', fontSize: '11px', fontWeight: '900', transition: 'all 0.3s', background: abaGrafico === 'bf' ? '#06b6d4' : 'transparent', color: '#fff', textTransform: 'uppercase' }}>Gordura%</button>
+                                <button type="button" onClick={() => setAbaGrafico('peso')} style={{ padding: '8px 20px', borderRadius: '10px', fontSize: '11px', fontWeight: '900', transition: 'all 0.3s', background: abaGrafico === 'peso' ? 'var(--accent)' : 'transparent', color: '#fff', textTransform: 'uppercase' }}>Peso</button>
+                                <button type="button" onClick={() => setAbaGrafico('bf')} style={{ padding: '8px 20px', borderRadius: '10px', fontSize: '11px', fontWeight: '900', transition: 'all 0.3s', background: abaGrafico === 'bf' ? '#06b6d4' : 'transparent', color: '#fff', textTransform: 'uppercase' }}>Gordura%</button>
                             </div>
                         </div>
 
                         <div className="relative h-[250px] w-full mt-4">
-                            {true ? (
-                                    (() => {
-                                        const currentChartData = history.slice(-10).map((h, i) => ({
-                                            x: i,
-                                            y: abaGrafico === 'peso' ? h.peso : (h.bf_percentagem || 0),
-                                            raw: h
-                                        }));
+                            {(() => {
+                                const currentChartData = history
+                                    .filter(h => abaGrafico === 'peso' ? h.peso != null : (h.bf_percentagem != null && h.bf_percentagem > 0))
+                                    .slice(-10)
+                                    .map((h, i) => ({
+                                        x: i,
+                                        y: abaGrafico === 'peso' ? Number(h.peso) : Number(h.bf_percentagem),
+                                        raw: h
+                                    }));
 
-                                        if (currentChartData.length === 0) return (
-                                            <div className="h-full flex items-center justify-center text-slate-500 font-bold text-[10px] uppercase tracking-widest">
-                                                Aguardando primeiro registo...
-                                            </div>
-                                        );
+                                if (currentChartData.length === 0) return (
+                                    <div className="h-full flex items-center justify-center text-slate-500 font-bold text-[10px] uppercase tracking-widest">
+                                        Aguardando primeiro registro de {abaGrafico === 'peso' ? 'peso' : 'gordura corporal'}...
+                                    </div>
+                                );
 
-                                        const chartColor = abaGrafico === 'peso' ? 'var(--accent)' : '#06b6d4';
+                                const chartColor = abaGrafico === 'peso' ? 'var(--accent)' : '#06b6d4';
+                                const vals = currentChartData.map(d => d.y);
+                                const minVal = Math.min(...vals);
+                                const maxVal = Math.max(...vals);
+                                const buffer = ((maxVal - minVal) * 0.25) || Math.max(1, maxVal * 0.05);
+                                const min = Math.max(0, minVal - buffer);
+                                const max = maxVal + buffer;
+                                const range = (max - min) || 1;
 
-                                        const vals = currentChartData.map(d => d.y);
-                                        const minVal = Math.min(...vals);
-                                        const maxVal = Math.max(...vals);
-                                        const buffer = (maxVal - minVal) || (maxVal * 0.05) || 2;
-                                        const min = minVal - buffer;
-                                        const max = maxVal + buffer;
-                                        const range = (max - min) || 1;
+                                // Alinhamento exato com o eixo Y (yPos = 40 - step * 40)
+                                const pts = currentChartData.map((d, i) => ({
+                                    x: currentChartData.length > 1 ? (i / (currentChartData.length - 1)) * 100 : 50,
+                                    y: 40 - ((d.y - min) / range) * 40
+                                }));
 
-                                        const pts = currentChartData.map((d, i) => ({
-                                            x: currentChartData.length > 1 ? (i / (currentChartData.length - 1)) * 100 : 50,
-                                            y: 20 - ((d.y - minVal) / range) * 20 + 10 
-                                        }));
+                                const getSpline = (p) => {
+                                    if (p.length < 2) return "";
+                                    let d = `M ${p[0].x},${p[0].y}`;
+                                    for (let i = 0; i < p.length - 1; i++) {
+                                        const cp1x = p[i].x + (p[i + 1].x - p[i].x) * 0.5;
+                                        d += ` C ${cp1x},${p[i].y} ${cp1x},${p[i + 1].y} ${p[i + 1].x},${p[i + 1].y}`;
+                                    }
+                                    return d;
+                                };
 
-                                        const getSpline = (p) => {
-                                            if (p.length < 2) return "";
-                                            let d = `M ${p[0].x},${p[0].y}`;
-                                            for (let i = 0; i < p.length - 1; i++) {
-                                                const cp1x = p[i].x + (p[i + 1].x - p[i].x) * 0.5;
-                                                d += ` C ${cp1x},${p[i].y} ${cp1x},${p[i + 1].y} ${p[i + 1].x},${p[i + 1].y}`;
-                                            }
-                                            return d;
-                                        };
+                                const pathD = getSpline(pts);
+                                const areaD = pathD ? `${pathD} L ${pts[pts.length - 1].x},40 L ${pts[0].x},40 Z` : "";
+                                const gridSteps = [0, 0.25, 0.5, 0.75, 1];
 
-                                        const pathD = getSpline(pts);
-                                        const areaD = pathD ? `${pathD} L ${pts[pts.length - 1].x},40 L ${pts[0].x},40 Z` : "";
-                                        const gridSteps = [0, 0.25, 0.5, 0.75, 1];
-
-                                        return (
-                                            <svg viewBox="-15 -5 125 55" preserveAspectRatio="none" className="w-full h-full overflow-visible">
-                                                <defs>
-                                                    <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                                                        <stop offset="0%" stopColor={chartColor} stopOpacity="0.3" />
-                                                        <stop offset="100%" stopColor={chartColor} stopOpacity="0" />
-                                                    </linearGradient>
-                                                </defs>
-                                                {gridSteps.map(step => {
-                                                    const yPos = 40 - step * 40;
-                                                    return <line key={step} x1="0" y1={yPos} x2="100" y2={yPos} stroke="rgba(255,255,255,0.05)" strokeWidth="0.1" strokeDasharray="1 1" />;
-                                                })}
-                                                {gridSteps.map(step => {
-                                                    const yPos = 40 - step * 40;
-                                                    const val = min + step * range;
-                                                    return <text key={step} x="-2" y={yPos + 1} fill="rgba(255,255,255,0.2)" fontSize="2.5" textAnchor="end" className="font-mono">{val.toFixed(1)}</text>;
-                                                })}
-                                                {pts.map((p, i) => {
-                                                    const date = new Date(currentChartData[i].raw.data);
-                                                    return <text key={i} x={p.x} y="46" fill="rgba(255,255,255,0.2)" fontSize="2.2" textAnchor="middle" className="font-mono">{`${date.getDate()}/${date.getMonth() + 1}`}</text>;
-                                                })}
-                                                {areaD && <path d={areaD} fill="url(#chartGradient)" />}
-                                                {pathD && <path d={pathD} fill="none" stroke={chartColor} strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" />}
-                                                {pts.map((p, i) => (
-                                                    <g key={i}>
-                                                        <circle cx={p.x} cy={p.y} r="1.2" fill={chartColor} fillOpacity="0.2" className="animate-pulse" />
-                                                        <circle cx={p.x} cy={p.y} r="0.6" fill="#0f172a" stroke={chartColor} strokeWidth="0.4" 
-                                                            onMouseEnter={(e) => setTooltip({ x: e.clientX, y: e.clientY, data: currentChartData[i].raw })}
-                                                            onMouseLeave={() => setTooltip(null)}
-                                                            className="cursor-pointer hover:r-[1] transition-all"
-                                                        />
-                                                    </g>
-                                                ))}
-                                            </svg>
-                                        );
-                                    })()
-                            ) : (
-                                <div className="h-full flex items-center justify-center text-slate-500 font-bold text-xs uppercase tracking-widest">Aguardando dados suficientes para gerar gráfico...</div>
-                            )}
+                                return (
+                                    <svg viewBox="-15 -5 125 55" preserveAspectRatio="none" className="w-full h-full overflow-visible">
+                                        <defs>
+                                            <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="0%" stopColor={chartColor} stopOpacity="0.3" />
+                                                <stop offset="100%" stopColor={chartColor} stopOpacity="0" />
+                                            </linearGradient>
+                                        </defs>
+                                        {gridSteps.map(step => {
+                                            const yPos = 40 - step * 40;
+                                            return <line key={step} x1="0" y1={yPos} x2="100" y2={yPos} stroke="rgba(255,255,255,0.06)" strokeWidth="0.15" strokeDasharray="1 1" />;
+                                        })}
+                                        {gridSteps.map(step => {
+                                            const yPos = 40 - step * 40;
+                                            const val = min + step * range;
+                                            return <text key={step} x="-2" y={yPos + 1} fill="rgba(255,255,255,0.35)" fontSize="2.5" textAnchor="end" className="font-mono">{val.toFixed(1)}</text>;
+                                        })}
+                                        {pts.map((p, i) => {
+                                            const date = new Date(currentChartData[i].raw.data);
+                                            return <text key={i} x={p.x} y="46" fill="rgba(255,255,255,0.35)" fontSize="2.2" textAnchor="middle" className="font-mono">{`${date.getDate()}/${date.getMonth() + 1}`}</text>;
+                                        })}
+                                        {areaD && <path d={areaD} fill="url(#chartGradient)" />}
+                                        {pathD && <path d={pathD} fill="none" stroke={chartColor} strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" />}
+                                        {pts.map((p, i) => (
+                                            <g key={i}>
+                                                <circle cx={p.x} cy={p.y} r="1.4" fill={chartColor} fillOpacity="0.25" />
+                                                <circle cx={p.x} cy={p.y} r="0.8" fill="#0f172a" stroke={chartColor} strokeWidth="0.45" 
+                                                    onMouseEnter={(e) => setTooltip({ x: e.clientX, y: e.clientY, data: currentChartData[i].raw })}
+                                                    onMouseLeave={() => setTooltip(null)}
+                                                    className="cursor-pointer transition-all"
+                                                />
+                                            </g>
+                                        ))}
+                                    </svg>
+                                );
+                            })()}
                             
                             {tooltip && (
                                 <div className="fixed z-[1000] bg-slate-900 border border-white/10 p-3 rounded-xl shadow-2xl pointer-events-none" style={{ left: tooltip.x, top: tooltip.y - 70, transform: 'translateX(-50%)' }}>
-                                    <div className="text-[10px] text-slate-500 font-bold uppercase mb-1">{new Date(tooltip.data.data).toLocaleDateString()}</div>
+                                    <div className="text-[10px] text-slate-500 font-bold uppercase mb-1">{new Date(tooltip.data.data).toLocaleDateString('pt-BR')}</div>
                                     <div className="text-sm font-black text-white">{abaGrafico === 'peso' ? tooltip.data.peso + 'kg' : tooltip.data.bf_percentagem?.toFixed(1) + '%'}</div>
                                 </div>
                             )}
                         </div>
                     </div>
 
-                    {/* Raio-X Técnico Elite */}
+                    {/* Raio-X Estrutural */}
                     <div className="mb-8">
                         <div className="progress-section-card overflow-hidden" style={{ background: '#0a0a0c', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '28px', padding: '0' }}>
                             <div style={{ padding: '24px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -5138,10 +5029,10 @@ import { createClient } from '@supabase/supabase-js';
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="p-5 bg-white/5 rounded-2xl border border-white/5 relative group">
                                         <div className="absolute top-2 right-2 w-1.5 h-1.5 bg-cyan-500 rounded-full animate-pulse"></div>
-                                        <div className="text-[10px] text-cyan-500 font-black uppercase mb-2">Músculo/Osso</div>
+                                        <div className="text-[10px] text-cyan-500 font-black uppercase mb-2">Massa Magra</div>
                                         <div className="text-2xl font-technical text-white mb-1"><Counter value={massaMagra} suffix="kg" /></div>
                                         <div className="w-full h-1 bg-white/5 rounded-full mt-3 overflow-hidden">
-                                            <div className="h-full bg-cyan-500" style={{ width: `${(massaMagra/100)*100}%` }}></div>
+                                            <div className="h-full bg-cyan-500" style={{ width: `${Math.min(100, (massaMagra / 100) * 100)}%` }}></div>
                                         </div>
                                     </div>
                                     <div className="p-5 bg-white/5 rounded-2xl border border-white/5 relative group">
@@ -5149,20 +5040,29 @@ import { createClient } from '@supabase/supabase-js';
                                         <div className="text-[10px] text-red-500 font-black uppercase mb-2">Massa Gorda</div>
                                         <div className="text-2xl font-technical text-white mb-1"><Counter value={massaGorda} suffix="kg" /></div>
                                         <div className="w-full h-1 bg-white/5 rounded-full mt-3 overflow-hidden">
-                                            <div className="h-full bg-red-500" style={{ width: `${(massaGorda/50)*100}%` }}></div>
+                                            <div className="h-full bg-red-500" style={{ width: `${Math.min(100, (massaGorda / 50) * 100)}%` }}></div>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="mt-6 p-6 bg-gradient-to-br from-orange-500/10 to-transparent rounded-2xl border border-orange-500/20 text-center relative overflow-hidden">
                                     {(() => {
+                                        if (!waistToHeight) {
+                                            return (
+                                                <>
+                                                    <div className="text-[11px] text-orange-500 font-black uppercase mb-2 tracking-widest">Proporção Cintura / Altura</div>
+                                                    <div className="text-3xl font-technical text-slate-500 mb-2">--</div>
+                                                    <div className="text-[11px] text-slate-400 font-bold">Informe Cintura e Altura abaixo para calcular seu índice metabólico.</div>
+                                                </>
+                                            );
+                                        }
                                         const status = waistToHeight < 0.50 ? { color: '#22c55e', text: 'SAUDÁVEL', desc: 'Risco metabólico baixo. Excelentes níveis.' } :
                                                        waistToHeight <= 0.55 ? { color: '#eab308', text: 'ATENÇÃO', desc: 'Risco moderado. Considere ajustes.' } :
                                                        { color: '#ef4444', text: 'ALERTA', desc: 'Risco elevado. Foco na gordura visceral.' };
                                         return (
                                             <>
                                                 <div className="text-[11px] text-orange-500 font-black uppercase mb-2 tracking-widest">Proporção Cintura / Altura</div>
-                                                <div className="text-4xl font-technical text-white mb-2" style={{ textShadow: `0 0 20px ${status.color}44` }}>{(waistToHeight || 0).toFixed(2)}</div>
-                                                <div className="text-[11px] text-slate-500 font-bold mb-3">{status.desc}</div>
+                                                <div className="text-4xl font-technical text-white mb-2" style={{ textShadow: `0 0 20px ${status.color}44` }}>{waistToHeight.toFixed(2)}</div>
+                                                <div className="text-[11px] text-slate-400 font-bold mb-3">{status.desc}</div>
                                                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[9px] font-black tracking-widest mx-auto" style={{ borderColor: `${status.color}44`, color: status.color, background: `${status.color}11` }}>
                                                     <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: status.color }}></div>
                                                     {status.text}
@@ -5175,11 +5075,11 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
                     </div>
 
-                    {/* Histórico Elite */}
-                    <div className="progress-section-card mb-8" style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '28px', padding: '32px' }}>
-                         <div className="flex justify-between items-center mb-8">
-                            <h3 className="ps-title" style={{ margin: 0 }}>Logbook de Performance</h3>
-                            <div className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Total: {history.length} registos</div>
+                    {/* Histórico */}
+                    <div className="progress-section-card mb-8" style={{ background: 'rgba(15, 23, 42, 0.4)', borderRadius: '28px', padding: '24px' }}>
+                         <div className="flex justify-between items-center mb-6">
+                            <h3 className="ps-title" style={{ margin: 0 }}>Histórico de Avaliações</h3>
+                            <div className="text-[11px] text-slate-500 font-bold uppercase tracking-wider">Total: {history.length} registros</div>
                          </div>
                          <div className="overflow-x-auto">
                             <table className="w-full text-left border-separate border-spacing-y-2">
@@ -5194,15 +5094,15 @@ import { createClient } from '@supabase/supabase-js';
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {sortedHistory.map((row, idx) => (
+                                    {sortedHistory.map((row) => (
                                         <tr key={row.id} className="group hover:scale-[1.01] transition-transform duration-200">
-                                            <td className="py-4 px-4 bg-white/[0.03] rounded-l-2xl border-y border-l border-white/5 text-sm text-white font-bold">{new Date(row.data).toLocaleDateString()}</td>
+                                            <td className="py-4 px-4 bg-white/[0.03] rounded-l-2xl border-y border-l border-white/5 text-sm text-white font-bold">{new Date(row.data).toLocaleDateString('pt-BR')}</td>
                                             <td className="py-4 px-4 bg-white/[0.03] border-y border-white/5 font-technical text-orange-500 text-lg">{row.peso}kg</td>
                                             <td className="py-4 px-4 bg-white/[0.03] border-y border-white/5 font-technical text-cyan-400 font-black">{row.bf_percentagem ? row.bf_percentagem.toFixed(1) + '%' : <span className="text-slate-600 opacity-50 italic">N/A</span>}</td>
                                             <td className="py-4 px-4 bg-white/[0.03] border-y border-white/5 text-xs text-slate-400 font-bold uppercase">{row.pescoco_cm || '--'} / {row.cintura_cm || '--'}cm</td>
                                             <td className="py-4 px-4 bg-white/[0.03] border-y border-white/5 text-sm text-white font-bold">{(row.peso * (1 - (row.bf_percentagem || 0)/100)).toFixed(1)}kg</td>
                                             <td className="py-4 px-4 bg-white/[0.03] rounded-r-2xl border-y border-r border-white/5 text-right">
-                                                <button onClick={() => handleEliminar(row.id)} className="p-2.5 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all">
+                                                <button type="button" onClick={() => handleEliminar(row.id)} className="p-2.5 text-red-500/40 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all" aria-label="Excluir registro">
                                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
                                                 </button>
                                             </td>
@@ -5213,73 +5113,70 @@ import { createClient } from '@supabase/supabase-js';
                          </div>
                     </div>
 
-                    {/* Formulário Elite */}
-                    <div className="progress-section-card bg-gradient-to-b from-[#1e293b] to-[#0f172a] border border-white/10" style={{ borderRadius: '32px', padding: '40px' }}>
-                        <div className="flex items-center gap-4 mb-10">
+                    {/* Formulário */}
+                    <div className="progress-section-card bg-gradient-to-b from-[#1e293b] to-[#0f172a] border border-white/10" style={{ borderRadius: '32px', padding: '28px' }}>
+                        <div className="flex items-center gap-4 mb-8">
                             <div className="w-12 h-12 rounded-2xl bg-orange-500 flex items-center justify-center shadow-[0_0_20px_rgba(249,115,22,0.4)]">
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round"/></svg>
                             </div>
                             <div>
-                                <h3 className="text-2xl font-black text-white m-0">Novo Registo Bio</h3>
-                                <p className="text-slate-400 text-sm font-medium">Input técnico de perímetria corporal</p>
+                                <h3 className="text-2xl font-black text-white m-0">Novo Registro</h3>
+                                <p className="text-slate-400 text-sm font-medium">Preencha Peso e Altura (as demais medidas são opcionais)</p>
                             </div>
                         </div>
 
-                        <div className="space-y-10">
-                            {/* Secção Base */}
+                        <div className="space-y-8">
                             <div>
-                                <div className="text-[10px] text-orange-500 font-black uppercase tracking-[3px] mb-6 flex items-center gap-3">
+                                <div className="text-[10px] text-orange-500 font-black uppercase tracking-[3px] mb-5 flex items-center gap-3">
                                     <span className="flex-grow h-px bg-orange-500/20"></span>
                                     Métricas Base
                                     <span className="flex-grow h-px bg-orange-500/20"></span>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                                     <div className="flex flex-col gap-2">
-                                        <label className="text-[11px] text-slate-500 font-black uppercase ml-1">Género (Obrigatório)</label>
+                                        <label className="text-[11px] text-slate-400 font-black uppercase ml-1">Gênero (Obrigatório)</label>
                                         <div className="flex bg-black/40 rounded-2xl p-1 border border-white/10">
-                                            <button onClick={() => setGenero('m')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${genero === 'm' ? 'bg-orange-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Masc.</button>
-                                            <button onClick={() => setGenero('f')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${genero === 'f' ? 'bg-orange-600 text-white shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}>Fem.</button>
+                                            <button type="button" onClick={() => setGenero('m')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${genero === 'm' ? 'bg-orange-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}>Masc.</button>
+                                            <button type="button" onClick={() => setGenero('f')} className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase transition-all ${genero === 'f' ? 'bg-orange-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}>Fem.</button>
                                         </div>
                                     </div>
                                     <div className="flex flex-col gap-2">
-                                        <label className="text-[11px] text-slate-500 font-black uppercase ml-1">Peso (kg)</label>
-                                        <input type="number" name="peso" value={form.peso} onChange={handleChange} placeholder="75.5" className="bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all outline-none" />
+                                        <label className="text-[11px] text-slate-400 font-black uppercase ml-1">Peso (kg)</label>
+                                        <input type="number" step="0.1" name="peso" value={form.peso} onChange={handleChange} placeholder="Ex: 68.5" className="bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all outline-none" />
                                     </div>
                                     <div className="flex flex-col gap-2">
-                                        <label className="text-[11px] text-slate-500 font-black uppercase ml-1">Altura (cm)</label>
-                                        <input type="number" name="altura" value={form.altura} onChange={handleChange} placeholder="175" className="bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all outline-none" />
+                                        <label className="text-[11px] text-slate-400 font-black uppercase ml-1">Altura (cm)</label>
+                                        <input type="number" name="altura" value={form.altura} onChange={handleChange} placeholder="Ex: 165" className="bg-black/40 border border-white/10 rounded-2xl p-4 text-white font-bold focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all outline-none" />
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Secção Perímetros */}
                             <div>
-                                <div className="text-[10px] text-cyan-500 font-black uppercase tracking-[3px] mb-6 flex items-center gap-3">
+                                <div className="text-[10px] text-cyan-500 font-black uppercase tracking-[3px] mb-5 flex items-center gap-3">
                                     <span className="flex-grow h-px bg-cyan-500/20"></span>
-                                    Perímetros (cm)
+                                    Medidas Opcionais (cm)
                                     <span className="flex-grow h-px bg-cyan-500/20"></span>
                                 </div>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-5">
                                     {[
                                         { label: 'Peito', name: 'peito' },
                                         { label: 'Pescoço', name: 'pescoco' },
                                         { label: 'Cintura', name: 'cintura' },
                                         { label: 'Quadril', name: 'quadril' },
-                                        { label: 'Braco Esq', name: 'braco_esq' },
-                                        { label: 'Braco Dir', name: 'braco_dir' },
+                                        { label: 'Braço Esq', name: 'braco_esq' },
+                                        { label: 'Braço Dir', name: 'braco_dir' },
                                         { label: 'Perna Esq', name: 'perna_esq' },
                                         { label: 'Perna Dir', name: 'perna_dir' },
                                         { label: 'Panturrilha', name: 'panturrilha' }
                                     ].map(f => (
                                         <div key={f.name} className="flex flex-col gap-2">
-                                            <label className="text-[10px] text-slate-600 font-black uppercase ml-1">{f.label}</label>
-                                            <input type="number" name={f.name} value={form[f.name]} onChange={handleChange} placeholder="0.0" className="bg-black/20 border border-white/5 rounded-xl p-3 text-white text-sm font-bold focus:border-cyan-500 transition-all outline-none" />
+                                            <label className="text-[10px] text-slate-400 font-black uppercase ml-1">{f.label}</label>
+                                            <input type="number" step="0.1" name={f.name} value={form[f.name]} onChange={handleChange} placeholder="Opcional" className="bg-black/20 border border-white/5 rounded-xl p-3 text-white text-sm font-bold focus:border-cyan-500 transition-all outline-none" />
                                         </div>
                                     ))}
                                     
-                                    {/* BF Preview Box */}
                                     <div className="col-span-2 sm:col-span-1 bg-cyan-500/10 border border-dashed border-cyan-500/30 rounded-xl p-3 flex flex-col justify-center items-center">
-                                        <div className="text-[8px] text-cyan-500 font-black uppercase mb-1">Gordura IA (Estimada)</div>
+                                        <div className="text-[8px] text-cyan-500 font-black uppercase mb-1">Gordura Estimada</div>
                                         <div className="text-white text-xl font-black italic">
                                             {currentBFPreview !== null ? `${currentBFPreview.toFixed(1)}%` : '--.-%'}
                                         </div>
@@ -5288,15 +5185,31 @@ import { createClient } from '@supabase/supabase-js';
                             </div>
                         </div>
 
-                        {formError && <div className="mt-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-500 text-xs font-bold text-center">{formError}</div>}
+                        {formError && <div className="mt-6 p-4 bg-red-500/15 border border-red-500/30 rounded-2xl text-red-300 text-xs font-bold text-center">{formError}</div>}
+
+                        {saveSuccess && (
+                            <div className="mt-6 p-4 bg-emerald-500/15 border border-emerald-500/35 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                                <span className="text-emerald-300 text-xs font-bold">✅ Medidas salvas com sucesso! Sua meta calórica já foi atualizada.</span>
+                                {onOpenNutriScan && (
+                                    <button
+                                        type="button"
+                                        onClick={onOpenNutriScan}
+                                        className="px-4 py-2 rounded-xl bg-emerald-500 text-slate-950 font-black text-[11px] uppercase tracking-wider shrink-0"
+                                    >
+                                        📸 Ir para Nutri IA
+                                    </button>
+                                )}
+                            </div>
+                        )}
 
                         <button 
+                            type="button"
                             onClick={handleGravar} 
-                            disabled={loading || !genero}
-                            className="mt-12 w-full bg-white text-black font-black py-5 rounded-2xl text-base uppercase tracking-widest hover:bg-orange-500 hover:text-white hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed group flex items-center justify-center gap-3"
+                            disabled={loading || saving || !genero}
+                            className="mt-8 w-full bg-white text-black font-black py-5 rounded-2xl text-base uppercase tracking-widest hover:bg-orange-500 hover:text-white hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] active:scale-[0.98] transition-all disabled:opacity-30 disabled:cursor-not-allowed group flex items-center justify-center gap-3"
                         >
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="group-hover:rotate-12 transition-transform"><path d="M12 5v14M5 12h14" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                            Submeter Avaliação Elite
+                            {saving ? 'Salvando...' : 'Salvar Avaliação'}
                         </button>
                     </div>
                 </div>
@@ -5378,7 +5291,7 @@ import { createClient } from '@supabase/supabase-js';
             }
         };
 
-        function RankingView({ session, userProfile, currentXP, onGoToTreinos }) {
+        function RankingView({ session, userProfile, currentXP, onGoToTreinos, onOpenEditProfile }) {
             const [topUsers, setTopUsers] = useState([]);
             const [loading, setLoading] = useState(true);
             const [myRank, setMyRank] = useState(null);
@@ -5476,12 +5389,17 @@ import { createClient } from '@supabase/supabase-js';
                             style={{ padding: '8px 20px', borderRadius: '99px', border: '1px solid rgba(255,255,255,0.1)', background: filterMode === 'global' ? 'var(--accent)' : 'rgba(255,255,255,0.05)', color: filterMode === 'global' ? '#fff' : 'var(--text-secondary)', fontWeight: '900', transition: 'all 0.2s', cursor: 'pointer', fontSize: '11px', textTransform: 'uppercase' }}
                         >🌍 Global</button>
                         <button 
+                            type="button"
                             onClick={() => {
                                 if (!userProfile?.estado) {
-                                    alert('Por favor, atualize o seu Estado no Perfil para ver o ranking local.');
+                                    if (onOpenEditProfile) {
+                                        onOpenEditProfile();
+                                    } else {
+                                        alert('Atualize seu Estado em Editar Perfil para ver o ranking local.');
+                                    }
                                     return;
                                 }
-                                setFilterMode('local')
+                                setFilterMode('local');
                             }}
                             style={{ padding: '8px 20px', borderRadius: '99px', border: '1px solid rgba(255,255,255,0.1)', background: filterMode === 'local' ? 'var(--accent)' : 'rgba(255,255,255,0.05)', color: filterMode === 'local' ? '#fff' : 'var(--text-secondary)', fontWeight: '900', transition: 'all 0.2s', cursor: 'pointer', fontSize: '11px', textTransform: 'uppercase' }}
                         >📍 Local (Estado)</button>
@@ -5630,11 +5548,13 @@ import { createClient } from '@supabase/supabase-js';
         );
     }
 
-        function HelpDashboard() {
+        function HelpDashboard({ onLogout }) {
             const [faqOpen, setFaqOpen] = React.useState(null);
+            const [legalModal, setLegalModal] = React.useState(null); // 'termos' | 'privacidade' | null
 
-            const handleReset = () => {
+            const handleReset = async () => {
                 if (window.confirm('Tem certeza que deseja limpar o cache do aplicativo? Esta ação vai desconectar sua conta neste aparelho para atualizar tudo do zero.')) {
+                    try { await window.supabase?.auth?.signOut(); } catch {}
                     localStorage.clear();
                     window.location.reload();
                 }
@@ -5645,14 +5565,14 @@ import { createClient } from '@supabase/supabase-js';
             };
 
             const faqs = [
-                { q: "Como ativar o Desafio 30 Dias, Nutri-Scan ou Combo de Ouro?", a: "Após comprar na Hotmart, você recebe um código no seu e-mail. Basta ir na aba 'Extras', descer até a caixa 'Ative seu código aqui', digitar o código e clicar em Liberar!" },
-                { q: "Como funciona o Nutri-Scan™ IA?", a: "Você já tem 2 análises grátis liberadas na aba 'Nutri IA'. Basta tirar uma foto do seu prato ou digitar o que comeu e a IA calcula automaticamente calorias, proteínas, carboidratos e gorduras." },
-                { q: "Onde configuro meu Peso e Altura?", a: "Você pode registrar seu peso e altura clicando na aba 'Evolução'. Os seus dados ficam salvos na sua conta para acompanhar sua evolução." },
+                { q: "Como ativar o Desafio 30 Dias, Nutri-Scan ou Combo de Ouro?", a: "Se você comprou com o mesmo e-mail usado aqui no app, o acesso libera automaticamente. Se recebeu um código no e-mail da Hotmart, vá na aba 'Extras', desça até 'Ative seu código aqui', digite o código e toque em Liberar!" },
+                { q: "Como funciona o Nutri-Scan™ IA?", a: "Você já tem 2 análises grátis liberadas na aba 'Nutri IA'. Basta tirar uma foto do seu prato, escolher da galeria ou digitar o que comeu e a IA calcula automaticamente calorias, proteínas, carboidratos e gorduras." },
+                { q: "Onde configuro meu Peso e Altura?", a: "Vá na aba 'Evolução' e preencha apenas Peso e Altura (as demais medidas são opcionais). Seus dados ficam salvos na sua conta e calibram sua meta diária no Nutri-Scan." },
                 { q: "Como instalar o aplicativo na tela inicial do celular?", a: "Veja o vídeo curto abaixo! Em iPhone (Safari) toque em Compartilhar > Adicionar à Tela de Início. Em Android (Chrome) toque nos 3 pontinhos > Instalar aplicativo." }
             ];
 
             return (
-                <div className="progress-dashboard">
+                <div className="progress-dashboard pb-28">
                     <div className="page-header" style={{ marginBottom: '16px' }}>
                         <h1>Central de Ajuda</h1>
                     </div>
@@ -5668,7 +5588,7 @@ import { createClient } from '@supabase/supabase-js';
                             Adicione o aplicativo à sua Tela Inicial para usar com um toque. Para Android ou iPhone, clique em <strong style={{ color: 'var(--text-primary)' }}>Compartilhar</strong> (ou nos 3 pontinhos) e depois em <strong style={{ color: 'var(--accent)' }}>"Adicionar à Tela Inicial"</strong>.
                         </p>
                         <div style={{ width: '100%', maxWidth: '280px', borderRadius: '8px', overflow: 'hidden', margin: '0 auto', marginTop: '16px' }}>
-                            <video src="./instalar_app.mp4" poster="./OIP.webp" controls playsInline preload="none" style={{ width: "100%", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.5)" }}></video>
+                            <video src="./instalar_app.mp4" poster="./OIP.webp" controls playsInline preload="metadata" style={{ width: "100%", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.5)" }}></video>
                         </div>
                     </div>
 
@@ -5695,7 +5615,7 @@ import { createClient } from '@supabase/supabase-js';
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
                         {faqs.map((f, i) => (
                             <div key={i} style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                                <button onClick={() => toggleFaq(i)} style={{ width: '100%', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left' }}>
+                                <button type="button" onClick={() => toggleFaq(i)} style={{ width: '100%', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left' }}>
                                     <span style={{ fontWeight: '600', fontSize: '15px' }}>{f.q}</span>
                                     <span style={{ color: 'var(--accent)', transform: faqOpen === i ? 'rotate(180deg)' : 'none', transition: 'transform 0.3s' }}>▼</span>
                                 </button>
@@ -5708,570 +5628,74 @@ import { createClient } from '@supabase/supabase-js';
                         ))}
                     </div>
 
-                    <h3 className="ps-title" style={{ marginTop: '32px' }}>Fale Conosco</h3>
+                    <h3 className="ps-title" style={{ marginTop: '32px' }}>Suporte & Compras Hotmart</h3>
                     <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.5), rgba(15,23,42,0.8))', padding: '24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', marginBottom: '32px', textAlign: 'center' }}>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '20px' }}>
-                            Precisa de ajuda com seu acesso ou encontrou algum erro? Envie um e-mail para nossa equipe.
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '18px', lineHeight: '1.55' }}>
+                            Precisa de ajuda com seu acesso, código ou assinatura? Você pode responder diretamente ao e-mail de confirmação da compra ou acessar a Central do Comprador Hotmart:
                         </p>
-                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                            <a href="mailto:suporte@app.com" style={{ display: 'inline-block', background: 'var(--accent)', color: '#fff', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', textDecoration: 'none', boxShadow: '0 4px 12px rgba(249,115,22,0.3)', flex: 1, maxWidth: '280px' }}>
-                                ✉️ Falar com o Suporte
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                            <a
+                                href="https://atendimento.hotmart.com.br/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ display: 'inline-block', background: 'var(--accent)', color: '#fff', padding: '12px 24px', borderRadius: '10px', fontWeight: '800', textDecoration: 'none', boxShadow: '0 4px 12px rgba(249,115,22,0.3)', flex: 1, maxWidth: '300px' }}
+                            >
+                                🛟 Central de Atendimento Hotmart
                             </a>
                         </div>
                     </div>
 
-                    <h3 className="ps-title" style={{ marginTop: '32px', color: 'var(--red)' }}>Opções Avançadas</h3>
-                    <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '24px', borderRadius: '16px', marginBottom: '40px' }}>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '16px' }}>O aplicativo não atualizou suas informações? Use o botão abaixo para limpar o cache local e entrar novamente.</p>
-                        <button onClick={handleReset} style={{ width: '100%', background: 'transparent', border: '1px solid var(--red)', color: 'var(--red)', padding: '12px', borderRadius: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <h3 className="ps-title" style={{ marginTop: '32px', color: 'var(--red)' }}>Conta & Cache</h3>
+                    <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '24px', borderRadius: '16px', marginBottom: '40px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px', margin: 0 }}>O aplicativo não atualizou suas informações? Limpe o cache local ou desconecte sua conta.</p>
+                        <button type="button" onClick={handleReset} style={{ width: '100%', background: 'transparent', border: '1px solid var(--red)', color: 'var(--red)', padding: '12px', borderRadius: '8px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer' }}>
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" strokeLinecap="round" strokeLinejoin="round" /></svg>
                             Limpar Cache do App
                         </button>
+                        {onLogout && (
+                            <button type="button" onClick={onLogout} style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', padding: '12px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
+                                Sair da Conta
+                            </button>
+                        )}
                     </div>
 
                     <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px', paddingBottom: '30px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px' }}>
-                        <div style={{ marginBottom: '6px', fontWeight: '700' }}>Plataforma Centralizada de Treino</div>
-                        <div style={{ letterSpacing: '1px', opacity: 0.7 }}>Versão 1.1.0</div>
+                        <div style={{ marginBottom: '6px', fontWeight: '700' }}>+500 Exercícios com Elástico</div>
+                        <div style={{ letterSpacing: '1px', opacity: 0.7 }}>Versão 1.2.0</div>
                         <div style={{ marginTop: '12px', display: 'flex', gap: '16px', justifyContent: 'center' }}>
-                            <a href="#termos" style={{ color: 'var(--text-muted)', textDecoration: 'underline' }}>Termos & Condições</a>
-                            <a href="#privacidade" style={{ color: 'var(--text-muted)', textDecoration: 'underline' }}>Privacidade</a>
+                            <button type="button" onClick={() => setLegalModal('termos')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', textDecoration: 'underline', cursor: 'pointer', fontSize: '13px' }}>Termos & Condições</button>
+                            <button type="button" onClick={() => setLegalModal('privacidade')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', textDecoration: 'underline', cursor: 'pointer', fontSize: '13px' }}>Privacidade</button>
                         </div>
                     </div>
+
+                    {legalModal && (
+                        <div className="fixed inset-0 z-[20000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && setLegalModal(null)}>
+                            <div className="bg-slate-900 border border-white/15 rounded-3xl max-w-md w-full max-h-[85vh] overflow-y-auto p-6 relative">
+                                <button type="button" onClick={() => setLegalModal(null)} className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 text-white text-xl flex items-center justify-center">&times;</button>
+                                <h3 className="text-lg font-black text-white mb-4">
+                                    {legalModal === 'termos' ? 'Termos & Condições de Uso' : 'Política de Privacidade (LGPD)'}
+                                </h3>
+                                <div className="text-xs text-slate-300 leading-relaxed space-y-3">
+                                    {legalModal === 'termos' ? (
+                                        <>
+                                            <p>O aplicativo +500 Exercícios com Elástico oferece vídeos demonstrativos, cronogramas de treino e estimativas nutricionais por IA para fins informativos e educativos.</p>
+                                            <p>Antes de iniciar qualquer programa de exercícios ou mudança alimentar, consulte um médico ou profissional de educação física/nutrição. Respeite sempre os limites do seu corpo.</p>
+                                            <p>As compras, garantias, cancelamentos e reembolsos são processados de forma segura pela plataforma Hotmart conforme as políticas vigentes na data da contratação.</p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <p>Seus dados cadastrais (e-mail, nome, objetivo, medidas corporais, registros de hidratação, sono e refeições) são armazenados de forma privada e utilizados exclusivamente para personalizar sua experiência no aplicativo.</p>
+                                            <p>Não vendemos seus dados a terceiros. Fotos enviadas ao Nutri-Scan IA são processadas apenas para estimar calorias e macronutrientes no momento da análise.</p>
+                                            <p>Você pode atualizar seus dados em Editar Perfil ou solicitar exclusão da sua conta a qualquer momento.</p>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         }
-
-        const TREINO_MOCK = {
-            "grupos": [
-                {
-                    "id": "g1",
-                    "nome": "Membros Superiores",
-                    "icone_name": "💪"
-                },
-                {
-                    "id": "g2",
-                    "nome": "Membros Inferiores",
-                    "icone_name": "🦵"
-                },
-                {
-                    "id": "g3",
-                    "nome": "Abdominais",
-                    "icone_name": "🎯"
-                },
-                {
-                    "id": "g4",
-                    "nome": "Cardio & Mobilidade",
-                    "icone_name": "🌿"
-                }
-            ],
-            "musculos": [
-                {
-                    "id": "m1",
-                    "group_id": "g1",
-                    "nome": "Peitoral"
-                },
-                {
-                    "id": "m2",
-                    "group_id": "g1",
-                    "nome": "Costas"
-                },
-                {
-                    "id": "m3",
-                    "group_id": "g1",
-                    "nome": "Ombros"
-                },
-                {
-                    "id": "m4",
-                    "group_id": "g1",
-                    "nome": "Braços"
-                },
-                {
-                    "id": "m5",
-                    "group_id": "g2",
-                    "nome": "Quadríceps"
-                },
-                {
-                    "id": "m6",
-                    "group_id": "g2",
-                    "nome": "Posteriores"
-                },
-                {
-                    "id": "m7",
-                    "group_id": "g2",
-                    "nome": "Glúteos"
-                },
-                {
-                    "id": "m8",
-                    "group_id": "g2",
-                    "nome": "Panturrilhas"
-                },
-                {
-                    "id": "m9",
-                    "group_id": "g2",
-                    "nome": "Abdutores e Pelve"
-                },
-                {
-                    "id": "m10",
-                    "group_id": "g3",
-                    "nome": "Reto Abdominal"
-                },
-                {
-                    "id": "m11",
-                    "group_id": "g3",
-                    "nome": "Oblíquos e Core"
-                },
-                {
-                    "id": "m12",
-                    "group_id": "g4",
-                    "nome": "Cardio / HIIT"
-                },
-                {
-                    "id": "m13",
-                    "group_id": "g4",
-                    "nome": "Mobilidade"
-                }
-            ],
-            "areas": [
-                {
-                    "id": "a_p1",
-                    "muscle_id": "m1",
-                    "nome": "Peito Completo"
-                },
-                {
-                    "id": "a_p2",
-                    "muscle_id": "m1",
-                    "nome": "Peito Superior"
-                },
-                {
-                    "id": "a_p3",
-                    "muscle_id": "m1",
-                    "nome": "Peito Inferior"
-                },
-                {
-                    "id": "a_c1",
-                    "muscle_id": "m2",
-                    "nome": "Trapézio e Pescoço"
-                },
-                {
-                    "id": "a_c2",
-                    "muscle_id": "m2",
-                    "nome": "Trapézio e Rombóides (Costas)"
-                },
-                {
-                    "id": "a_c3",
-                    "muscle_id": "m2",
-                    "nome": "Grande Dorsal"
-                },
-                {
-                    "id": "a_c4",
-                    "muscle_id": "m2",
-                    "nome": "Lombar"
-                },
-                {
-                    "id": "a_c5",
-                    "muscle_id": "m2",
-                    "nome": "Costas Laterais"
-                },
-                {
-                    "id": "a_o1",
-                    "muscle_id": "m3",
-                    "nome": "Deltóide Frontal / Médio"
-                },
-                {
-                    "id": "a_o2",
-                    "muscle_id": "m3",
-                    "nome": "Deltóide Posterior"
-                },
-                {
-                    "id": "a_b1",
-                    "muscle_id": "m4",
-                    "nome": "Bíceps"
-                },
-                {
-                    "id": "a_b2",
-                    "muscle_id": "m4",
-                    "nome": "Tríceps"
-                },
-                {
-                    "id": "a_b3",
-                    "muscle_id": "m4",
-                    "nome": "Antebraços"
-                },
-                {
-                    "id": "a_b4",
-                    "muscle_id": "m4",
-                    "nome": "Punhos e Mãos"
-                },
-                {
-                    "id": "a_q1",
-                    "muscle_id": "m5",
-                    "nome": "Quadríceps Frontal (Perna Base)"
-                },
-                {
-                    "id": "a_q2",
-                    "muscle_id": "m5",
-                    "nome": "Vastos (Isolado)"
-                },
-                {
-                    "id": "a_po1",
-                    "muscle_id": "m6",
-                    "nome": "Isquiotibiais"
-                },
-                {
-                    "id": "a_g1",
-                    "muscle_id": "m7",
-                    "nome": "Glúteo Completo"
-                },
-                {
-                    "id": "a_pa1",
-                    "muscle_id": "m8",
-                    "nome": "Panturrilhas (Perfil)"
-                },
-                {
-                    "id": "a_pa2",
-                    "muscle_id": "m8",
-                    "nome": "Panturrilhas (Posterior)"
-                },
-                {
-                    "id": "a_qa1",
-                    "muscle_id": "m9",
-                    "nome": "Psoas / Flexores"
-                },
-                {
-                    "id": "a_qa2",
-                    "muscle_id": "m9",
-                    "nome": "Abdutores / Fáscia Lata"
-                },
-                {
-                    "id": "a_ab1",
-                    "muscle_id": "m10",
-                    "nome": "Abdominal Superior"
-                },
-                {
-                    "id": "a_ab2",
-                    "muscle_id": "m10",
-                    "nome": "Gomos Centrais"
-                },
-                {
-                    "id": "a_ob1",
-                    "muscle_id": "m11",
-                    "nome": "Oblíquos / Serrátil"
-                },
-                {
-                    "id": "a_ob2",
-                    "muscle_id": "m11",
-                    "nome": "Core Completo (Reforço)"
-                },
-                {
-                    "id": "a_ca1",
-                    "muscle_id": "m12",
-                    "nome": "Alta Intensidade (HIIT)"
-                },
-                {
-                    "id": "a_ca2",
-                    "muscle_id": "m12",
-                    "nome": "Resistência / LISS"
-                },
-                {
-                    "id": "a_mo1",
-                    "muscle_id": "m13",
-                    "nome": "Alongamento Dinâmico"
-                }
-            ],
-            "exercicios": [
-                {
-                    "id": "ex_peit_1",
-                    "area_id": "a_p1",
-                    "nome": "Flexões Normais",
-                    "nivel": "Intermediário",
-                    "sets_reps": "4x 12",
-                    "duracao_minutos": 5,
-                    "sprite_pos": "20% 0%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_peit_2",
-                    "area_id": "a_p2",
-                    "nome": "Flexões Inclinadas",
-                    "nivel": "Iniciante",
-                    "sets_reps": "3x 10",
-                    "duracao_minutos": 4,
-                    "sprite_pos": "20% 0%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_peit_3",
-                    "area_id": "a_p3",
-                    "nome": "Dips / Fundos para Peito",
-                    "nivel": "Avançado",
-                    "sets_reps": "4x 10",
-                    "duracao_minutos": 5,
-                    "sprite_pos": "20% 0%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_c_1",
-                    "area_id": "a_c1",
-                    "nome": "Encolhimentos",
-                    "nivel": "Iniciante",
-                    "sets_reps": "4x 15",
-                    "duracao_minutos": 4,
-                    "sprite_pos": "0% 0%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_c_3",
-                    "area_id": "a_c3",
-                    "nome": "Elevações Pull-Ups",
-                    "nivel": "Avançado",
-                    "sets_reps": "4x 8",
-                    "duracao_minutos": 6,
-                    "sprite_pos": "20% 66.666%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_c_4",
-                    "area_id": "a_c4",
-                    "nome": "Extensão Lombar",
-                    "nivel": "Intermediário",
-                    "sets_reps": "3x 15",
-                    "duracao_minutos": 5,
-                    "sprite_pos": "40% 66.666%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_o_1",
-                    "area_id": "a_o1",
-                    "nome": "Press Militar",
-                    "nivel": "Intermediário",
-                    "sets_reps": "4x 10",
-                    "duracao_minutos": 6,
-                    "sprite_pos": "40% 0%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_o_2",
-                    "area_id": "a_o2",
-                    "nome": "Face Pull",
-                    "nivel": "Intermediário",
-                    "sets_reps": "3x 15",
-                    "duracao_minutos": 5,
-                    "sprite_pos": "80% 66.666%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_b_1",
-                    "area_id": "a_b1",
-                    "nome": "Curl Bíceps",
-                    "nivel": "Iniciante",
-                    "sets_reps": "3x 12",
-                    "duracao_minutos": 4,
-                    "sprite_pos": "60% 0%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_b_2",
-                    "area_id": "a_b2",
-                    "nome": "Apoios Fechados",
-                    "nivel": "Intermediário",
-                    "sets_reps": "3x 12",
-                    "duracao_minutos": 4,
-                    "sprite_pos": "60% 66.666%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_q_1",
-                    "area_id": "a_q1",
-                    "nome": "Agachamento Livre",
-                    "nivel": "Intermediário",
-                    "sets_reps": "4x 15",
-                    "duracao_minutos": 6,
-                    "sprite_pos": "0% 100%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_po_1",
-                    "area_id": "a_po1",
-                    "nome": "Romanian Deadlift",
-                    "nivel": "Intermediário",
-                    "sets_reps": "4x 12",
-                    "duracao_minutos": 5,
-                    "sprite_pos": "60% 100%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_g_1",
-                    "area_id": "a_g1",
-                    "nome": "Ponte de Glúteos",
-                    "nivel": "Iniciante",
-                    "sets_reps": "4x 15",
-                    "duracao_minutos": 4,
-                    "sprite_pos": "40% 100%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_pa_1",
-                    "area_id": "a_pa1",
-                    "nome": "Elevação de Gémeos",
-                    "nivel": "Iniciante",
-                    "sets_reps": "4x 20",
-                    "duracao_minutos": 3,
-                    "sprite_pos": "80% 100%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_ab_1",
-                    "area_id": "a_ab1",
-                    "nome": "Crunches / Encolhimentos",
-                    "nivel": "Iniciante",
-                    "sets_reps": "3x 20",
-                    "duracao_minutos": 4,
-                    "sprite_pos": "0% 33.333%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_ab_2",
-                    "area_id": "a_ab2",
-                    "nome": "Elevação de Pernas",
-                    "nivel": "Intermediário",
-                    "sets_reps": "3x 15",
-                    "duracao_minutos": 5,
-                    "sprite_pos": "40% 33.333%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_ab_3",
-                    "area_id": "a_ob2",
-                    "nome": "Prancha Isométrica",
-                    "nivel": "Intermediário",
-                    "sets_reps": "3x 45s",
-                    "duracao_minutos": 4,
-                    "sprite_pos": "20% 33.333%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_ob_1",
-                    "area_id": "a_ob1",
-                    "nome": "Prancha Lateral Dir/Esq",
-                    "nivel": "Avançado",
-                    "sets_reps": "3x 45s",
-                    "duracao_minutos": 4,
-                    "sprite_pos": "60% 33.333%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_ca_1",
-                    "area_id": "a_ca1",
-                    "nome": "Burpees Escalados",
-                    "nivel": "Avançado",
-                    "sets_reps": "5x 1 min",
-                    "duracao_minutos": 8,
-                    "sprite_pos": "20% 33.333%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_ca_2",
-                    "area_id": "a_ca1",
-                    "nome": "Jumping Jacks",
-                    "nivel": "Iniciante",
-                    "sets_reps": "4x 2 mins",
-                    "duracao_minutos": 10,
-                    "sprite_pos": "20% 33.333%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_ca_3",
-                    "area_id": "a_ca2",
-                    "sprint_pos": "",
-                    "nome": "Corrida Estacionária",
-                    "nivel": "Intermediário",
-                    "sets_reps": "3x 5 mins",
-                    "duracao_minutos": 15,
-                    "sprite_pos": "0% 100%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_mo_1",
-                    "area_id": "a_mo1",
-                    "nome": "Rotações Canivete",
-                    "nivel": "Iniciante",
-                    "sets_reps": "2x 10 rep",
-                    "duracao_minutos": 4,
-                    "sprite_pos": "80% 33.333%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_gen_100",
-                    "area_id": "a_c2",
-                    "nome": "Treino Isolado: Trapézio e Rombóides (Costas)",
-                    "nivel": "Intermediário",
-                    "sets_reps": "3x 12",
-                    "duracao_minutos": 5,
-                    "sprite_pos": "40% 66.666%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_gen_101",
-                    "area_id": "a_c2",
-                    "nome": "Trapézio e Rombóides (Costas) (Variação B)",
-                    "nivel": "Avançado",
-                    "sets_reps": "4x 10",
-                    "duracao_minutos": 6,
-                    "sprite_pos": "20% 0%",
-                    "is_enabled": true
-                },
-                {
-                    "id": "ex_gen_102",
-                    "area_id": "a_c5",
-                    "nome": "Treino Costas Laterais",
-                    "nivel": "Intermediário",
-                    "sets_reps": "3x 12",
-                    "duracao_minutos": 5,
-                    "sprite_pos": "40% 66.666%",
-                    "is_enabled": true
-                }
-            ]
-        };
-
-        const ExerciciosCardCustom = ({ ex, index, onClickImage, onClickBody }) => {
-            return (
-                <div className="playlist-item" style={{ display: 'flex', gap: '16px', marginBottom: '8px', alignItems: 'stretch' }}>
-                    <div className="step-badge" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--accent)', color: '#fff', padding: '0 8px', borderRadius: '12px', writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontWeight: '900', fontSize: '14px', letterSpacing: '2px', flexShrink: 0, opacity: 0.9, minHeight: '120px' }}>
-                        PASSO {index + 1}
-                    </div>
-                    <div className="card" style={{ flexGrow: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', border: '1px solid rgba(255,255,255,0.05)', backgroundColor: 'var(--bg-secondary)', overflow: 'hidden', cursor: 'pointer' }} onClick={onClickBody}>
-                        <div style={{ position: 'relative', width: '100%', height: '140px', borderRadius: '12px', overflow: 'hidden', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); onClickImage(ex); }}>
-                            <div style={{ width: '100%', height: '100%', backgroundSize: '600% 400%', backgroundRepeat: 'no-repeat', backgroundImage: 'url("muscles.png")', backgroundPosition: ex.sprite_pos, filter: 'invert(1) hue-rotate(180deg) brightness(1.2)', transform: 'scale(1.4)' }}></div>
-                            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.8) 100%)' }}></div>
-                            <div style={{ position: 'absolute', bottom: '12px', left: '12px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                <span style={{ background: ex.nivel === 'Iniciante' ? '#22c55e' : (ex.nivel === 'Intermediário' ? '#ea580c' : '#ef4444'), color: '#fff', padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.3)' }}>
-                                    {ex.nivel}
-                                </span>
-                            </div>
-                            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(4px)', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <svg viewBox="0 0 24 24" width="24" height="24" fill="#fff" stroke="none"><path d="M8 5v14l11-7z"></path></svg>
-                            </div>
-                        </div>
-
-                        <div>
-                            <h3 style={{ fontSize: '17px', fontWeight: '800', lineHeight: 1.3, marginBottom: '8px' }}>{ex.nome}</h3>
-                            <div style={{ display: 'flex', gap: '16px', color: 'var(--text-secondary)', fontSize: '13px' }}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--accent)" strokeWidth="2.5"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                                    <span style={{ fontWeight: '700', color: '#fff' }}>{ex.sets_reps}</span>
-                                </span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--accent)" strokeWidth="2.5"><circle cx="12" cy="12" r="9" strokeLinecap="round" strokeLinejoin="round"></circle><path d="M12 7v5l3 3" strokeLinecap="round" strokeLinejoin="round"></path></svg>
-                                    <span style={{ fontWeight: '700', color: '#fff' }}>{ex.duracao_minutos} min</span>
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-
 
         function SmartRestTimer({ timeSeconds, onComplete, onSkip }) {
             const [timeLeft, setTimeLeft] = useState(timeSeconds);
@@ -6345,7 +5769,7 @@ import { createClient } from '@supabase/supabase-js';
                     if (!window.supabase) return;
                     const { data: { session } } = await window.supabase.auth.getSession();
                     if (!session) return;
-                    const res = await window.supabase.from('workout_logs').select('*').eq('user_id', session.user.id).eq('exercise_id', ex.id).order('date', { ascending: false }).limit(totalSets);
+                    const res = await window.supabase.from('workout_logs').select('*').eq('user_id', session.user.id).eq('exercise_id', ex.id).order('created_at', { ascending: false }).limit(totalSets);
                     if (res.data) setLastSessionData(res.data);
                 }
                 fetchLastLocal();
@@ -6426,16 +5850,24 @@ import { createClient } from '@supabase/supabase-js';
         function PremiumExerciseCard({ exercise, onClick, categoryImage }) {
             const handleAdapterClick = () => {
                 if (onClick) onClick({
+                    ...exercise,
                     id: exercise.id,
-                    nome: exercise.title,
-                    media: exercise.video_url,
-                    reps: '15 Reps'
+                    title: exercise.title || exercise.nome,
+                    nome: exercise.title || exercise.nome,
+                    media: exercise.video_url || exercise.media,
+                    video_url: exercise.video_url || exercise.media,
+                    category: exercise.category || exercise.target_muscle || '',
+                    difficulty: exercise.difficulty || '',
+                    description: exercise.description || '',
+                    sets: exercise.sets || '3',
+                    reps: exercise.reps || '15',
+                    rest: exercise.rest || '60'
                 });
             };
 
             return (
                 <div className="premium-card" onClick={handleAdapterClick} style={{ cursor: 'pointer' }}>
-                    <div className="premium-card-media" style={{ background: '#000 !important', backgroundColor: '#000', overflow: 'hidden' }}>
+                    <div className="premium-card-media" style={{ backgroundColor: '#000', overflow: 'hidden' }}>
                         <img src={categoryImage || "muscles.png"} alt={exercise.title} style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.8, background: '#000' }} />
                         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, #000 0%, transparent 50%)', backgroundColor: 'transparent' }}></div>
                     </div>
@@ -6566,7 +5998,7 @@ import { createClient } from '@supabase/supabase-js';
                         'Ideal para firmar braços, pernas e glúteos sem pagar academia',
                         'Acesso vitalício para baixar e consultar sempre que quiser'
                     ],
-                    onOpenUnlocked: () => window.open('https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf', '_blank')
+                    onOpenUnlocked: () => safeOpenExternal('https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Guia%20de%20Musculacao%20em%20Casa.pdf')
                 },
                 {
                     id: 'pilates',
@@ -6583,7 +6015,7 @@ import { createClient } from '@supabase/supabase-js';
                         'Excelente para aliviar dores nas costas e melhorar a flexibilidade',
                         'Perfeito para fazer em casa em qualquer idade'
                     ],
-                    onOpenUnlocked: () => window.open('https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf', '_blank')
+                    onOpenUnlocked: () => safeOpenExternal('https://wutjxjubudszwgvxedgm.supabase.co/storage/v1/object/public/Protocolo%20Flexibilidade%20&%20Anti-Stress/Untitled%20folder/Pilates.pdf')
                 }
             ];
 
@@ -6765,7 +6197,8 @@ import { createClient } from '@supabase/supabase-js';
 
                                 <div className="space-y-3">
                                     <button
-                                        onClick={() => window.open(previewProgram.comboLink, '_blank')}
+                                        type="button"
+                                        onClick={() => safeOpenExternal(previewProgram.comboLink)}
                                         className="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white font-black text-xs uppercase tracking-wider shadow-xl shadow-orange-600/25 active:scale-95 transition-all"
                                     >
                                         🥇 Levar NO COMBO DE OURO (Este + 5 Guias) — R$ 24,90
@@ -6773,14 +6206,16 @@ import { createClient } from '@supabase/supabase-js';
                                     </button>
 
                                     <button
-                                        onClick={() => window.open(previewProgram.singleLink, '_blank')}
+                                        type="button"
+                                        onClick={() => safeOpenExternal(previewProgram.singleLink)}
                                         className="w-full py-3.5 px-4 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-white font-bold text-xs uppercase tracking-wider transition-all"
                                     >
                                         Desbloquear só {previewProgram.title} — R$ {previewProgram.singlePrice}
                                     </button>
 
                                     <button
-                                        onClick={() => { setPreviewProgram(null); onGoToExtras && onGoToExtras(); }}
+                                        type="button"
+                                        onClick={() => { setPreviewProgram(null); onGoToExtras && onGoToExtras(true); }}
                                         className="w-full py-2 text-[11px] text-slate-400 hover:text-white underline font-semibold"
                                     >
                                         Já comprou? Clique aqui para ativar seu código
@@ -6793,13 +6228,7 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function ArsenalVIP({ ud, onNav, temAcessoNutriScan, hasDesafio, hasSono, temAcessoPremium, setSel, isVipUser, initialSubTab = 'nutricao', onOpenNutriUpsell, freeScansRemaining = 0 }) {
-            const [activeSubTab, setActiveSubTab] = useState(initialSubTab || 'nutricao');
-
-            useEffect(() => {
-                if (initialSubTab) setActiveSubTab(initialSubTab);
-            }, [initialSubTab]);
-
+        function ArsenalVIP({ ud, onNav, temAcessoNutriScan, hasDesafio, hasSono, setSel, activeSubTab = 'nutricao', onChangeSubTab, onOpenNutriUpsell, freeScansRemaining = 0 }) {
             const SUB_TABS = [
                 {
                     id: 'nutricao',
@@ -6851,7 +6280,8 @@ import { createClient } from '@supabase/supabase-js';
                         {SUB_TABS.map(tab => (
                             <button
                                 key={tab.id}
-                                onClick={() => setActiveSubTab(tab.id)}
+                                type="button"
+                                onClick={() => onChangeSubTab && onChangeSubTab(tab.id)}
                                 className={`px-4 py-3 rounded-2xl font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${
                                     activeSubTab === tab.id 
                                     ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/20 scale-[1.02]' 
@@ -6927,9 +6357,10 @@ import { createClient } from '@supabase/supabase-js';
                                 )}
 
                                 <button 
+                                    type="button"
                                     onClick={() => {
                                         if(onTrackEvent) onTrackEvent('yes');
-                                        window.open('https://pay.hotmart.com/H106107115U?checkoutMode=10&bid=1784830143838', '_blank');
+                                        safeOpenExternal('https://pay.hotmart.com/H106107115U?checkoutMode=10&bid=1784830143838');
                                     }}
                                     style={{ width: '100%', padding: '15px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', borderRadius: '16px', fontWeight: '900', fontSize: '15px', border: 'none', cursor: 'pointer', boxShadow: '0 4px 15px rgba(16, 185, 129, 0.35)' }}
                                 >
@@ -6964,67 +6395,51 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
+        function WarriorCountBadge() {
+            const [count, setCount] = useState(() => 101 + (Math.floor(Date.now() / 300000) % 899));
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    setCount(101 + (Math.floor(Date.now() / 300000) % 899));
+                }, 60000);
+                return () => clearInterval(interval);
+            }, []);
+            return (
+                <div className="flex items-center gap-2.5">
+                    <div className="relative flex h-2 w-2">
+                        <div className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></div>
+                        <div className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></div>
+                    </div>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.18em]">{count} alunos treinando agora</span>
+                </div>
+            );
+        }
+
         function App() {
 
             const ud = useUserData();
             const [page, setPage] = useState('inicio');
             const [arsenalSubTab, setArsenalSubTab] = useState('nutricao');
-            
-            const [warriorCount, setWarriorCount] = useState(101 + (Math.floor(Date.now() / 300000) % 899));
-            useEffect(() => {
-                const interval = setInterval(() => {
-                    setWarriorCount(101 + (Math.floor(Date.now() / 300000) % 899));
-                }, 60000); 
-                return () => clearInterval(interval);
-            }, []);
+            const [focusRedeemOnExtras, setFocusRedeemOnExtras] = useState(false);
+            const [editProfileOpen, setEditProfileOpen] = useState(false);
+            const [workoutSwappedMsg, setWorkoutSwappedMsg] = useState('');
+            const [recoverySaving, setRecoverySaving] = useState(false);
+            const [recoveryError, setRecoveryError] = useState('');
+            const [notifUnread, setNotifUnread] = useState(() => {
+                try { return localStorage.getItem('notifs_seen_v2') !== '1'; } catch { return true; }
+            });
 
-            const [temAcessoPremium, setTemAcessoPremium] = useState(false); 
-            const [temAcessoNutriScan, setTemAcessoNutriScan] = useState(false);
-            const [temAcessoVIP, setTemAcessoVIP] = useState(false);
-            const [temAcessoTotalVIP, setTemAcessoTotalVIP] = useState(false);
-            const [hasDesafio, setHasDesafio] = useState(false);
-            const [hasSono, setHasSono] = useState(false);
-            const [hasMusculacao, setHasMusculacao] = useState(false);
-            const [hasPilates, setHasPilates] = useState(false);
+            const ent = useMemo(() => resolveEntitlements(ud.userProfile), [ud.userProfile]);
+            const temAcessoTotalVIP = ent.hasTotalVip;
+            const temAcessoPremium = ent.hasGold;
+            const temAcessoNutriScan = Boolean(ent.hasScannerIA || ud.nutriQuota?.hasNutriScan);
+            const hasDesafio = ent.hasDesafio;
+            const hasSono = ent.hasSono;
+            const hasMusculacao = ent.hasMusculacao;
+            const hasPilates = ent.hasPilates;
 
-            const currentUserId = ud?.session?.user?.id || ud?.userProfile?.id || 'guest';
-            const [freeScansUsedGlobal, setFreeScansUsedGlobal] = useState(() => getFreeScansUsed(currentUserId));
-
-            useEffect(() => {
-                const syncGlobalFree = () => setFreeScansUsedGlobal(getFreeScansUsed(currentUserId));
-                syncGlobalFree();
-                window.addEventListener('nutriscan-free-uses-updated', syncGlobalFree);
-                return () => window.removeEventListener('nutriscan-free-uses-updated', syncGlobalFree);
-            }, [currentUserId]);
-
-            const freeScansRemainingGlobal = temAcessoNutriScan ? Infinity : Math.max(0, NUTRISCAN_FREE_LIMIT - freeScansUsedGlobal);
-
-            React.useEffect(() => {
-                const checkAccess = () => {
-                    const profile = ud.userProfile;
-                    const localModules = JSON.parse(localStorage.getItem('app_unlocked_modules') || '[]');
-                    
-                    const totalVip = profile?.permissions?.total_vip || localModules.includes('total_vip') || profile?.is_vip;
-                    const gold = profile?.acesso_combo_ouro || profile?.permissions?.vip_gold || profile?.permissions?.gold || localModules.includes('vip_gold') || totalVip;
-                    const nutri = profile?.assinatura_scanner_ia_ativa || profile?.permissions?.scanner_ia || profile?.permissions?.pacote_elite || localModules.includes('scanner_ia') || localModules.includes('pacote_elite') || localStorage.getItem('acessoScannerIA') === 'true' || totalVip;
-                    const vip = profile?.permissions?.vip || profile?.permissions?.comunidade_vip || localModules.includes('comunidade_vip') || localModules.includes('pacote_elite') || totalVip;
-                    
-                    const desafio = profile?.permissions?.desafio30 || localModules.includes('desafio30') || gold || totalVip;
-                    const sono = profile?.permissions?.sono || localModules.includes('sono') || gold || totalVip;
-                    const musc = profile?.permissions?.musculacao || localModules.includes('musculacao') || gold || totalVip;
-                    const pil = profile?.permissions?.pilates || localModules.includes('pilates') || gold || totalVip;
-
-                    setTemAcessoTotalVIP(!!totalVip);
-                    setTemAcessoPremium(!!gold);
-                    setTemAcessoNutriScan(!!nutri);
-                    setTemAcessoVIP(!!vip);
-                    setHasDesafio(!!desafio);
-                    setHasSono(!!sono);
-                    setHasMusculacao(!!musc);
-                    setHasPilates(!!pil);
-                };
-                checkAccess();
-            }, [ud.userProfile]);
+            const freeScansRemainingGlobal = temAcessoNutriScan
+                ? Infinity
+                : Math.max(0, typeof ud.nutriQuota?.freeScansRemaining === 'number' ? ud.nutriQuota.freeScansRemaining : NUTRISCAN_FREE_LIMIT);
 
             const [showNutriScanUpsell, setShowNutriScanUpsell] = useState(false);
             const [nutriUpsellReason, setNutriUpsellReason] = useState('post_workout');
@@ -7038,11 +6453,11 @@ import { createClient } from '@supabase/supabase-js';
             useEffect(() => {
                 const handleShowModal = () => {
                     if (!temAcessoNutriScan) {
-                        // Mostrar no máximo 1x por dia após treino concluído para não gerar irritação
-                        const todayKey = new Date().toISOString().slice(0, 10);
-                        const lastShown = localStorage.getItem('nutri_upsell_last_shown_date');
+                        const todayKey = safeFormatDate(new Date());
+                        let lastShown = '';
+                        try { lastShown = localStorage.getItem('nutri_upsell_last_shown_date') || ''; } catch {}
                         if (lastShown !== todayKey) {
-                            localStorage.setItem('nutri_upsell_last_shown_date', todayKey);
+                            try { localStorage.setItem('nutri_upsell_last_shown_date', todayKey); } catch {}
                             setNutriUpsellReason('post_workout');
                             setShowNutriScanUpsell(true);
                         }
@@ -7065,9 +6480,6 @@ import { createClient } from '@supabase/supabase-js';
                 }
             };
 
-            const [selectedGroup, setSelectedGroup] = useState(null);
-            const [selectedMuscle, setSelectedMuscle] = useState(null);
-            const [selectedArea, setSelectedArea] = useState(null);
             const [search, setSearch] = useState('');
             const [cat, setCat] = useState('Todos');
             const [diff, setDiff] = useState('Todos');
@@ -7079,18 +6491,6 @@ import { createClient } from '@supabase/supabase-js';
             const [safeVideoModalOpen, setSafeVideoModalOpen] = useState(false);
             const [showBackToTop, setShowBackToTop] = useState(false);
             const [isLoadingExercises, setIsLoadingExercises] = useState(true);
-            const [isQuestActive, setIsQuestActive] = React.useState(true);
-            const [questSuccess, setQuestSuccess] = React.useState(false);
-
-            const handleScannerUnlock = React.useCallback(() => {
-                localStorage.setItem('acessoScannerIA', 'true');
-                setTemAcessoNutriScan(true);
-            }, []);
-
-            const completeQuest = React.useCallback(() => {
-                setQuestSuccess(true);
-                setTimeout(() => setIsQuestActive(false), 2000);
-            }, []);
             const [dailyWorkout, setDailyWorkout] = useState([]);
             const [dailyWorkoutOpen, setDailyWorkoutOpen] = useState(false);
             const [dailyWorkoutIndex, setDailyWorkoutIndex] = useState(0);
@@ -7099,41 +6499,20 @@ import { createClient } from '@supabase/supabase-js';
             const [allExercises, setAllExercises] = useState([]);
             const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
-            // GARBAGE COLLECTION EXTREMA: Corta qualquer vídeo ativo quando muda de página ou fecha modais
-            useEffect(() => {
-                document.querySelectorAll('video').forEach(v => {
-                    if (!v.paused) v.pause();
-                    v.removeAttribute('src');
-                    v.load();
-                });
-            }, [page]);
+            const handleCloseVideo = useCallback(() => setSel(null), []);
 
-            useEffect(() => {
-                if (!dailyWorkoutOpen) {
-                    document.querySelectorAll('video').forEach(v => {
-                        if (!v.paused) v.pause();
-                        v.removeAttribute('src');
-                        v.load();
-                    });
+            const navigateTo = useCallback((nextPage, opts = {}) => {
+                if (nextPage === 'extras' && opts?.focusRedeem) {
+                    setFocusRedeemOnExtras(true);
                 }
-            }, [dailyWorkoutOpen]);
-
-            useEffect(() => {
-                if (!sel) {
-                    document.querySelectorAll('video').forEach(v => {
-                        if (!v.paused) v.pause();
-                        v.removeAttribute('src');
-                        v.load();
-                    });
-                }
-            }, [sel]);
+                setPage(nextPage);
+            }, []);
 
             const handleLogout = useCallback(async () => {
                 if (window.supabase) {
                     await window.supabase.auth.signOut();
                 }
-                localStorage.clear();
-                sessionStorage.clear();
+                try { localStorage.clear(); sessionStorage.clear(); } catch {}
                 window.location.reload();
             }, []);
 
@@ -7321,7 +6700,7 @@ import { createClient } from '@supabase/supabase-js';
                 return null;
             }, []);
 
-            const generateDailyWorkout = useCallback(() => {
+            const generateDailyWorkout = useCallback((showFeedback = false) => {
                 const bunnyOnly = allExercises.filter(ex => {
                     if (!getBunnyEmbedUrl(ex)) return false;
                     const cat = (ex.category || '').toLowerCase().trim();
@@ -7336,17 +6715,21 @@ import { createClient } from '@supabase/supabase-js';
                 }
                 const generated = shuffled.slice(0, 7);
                 setDailyWorkout(generated);
+                if (showFeedback) {
+                    setWorkoutSwappedMsg('✅ Nova sequência montada!');
+                    setTimeout(() => setWorkoutSwappedMsg(''), 2500);
+                }
                 return generated;
             }, [allExercises, getBunnyEmbedUrl]);
 
             useEffect(() => {
                 if (allExercises.length > 0 && dailyWorkout.length === 0) {
-                    generateDailyWorkout();
+                    generateDailyWorkout(false);
                 }
             }, [allExercises, dailyWorkout.length, generateDailyWorkout]);
 
             const startDailyWorkout = useCallback(() => {
-                const queue = dailyWorkout.length ? dailyWorkout : generateDailyWorkout();
+                const queue = dailyWorkout.length ? dailyWorkout : generateDailyWorkout(false);
                 if (!queue || queue.length === 0) return;
                 setDailyWorkoutIndex(0);
                 setDailyWorkoutOpen(true);
@@ -7354,6 +6737,10 @@ import { createClient } from '@supabase/supabase-js';
 
             const concludeDailyWorkout = useCallback(async () => {
                 try {
+                    const idsToCredit = completedDailyIds.length > 0 ? completedDailyIds : dailyWorkout.map(e => e.id);
+                    if (idsToCredit.length > 0) {
+                        ud.completeWorkout(idsToCredit);
+                    }
                     if (window.supabase) {
                         const { data: { session } } = await window.supabase.auth.getSession();
                         if (session) {
@@ -7371,13 +6758,8 @@ import { createClient } from '@supabase/supabase-js';
                 } finally {
                     setDailyWorkoutOpen(false);
                     fetchUserStreaks();
-                    window.dispatchEvent(new CustomEvent('triggerNutriScanUpsell'));
                 }
-            }, [dailyWorkout.length, fetchUserStreaks]);
-
-            useEffect(() => {
-                if (page === 'inicio') generateDailyWorkout();
-            }, [page, generateDailyWorkout]);
+            }, [completedDailyIds, dailyWorkout, ud.completeWorkout, fetchUserStreaks]);
 
             const isVipUser = temAcessoTotalVIP; 
 
@@ -7412,12 +6794,14 @@ import { createClient } from '@supabase/supabase-js';
                 const exercises = allExercises || [];
                 const RECOVERY_WINDOW = 48 * 60 * 60 * 1000;
                 const groups = {
-                    superior: ["Membros Superiores", "Braços"],
-                    inferior: ["Membros Inferiores"],
-                    core: ["Core"]
+                    superior: ["membros superiores", "braços", "bracos", "peito", "costas", "ombros"],
+                    inferior: ["membros inferiores", "pernas", "glúteos", "gluteos"],
+                    core: ["core", "abdominais", "abdômen", "abdomen"]
                 };
                 const getStatus = (groupNames) => {
-                    const groupExIds = exercises.filter(ex => groupNames.includes(ex.category)).map(ex => ex.id);
+                    const groupExIds = exercises
+                        .filter(ex => groupNames.includes(String(ex.category || '').toLowerCase().trim()))
+                        .map(ex => ex.id);
                     const groupLogs = logs.filter(l => groupExIds.includes(l.id));
                     if (groupLogs.length === 0) return 100;
                     const lastTs = Math.max(...groupLogs.map(l => l.ts || 0));
@@ -7444,25 +6828,36 @@ import { createClient } from '@supabase/supabase-js';
                     <div className="fixed inset-0 z-[15000] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
                         <div className="auth-card" style={{ maxWidth: '400px', width: '100%', position: 'relative' }}>
                             <h2 style={{ color: '#fff', fontSize: '20px', fontWeight: '900', marginBottom: '12px' }}>Definir Nova Senha</h2>
-                            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', marginBottom: '24px' }}>
+                            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', marginBottom: '20px' }}>
                                 Insira sua nova senha abaixo para recuperar o acesso à sua conta.
                             </div>
                             <form onSubmit={async (e) => {
                                 e.preventDefault();
+                                setRecoveryError('');
                                 const pwd = e.target.newPwd.value;
-                                if(pwd.length < 6) return alert('A senha deve ter pelo menos 6 caracteres.');
-                                const { error } = await window.supabase.auth.updateUser({ password: pwd });
-                                if(error) alert('Erro: ' + error.message);
-                                else { 
-                                    alert('Senha atualizada com sucesso!'); 
-                                    ud.setRecoveryMode(false); 
+                                if (pwd.length < 6) return setRecoveryError('A senha deve ter pelo menos 6 caracteres.');
+                                setRecoverySaving(true);
+                                try {
+                                    const { error } = await window.supabase.auth.updateUser({ password: pwd });
+                                    if (error) setRecoveryError(error.message || 'Erro ao atualizar senha.');
+                                    else {
+                                        ud.setRecoveryMode(false);
+                                    }
+                                } finally {
+                                    setRecoverySaving(false);
                                 }
                             }}>
-                                <div className="input-group" style={{ marginBottom: '20px' }}>
+                                <div className="input-group" style={{ marginBottom: '16px' }}>
                                     <label style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Nova Senha</label>
-                                    <input type="password" name="newPwd" className="ob-input" placeholder="••••••" required style={{ width: '100%', padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} />
+                                    <input type="password" name="newPwd" className="ob-input" placeholder="Mínimo 6 caracteres" required disabled={recoverySaving} style={{ width: '100%', padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} />
                                 </div>
-                                <button type="submit" className="ob-submit-btn" style={{ width: '100%', padding: '14px', borderRadius: '14px', background: '#f97316', color: '#fff', fontWeight: '900', border: 'none', cursor: 'pointer' }}>Salvar Nova Senha</button>
+                                {recoveryError && <div style={{ color: '#f87171', fontSize: '12px', fontWeight: '700', marginBottom: '12px' }}>{recoveryError}</div>}
+                                <button type="submit" disabled={recoverySaving} className="ob-submit-btn" style={{ width: '100%', padding: '14px', borderRadius: '14px', background: '#f97316', color: '#fff', fontWeight: '900', border: 'none', cursor: 'pointer', opacity: recoverySaving ? 0.6 : 1 }}>
+                                    {recoverySaving ? 'Salvando...' : 'Salvar Nova Senha'}
+                                </button>
+                                <button type="button" onClick={() => ud.setRecoveryMode(false)} style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer' }}>
+                                    Cancelar
+                                </button>
                             </form>
                         </div>
                     </div>
@@ -7473,6 +6868,8 @@ import { createClient } from '@supabase/supabase-js';
             if (isOnboardingIncomplete) {
                 return <Onboarding onComplete={ud.saveProfile} />;
             }
+
+            const totalCompleted = ud.completedLog?.length || 0;
 
             const getMotivationalPhrase = (goal) => {
                 switch (goal) {
@@ -7585,42 +6982,43 @@ import { createClient } from '@supabase/supabase-js';
                         // Variáveis Dinâmicas de Texto do Objetivo
                         const resolvedUserGoal = ud.metaProfile?.user_goal || ud.metaProfile?.objetivo_principal || ud.userProfile?.goal || ud.userProfile?.objetivo_principal || '';
                         const isGoalMassa = resolvedUserGoal.toLowerCase().includes('massa');
-                        const totalCompleted = ud.completedLog?.length || 0;
+                        const safeAvatar = isSafeImageUrl(ud.userProfile?.avatar_url) ? ud.userProfile.avatar_url : null;
 
                         return (
                             <div className="w-full min-h-screen pb-24 overflow-y-auto px-5">
                                 {/* 1. HEADER DINÂMICO PREMIUM */}
-                                <div className="dashboard-header sticky top-0 z-[100] backdrop-blur-xl bg-slate-900/80 border-b border-white/5 py-3 px-5 -mx-5 -mt-5 mb-6 flex justify-between items-center">
+                                <div className="dashboard-header sticky top-0 z-[100] backdrop-blur-xl bg-slate-900/80 border-b border-white/5 py-3 px-5 -mx-5 -mt-5 mb-6 flex justify-between items-center gap-2">
                                     {/* Lado Esquerdo: Avatar & Identidade */}
-                                    <div className="relative">
+                                    <div className="relative min-w-0">
                                         <button 
+                                            type="button"
                                             onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
-                                            className="flex items-center gap-3 active:scale-95 transition-all text-left group"
+                                            className="flex items-center gap-3 active:scale-95 transition-all text-left group max-w-full"
                                         >
                                             <div
                                                 style={{
                                                     width: '42px', height: '42px', borderRadius: '50%',
-                                                        background: (ud.userProfile?.gender === 'Masculino' || ud.userProfile?.gender === 'male') 
+                                                    background: (ud.userProfile?.gender === 'Masculino' || ud.userProfile?.gender === 'male') 
                                                         ? 'url(avatar_male.png) center / 220% no-repeat'
                                                         : (ud.userProfile?.gender === 'Feminino' || ud.userProfile?.gender === 'female')
                                                         ? 'url(avatar_female.png) center / 220% no-repeat'
-                                                        : ud.userProfile?.avatar_url 
-                                                        ? `url(${ud.userProfile.avatar_url}) center/cover` 
+                                                        : safeAvatar
+                                                        ? `url("${encodeURI(safeAvatar)}") center/cover`
                                                         : 'linear-gradient(135deg, #f97316, #ea580c)',
                                                     border: '2px solid rgba(255,255,255,0.1)'
                                                 }}
                                                 className="flex items-center justify-center font-bold text-white shadow-lg flex-shrink-0 group-hover:border-orange-400/50 transition-colors"
                                             >
-                                                {(!ud.userProfile?.avatar_url && (ud.userProfile?.gender !== 'Masculino' && ud.userProfile?.gender !== 'Feminino' && ud.userProfile?.gender !== 'male' && ud.userProfile?.gender !== 'female')) && (ud.userProfile?.name ? ud.userProfile.name.charAt(0).toUpperCase() : 'A')}
+                                                {(!safeAvatar && (ud.userProfile?.gender !== 'Masculino' && ud.userProfile?.gender !== 'Feminino' && ud.userProfile?.gender !== 'male' && ud.userProfile?.gender !== 'female')) && (ud.userProfile?.name ? ud.userProfile.name.charAt(0).toUpperCase() : 'A')}
                                             </div>
-                                            <div className="flex flex-col">
-                                                <h1 className="text-base font-black text-white leading-tight group-hover:text-orange-400 transition-colors flex items-center gap-1.5">
+                                            <div className="flex flex-col min-w-0">
+                                                <h1 className="text-sm sm:text-base font-black text-white leading-tight group-hover:text-orange-400 transition-colors flex items-center gap-1.5 truncate">
                                                     Olá, {ud.userProfile?.name || 'seja bem-vindo(a)'}!
-                                                    <svg className={`transition-transform duration-300 ${isProfileMenuOpen ? 'rotate-180' : ''} text-white/30`} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                                                    <svg className={`transition-transform duration-300 shrink-0 ${isProfileMenuOpen ? 'rotate-180' : ''} text-white/30`} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                                                 </h1>
                                                 <div className="flex items-center mt-0.5 gap-2">
                                                     <span className="bg-orange-500/10 border border-orange-500/20 text-orange-500 text-[10px] font-black px-2 py-0.5 rounded-full tracking-wider uppercase">Nível {userLevel}</span>
-                                                    <span className="text-[10px] text-yellow-500 font-bold flex items-center gap-1"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15 8L21 9L16 14L17.5 20L12 17L6.5 20L8 14L3 9L9 8L12 2Z"/></svg> {homeXP.toLocaleString()} XP</span>
+                                                    <span className="text-[10px] text-yellow-500 font-bold flex items-center gap-1"><svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15 8L21 9L16 14L17.5 20L12 17L6.5 20L8 14L3 9L9 8L12 2Z"/></svg> {homeXP.toLocaleString('pt-BR')} XP</span>
                                                 </div>
                                             </div>
                                         </button>
@@ -7632,14 +7030,37 @@ import { createClient } from '@supabase/supabase-js';
                                                     className="fixed inset-0 z-[110]" 
                                                     onClick={() => setIsProfileMenuOpen(false)}
                                                 />
-                                                <div className="absolute top-full left-0 mt-3 w-56 bg-slate-800/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl z-[120] overflow-hidden animate-fade-in-up" style={{ animation: 'fade-in-up 0.3s ease-out' }}>
+                                                <div className="absolute top-full left-0 mt-3 w-60 bg-slate-800/95 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-2xl z-[120] overflow-hidden animate-fade-in-up" style={{ animation: 'fade-in-up 0.3s ease-out' }}>
                                                     <div className="p-4 border-b border-white/5">
                                                         <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Seu Perfil</div>
                                                         <div className="text-sm font-bold text-white truncate">{ud.userProfile?.name || 'Aluno(a)'}</div>
                                                         {resolvedUserGoal && <div className="text-[11px] text-orange-400 font-semibold mt-0.5">Meta: {resolvedUserGoal}</div>}
                                                     </div>
-                                                    <div className="p-2">
+                                                    <div className="p-2 space-y-1">
                                                         <button 
+                                                            type="button"
+                                                            onClick={() => { setIsProfileMenuOpen(false); setEditProfileOpen(true); }}
+                                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-white hover:bg-white/10 transition-colors text-sm font-bold"
+                                                        >
+                                                            <span>✏️</span> Editar Perfil
+                                                        </button>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => { setIsProfileMenuOpen(false); setPage('ranking'); }}
+                                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-200 hover:bg-white/10 transition-colors text-sm font-bold"
+                                                        >
+                                                            <span>🏆</span> Ranking
+                                                        </button>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => { setIsProfileMenuOpen(false); setPage('ajuda'); }}
+                                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-200 hover:bg-white/10 transition-colors text-sm font-bold"
+                                                        >
+                                                            <span>❓</span> Central de Ajuda
+                                                        </button>
+                                                        <div className="h-px bg-white/5 my-1"></div>
+                                                        <button 
+                                                            type="button"
                                                             onClick={handleLogout}
                                                             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors text-sm font-bold"
                                                         >
@@ -7652,34 +7073,52 @@ import { createClient } from '@supabase/supabase-js';
                                         )}
                                     </div>
 
-                                    {/* Lado Direito: Streak e Notificações */}
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-2xl border border-white/10 streak-glow">
-                                            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-orange-500">
+                                    {/* Lado Direito: Streak, Ranking, Ajuda e Notificações */}
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <div className="flex items-center gap-1.5 bg-white/5 px-2.5 py-1.5 rounded-2xl border border-white/10 streak-glow" title="Dias seguidos">
+                                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-orange-500">
                                                 <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
                                             </svg>
-                                            <span className="text-sm font-black text-white">{homeStreak}</span>
+                                            <span className="text-xs font-black text-white">{homeStreak}</span>
                                         </div>
                                         <button
-                                            onClick={() => setNotifOpen(true)}
-                                            className="w-10 h-10 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white relative hover:bg-white/10 transition-colors"
+                                            type="button"
+                                            onClick={() => setPage('ranking')}
+                                            aria-label="Ranking"
+                                            title="Ranking"
+                                            className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-sm hover:bg-white/10 transition-colors"
                                         >
-                                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" /></svg>
-                                            <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-orange-500 rounded-full border-2 border-slate-900"></span>
+                                            🏆
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setPage('ajuda')}
+                                            aria-label="Ajuda"
+                                            title="Ajuda"
+                                            className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white text-xs font-black hover:bg-white/10 transition-colors"
+                                        >
+                                            ?
+                                        </button>
+                                        <button
+                                            type="button"
+                                            aria-label="Notificações"
+                                            onClick={() => {
+                                                setNotifOpen(true);
+                                                setNotifUnread(false);
+                                                try { localStorage.setItem('notifs_seen_v2', '1'); } catch {}
+                                            }}
+                                            className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white relative hover:bg-white/10 transition-colors"
+                                        >
+                                            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" /></svg>
+                                            {notifUnread && <span className="absolute top-2 right-2 w-2 h-2 bg-orange-500 rounded-full border-2 border-slate-900"></span>}
                                         </button>
                                     </div>
                                 </div>
 
                                 <div className="home-dashboard p-4 sm:p-6 max-w-4xl mx-auto">
-                                {/* 1. Indicador de Comunidade */}
+                                {/* 1. Indicador de Comunidade isolado */}
                                 <div className="flex items-center justify-between gap-3 mb-5 opacity-90">
-                                    <div className="flex items-center gap-2.5">
-                                        <div className="relative flex h-2 w-2">
-                                            <div className="animate-ping-slow absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></div>
-                                            <div className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></div>
-                                        </div>
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.18em]">{warriorCount} alunos treinando agora</span>
-                                    </div>
+                                    <WarriorCountBadge />
                                     {resolvedUserGoal && (
                                         <span className="text-[10px] font-black text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2.5 py-1 rounded-full uppercase tracking-wider">
                                             🎯 {resolvedUserGoal}
@@ -7687,19 +7126,25 @@ import { createClient } from '@supabase/supabase-js';
                                     )}
                                 </div>
 
-                                {/* 2. TREINO DO DIA NO TOPO (VALOR IMEDIATO + RETENÇÃO!) */}
+                                {/* 2. TREINO DO DIA NO TOPO */}
                                 <div className="flex items-center justify-between gap-3 mb-3">
                                     <h2 className="text-xs sm:text-sm font-black text-slate-300 uppercase tracking-[0.18em] flex items-center gap-2">
                                         ⚡ Seu Treino de Hoje em Casa
                                     </h2>
                                     <button
-                                        onClick={generateDailyWorkout}
+                                        type="button"
+                                        onClick={() => generateDailyWorkout(true)}
                                         className="text-[11px] font-black uppercase tracking-[0.12em] text-orange-400 hover:text-orange-300 transition-colors"
                                         title="Trocar sequência"
                                     >
                                         ↻ Trocar Treino
                                     </button>
                                 </div>
+                                {workoutSwappedMsg && (
+                                    <div className="mb-3 px-4 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold">
+                                        {workoutSwappedMsg}
+                                    </div>
+                                )}
 
                                 <div className="relative overflow-hidden w-full bg-slate-800/40 rounded-3xl shadow-xl group mb-6">
                                     <img
@@ -8011,7 +7456,7 @@ import { createClient } from '@supabase/supabase-js';
                                 hasMusculacao={hasMusculacao}
                                 hasPilates={hasPilates}
                                 onOpenDesafio={() => { setArsenalSubTab('cronograma'); setPage('arsenal-vip'); }}
-                                onGoToExtras={() => setPage('extras')} 
+                                onGoToExtras={(scrollToRedeem = false) => navigateTo('extras', { focusRedeem: scrollToRedeem })} 
                             />
                         );
                     }
@@ -8020,14 +7465,13 @@ import { createClient } from '@supabase/supabase-js';
                         return (
                             <ArsenalVIP 
                                 ud={ud} 
-                                onNav={setPage} 
+                                onNav={navigateTo} 
                                 temAcessoNutriScan={temAcessoNutriScan} 
                                 hasDesafio={hasDesafio} 
                                 hasSono={hasSono}
-                                temAcessoPremium={temAcessoPremium} 
                                 setSel={setSel}
-                                isVipUser={temAcessoTotalVIP}
-                                initialSubTab={arsenalSubTab}
+                                activeSubTab={arsenalSubTab}
+                                onChangeSubTab={setArsenalSubTab}
                                 onOpenNutriUpsell={openNutriScanUpsell}
                                 freeScansRemaining={freeScansRemainingGlobal}
                             />
@@ -8035,26 +7479,33 @@ import { createClient } from '@supabase/supabase-js';
                     }
 
                     case 'evolucao': {
-                        return <EvolucaoCorporal session={ud.session} userProfile={ud.userProfile} />;
+                        return (
+                            <EvolucaoCorporal
+                                session={ud.session}
+                                userProfile={ud.userProfile}
+                                onOpenNutriScan={() => { setArsenalSubTab('nutricao'); setPage('arsenal-vip'); }}
+                            />
+                        );
                     }
 
                     case 'extras': {
                         return <ExtrasHub 
                             ud={ud}
-                            onNav={setPage}
+                            onNav={navigateTo}
                             onAccessModule={handleAccessModule} 
-                            onScannerUnlock={handleScannerUnlock}
                             freeScansRemaining={freeScansRemainingGlobal}
+                            focusRedeem={focusRedeemOnExtras}
+                            onClearFocusRedeem={() => setFocusRedeemOnExtras(false)}
                             onOpenNutriScan={() => { setArsenalSubTab('nutricao'); setPage('arsenal-vip'); }}
                         />;
                     }
 
                     case 'ranking': {
-                        return <RankingTab session={ud.session} userProfile={ud.userProfile} currentXP={homeXP} onGoToTreinos={() => setPage('treinos')} />;
+                        return <RankingTab session={ud.session} userProfile={ud.userProfile} currentXP={homeXP} onGoToTreinos={() => setPage('treinos')} onOpenEditProfile={() => setEditProfileOpen(true)} />;
                     }
 
                     case 'ajuda': {
-                        return <HelpDashboard />;
+                        return <HelpDashboard onLogout={handleLogout} />;
                     }
 
                     case 'progresso': {
@@ -8103,11 +7554,12 @@ import { createClient } from '@supabase/supabase-js';
 
                     case 'guardados': {
                         if (!temAcessoPremium) return <TeaserArsenalPage onGoToExtras={() => setPage('extras')} />;
-                        const favs = EXERCISES.filter(e => ud.favoritedIds.includes(e.id));
+                        const catalog = allExercises.length > 0 ? allExercises : EXERCISES;
+                        const favs = catalog.filter(e => ud.favoritedIds.includes(e.id));
                         return (
                             <div>
                                 <div className="page-header">
-                                    <h1 className="text-4xl font-black italic tracking-tighter mb-2">❤️ Guardados</h1>
+                                    <h1 className="text-4xl font-black italic tracking-tighter mb-2">❤️ Salvos</h1>
                                 </div>
                                 {favs.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -8124,7 +7576,7 @@ import { createClient } from '@supabase/supabase-js';
                                     </div>
                                 ) : (
                                     <div className="bg-white/5 p-12 rounded-[32px] text-center border border-dashed border-white/10">
-                                        <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Nenhum exercício guardado.</p>
+                                        <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">Nenhum exercício salvo.</p>
                                     </div>
                                 )}
                             </div>
@@ -8136,7 +7588,7 @@ import { createClient } from '@supabase/supabase-js';
             return (
                 <div className="app-layout">
 
-                    <Sidebar page={page} onNav={(p) => {
+                    <Sidebar page={page} onLogout={handleLogout} onNav={(p) => {
                         if (p === 'explorar_senior') {
                             setModFilter('senior');
                             setCat('Idosos');
@@ -8150,6 +7602,7 @@ import { createClient } from '@supabase/supabase-js';
                             setCat('Ginástica');
                             setPage('treinos');
                         } else {
+                            if (p === 'arsenal-vip') setArsenalSubTab('nutricao');
                             if (p === 'explorar') setModFilter('base');
                             setPage(p);
                         }
@@ -8157,12 +7610,13 @@ import { createClient } from '@supabase/supabase-js';
                     <div className="app-content" style={{ position: 'relative', zIndex: 1 }}>
                         <main className="main" style={{ minHeight: '100vh' }}>{renderPage()}</main>
                     </div>
-                    <div className="bottom-nav" style={{ bottom: '0px' }}>
-                        {NAV.map(n => {
+                    <div className="bottom-nav" style={{ bottom: '0px', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+                        {MOBILE_NAV.map(n => {
                             const showFreeNutriPill = n.id === 'arsenal-vip' && !temAcessoNutriScan && freeScansRemainingGlobal > 0;
                             return (
                                 <button 
                                     key={n.id} 
+                                    type="button"
                                     className={`bottom-nav-item ${page === n.id ? 'active' : ''}`} 
                                     style={{ position: 'relative' }}
                                     onClick={() => {
@@ -8172,7 +7626,7 @@ import { createClient } from '@supabase/supabase-js';
                                     }}
                                 >
                                     {showFreeNutriPill && (
-                                        <span style={{ position: 'absolute', top: '2px', right: '2px', background: '#10b981', color: '#022c22', fontSize: '7.5px', fontWeight: '900', padding: '1px 4px', borderRadius: '99px', lineHeight: '1.2', letterSpacing: '0.02em', boxShadow: '0 2px 6px rgba(16,185,129,0.5)' }}>
+                                        <span style={{ position: 'absolute', top: '-4px', left: '50%', transform: 'translateX(-50%)', background: '#10b981', color: '#022c22', fontSize: '7.5px', fontWeight: '900', padding: '1px 6px', borderRadius: '99px', lineHeight: '1.25', letterSpacing: '0.03em', whiteSpace: 'nowrap', boxShadow: '0 2px 8px rgba(16,185,129,0.5)' }}>
                                             {freeScansRemainingGlobal} GRÁTIS
                                         </span>
                                     )}
@@ -8185,13 +7639,24 @@ import { createClient } from '@supabase/supabase-js';
                         })}
                     </div>
 
-                    {sel && <VideoModal exercise={sel} isCompleted={ud.isCompleted(sel.id)} onClose={() => setSel(null)} onToggle={ud.toggleComplete} />}
+                    {sel && <VideoModal exercise={sel} isCompleted={ud.isCompleted(sel.id)} onClose={handleCloseVideo} onToggle={ud.toggleComplete} />}
 
-                    {createPortal(
-                        <button className={`back-to-top ${showBackToTop ? 'show' : ''}`} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                    {editProfileOpen && (
+                        <Onboarding
+                            initialProfile={ud.userProfile}
+                            onCancel={() => setEditProfileOpen(false)}
+                            onComplete={async (n, g, gen, a, est, wa) => {
+                                await ud.saveProfile(n, g, gen, a, est, wa);
+                                setEditProfileOpen(false);
+                            }}
+                        />
+                    )}
+
+                    {page !== 'ranking' && createPortal(
+                        <button type="button" aria-label="Voltar ao topo" className={`back-to-top ${showBackToTop ? 'show' : ''}`} onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '20px', height: '20px' }}><path d="M12 19V5M5 12l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" /></svg>
                         </button>,
-                        document.getElementById('portal-root')
+                        document.getElementById('portal-root') || document.body
                     )}
 
                     {trackEx && <TrackSetsModal ex={trackEx} onClose={() => setTrackEx(null)} onShowTimer={setRestTimer} onUpdateStreak={fetchUserStreaks} />}
@@ -8273,12 +7738,15 @@ import { createClient } from '@supabase/supabase-js';
                     {dailyWorkoutOpen && dailyWorkout.length > 0 && (
                         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDailyWorkoutOpen(false)} style={{ zIndex: 12000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <div className="password-modal-content" style={{ width: '95%', maxWidth: '860px', padding: '16px', maxHeight: '95vh', overflowY: 'auto' }}>
-                                <button onClick={() => setDailyWorkoutOpen(false)} style={{ position: 'absolute', top: '10px', right: '14px', color: 'var(--text-muted)', fontSize: '24px', background: 'none', border: 'none', zIndex: 10 }}>&times;</button>
-
-                                <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#fff', marginBottom: '4px', textAlign: 'left' }}>Treino do Dia</h2>
-                                <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '20px', textAlign: 'left' }}>
-                                    Treino montado profissionalmente com foco no corpo inteiro para os máximos resultados.
-                                </p>
+                                <div style={{ position: 'sticky', top: '-16px', background: '#0f172a', padding: '12px 0 10px', marginBottom: '12px', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                                    <div>
+                                        <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#fff', margin: 0, textAlign: 'left' }}>Treino do Dia</h2>
+                                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', margin: '2px 0 0', textAlign: 'left' }}>
+                                            {completedDailyIds.length} de {dailyWorkout.length} exercícios concluídos
+                                        </p>
+                                    </div>
+                                    <button type="button" aria-label="Fechar treino do dia" onClick={() => setDailyWorkoutOpen(false)} style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '22px', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&times;</button>
+                                </div>
 
                                 <div className="full-body-workout-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                                     {dailyWorkout.map((ex, idx) => {
@@ -8287,7 +7755,6 @@ import { createClient } from '@supabase/supabase-js';
                                         const isDone = completedDailyIds.includes(ex.id);
                                         const categoryLabel = getCategoryLabel(ex.title);
 
-                                        // Extract GUID for native video player if possible
                                         const guidMatch = embedUrl?.match(/embed\/630822\/([a-f0-9-]+)/i);
                                         const videoSrc = guidMatch ? `https://vz-f56588b2-589.b-cdn.net/${guidMatch[1]}/play_720p.mp4` : null;
                                         const posterUrl = guidMatch ? `https://vz-f56588b2-589.b-cdn.net/${guidMatch[1]}/thumbnail.jpg` : null;
@@ -8310,9 +7777,9 @@ import { createClient } from '@supabase/supabase-js';
                                                 transition: 'all 0.3s ease'
                                             }}>
                                                 <div className="full-body-item-header" onClick={() => setDailyWorkoutIndex(idx)} style={{ padding: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: isActive ? 'rgba(34,211,238,0.05)' : 'transparent' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
                                                         <div onClick={toggleDone} style={{
-                                                            width: '24px', height: '24px', borderRadius: '50%',
+                                                            width: '24px', height: '24px', borderRadius: '50%', flexShrink: 0,
                                                             border: `2px solid ${isDone ? '#22d3ee' : 'rgba(255,255,255,0.2)'}`,
                                                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                             background: isDone ? '#22d3ee' : 'transparent',
@@ -8320,12 +7787,12 @@ import { createClient } from '@supabase/supabase-js';
                                                         }}>
                                                             {isDone && <svg viewBox="0 0 24 24" width="14" height="14" stroke="#000" strokeWidth="4" fill="none"><path d="M20 6L9 17L4 12" /></svg>}
                                                         </div>
-                                                        <div>
-                                                            <span style={{ fontSize: '12px', fontWeight: '900', color: isDone ? '#22d3ee' : '#22d3ee', letterSpacing: '1px' }}>{categoryLabel}</span>
-                                                            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '2px', fontWeight: '700' }}>3 SÉRIES • REPS ATÉ À FALHA</div>
+                                                        <div style={{ minWidth: 0 }}>
+                                                            <div style={{ fontSize: '14px', fontWeight: '900', color: '#fff', lineHeight: '1.25' }}>{ex.title || categoryLabel}</div>
+                                                            <div style={{ fontSize: '10px', color: '#22d3ee', marginTop: '3px', fontWeight: '800', letterSpacing: '0.5px' }}>{categoryLabel} • 3 SÉRIES • 12-15 REPS</div>
                                                         </div>
                                                     </div>
-                                                    <div style={{ color: isActive ? '#22d3ee' : 'rgba(255,255,255,0.2)' }}>
+                                                    <div style={{ color: isActive ? '#22d3ee' : 'rgba(255,255,255,0.2)', flexShrink: 0 }}>
                                                         {isActive ? (
                                                             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" /></svg>
                                                         ) : (
@@ -8343,18 +7810,13 @@ import { createClient } from '@supabase/supabase-js';
                                                                     poster={posterUrl}
                                                                     controls
                                                                     playsInline
-                                                                    preload="none"
-                                                                    style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'pointer' }}
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        const v = e.target;
-                                                                        v.paused ? v.play() : v.pause();
-                                                                    }}
+                                                                    preload="metadata"
+                                                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                                                                 />
                                                             ) : (
                                                                 <iframe
                                                                     src={embedUrl}
-                                                                    title="Bunny Player"
+                                                                    title={ex.title || 'Vídeo do exercício'}
                                                                     style={{ width: '100%', height: '100%', border: 'none' }}
                                                                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                                                                     allowFullScreen
@@ -8364,21 +7826,22 @@ import { createClient } from '@supabase/supabase-js';
 
                                                         <div style={{ marginTop: '16px', padding: '0 4px' }}>
                                                             <h4 style={{ color: '#fff', fontSize: '14px', fontWeight: '800', marginBottom: '8px' }}>Execução Correta:</h4>
-                                                            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', lineHeight: '1.6' }}>
-                                                                {ex.description || "Siga o movimento do vídeo com técnica apurada. Expire no esforço e mantenha o core contraído."}
+                                                            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.65)', lineHeight: '1.6' }}>
+                                                                {ex.description || "Siga o movimento do vídeo com técnica apurada. Expire no esforço e mantenha o abdômen contraído."}
                                                             </div>
 
                                                             <button
+                                                                type="button"
                                                                 onClick={toggleDone}
                                                                 style={{
                                                                     marginTop: '16px', width: '100%', padding: '12px',
                                                                     borderRadius: '12px', background: isDone ? 'rgba(34,211,238,0.1)' : '#fff',
                                                                     color: isDone ? '#22d3ee' : '#000', fontWeight: '900', fontSize: '12px',
                                                                     textTransform: 'uppercase', letterSpacing: '1px', border: isDone ? '1px solid #22d3ee' : 'none',
-                                                                    transition: 'all 0.2s'
+                                                                    transition: 'all 0.2s', cursor: 'pointer'
                                                                 }}
                                                             >
-                                                                {isDone ? '✓ BLOCO CONCLUÍDO' : 'MARCAR COMO FEITO'}
+                                                                {isDone ? '✓ EXERCÍCIO CONCLUÍDO' : 'MARCAR COMO FEITO'}
                                                             </button>
                                                         </div>
                                                     </div>
@@ -8389,6 +7852,7 @@ import { createClient } from '@supabase/supabase-js';
                                 </div>
 
                                 <button
+                                    type="button"
                                     className="btn-conclude-workout"
                                     style={{
                                         marginTop: '24px',
@@ -8407,7 +7871,7 @@ import { createClient } from '@supabase/supabase-js';
                                     }}
                                     onClick={concludeDailyWorkout}
                                 >
-                                    Concluir Treino de Hoje
+                                    Concluir Treino de Hoje (+500 XP)
                                 </button>
                             </div>
                         </div>
@@ -8427,12 +7891,17 @@ import { createClient } from '@supabase/supabase-js';
 
         createRoot(document.getElementById('root')).render(<App />);
 
-        // Registro do Service Worker para Otimização e Cache de Vídeo
+        // Desregistra o antigo sw.js de cache de vídeo (que colidia com OneSignal e HTTP 206 no iOS/Safari)
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('✓ Video Optimizer SW registrado!', reg.scope))
-                    .catch(err => console.warn('✗ Falha ao registar SW:', err));
-            });
+            navigator.serviceWorker.getRegistrations()
+                .then(regs => {
+                    regs.forEach(reg => {
+                        const scriptUrl = reg.active?.scriptURL || reg.installing?.scriptURL || reg.waiting?.scriptURL || '';
+                        if (scriptUrl.endsWith('/sw.js')) {
+                            reg.unregister();
+                        }
+                    });
+                })
+                .catch(() => {});
         }
     

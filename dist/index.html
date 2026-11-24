@@ -3,12 +3,17 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="./OIP.webp">
     <title>+500 Exercícios com Elástico</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700;800&family=Orbitron:wght@400;700;900&display=swap"
         rel="stylesheet">
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="./config.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -37,7 +42,6 @@
             }
         };
     </script>
-    <script src="https://unpkg.com/lucide@latest"></script>
 
 
     <style>
@@ -52,6 +56,7 @@
             --text-secondary: #94a3b8;
             --text-muted: #64748b;
             --accent: #f97316;
+            --accent-rgb: 249, 115, 22;
             --accent-hover: #ea580c;
             --accent-glow: rgba(249, 115, 22, 0.35);
             --accent-soft: rgba(249, 115, 22, 0.12);
@@ -69,7 +74,6 @@
         }
 
         .font-technical { font-family: var(--font-technical); }
-
         .font-mono { font-family: var(--font-mono); }
 
         @keyframes countUp {
@@ -111,7 +115,6 @@
             0% { transform: scale(1); opacity: 1; }
             70%, 100% { transform: scale(2.5); opacity: 0; }
         }
-
         .animate-ping-slow {
             animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
         }
@@ -120,7 +123,6 @@
             0%, 100% { box-shadow: 0 0 15px rgba(249, 115, 22, 0.2), inset 0 0 5px rgba(249, 115, 22, 0.1); }
             50% { box-shadow: 0 0 35px rgba(249, 115, 22, 0.6), inset 0 0 15px rgba(249, 115, 22, 0.3); }
         }
-
         .flash-quest-card {
             background: linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, rgba(15, 23, 42, 0.9) 100%);
             border: 2px solid rgba(249, 115, 22, 0.4);
@@ -158,11 +160,10 @@
             min-width: 0;
             display: flex;
             flex-direction: column;
-            width: 100vw !important;
+            width: 100% !important;
         }
 
         /* -- AUTH UI CSS -- */
-
         .auth-overlay {
             position: fixed;
             inset: 0;
@@ -242,19 +243,19 @@
         }
 
         /* -- FIM AUTH UI CSS -- */
-
+        
         input[type="time"]::-webkit-calendar-picker-indicator {
             filter: invert(1);
             cursor: pointer;
         }
-
+        
         .time-input-wrapper {
             position: relative;
             cursor: pointer;
             display: flex;
             align-items: center;
         }
-
+        
         .time-input-wrapper input[type="time"] {
             color-scheme: dark;
             cursor: pointer;
@@ -273,6 +274,7 @@
             padding: 0;
             box-sizing: border-box;
         }
+
 
         button {
             cursor: pointer;
@@ -478,14 +480,12 @@
         }
 
         /* -- RANKING ATMOSPHERES -- */
-
         .ranking-wrapper {
             position: relative;
             min-height: 100vh;
             transition: all 1.5s ease;
             padding-bottom: 40px;
         }
-
         .ranking-wrapper.elite::before {
             content: '';
             position: absolute;
@@ -494,7 +494,6 @@
             pointer-events: none;
             z-index: 0;
         }
-
         .ranking-wrapper.diamond::after {
             content: '';
             position: absolute;
@@ -504,11 +503,9 @@
             pointer-events: none;
             z-index: 0;
         }
-
         .ranking-wrapper.platinum {
             background: linear-gradient(135deg, rgba(226, 232, 240, 0.03) 0%, transparent 40%);
         }
-
         .floating-dust {
             position: absolute;
             inset: 0;
@@ -516,7 +513,6 @@
             overflow: hidden;
             z-index: 0;
         }
-
         .dust-particle {
             position: absolute;
             width: 2px; height: 2px;
@@ -526,7 +522,6 @@
             animation: floatUp var(--duration) linear infinite;
             bottom: -10px;
         }
-
         @keyframes floatUp {
             0% { transform: translateY(0) translateX(0); opacity: 0; }
             10% { opacity: 0.4; }
@@ -535,16 +530,17 @@
         }
 
         /* -- ONBOARDING CSS -- */
-
         .onboarding-overlay {
             position: fixed;
             inset: 0;
             background: var(--bg-primary);
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: center;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
             z-index: 9999;
-            padding: 24px;
+            padding: 24px 16px 40px;
         }
 
         .onboarding-card {
@@ -671,7 +667,6 @@
         /* -- FIM ONBOARDING CSS -- */
 
         /* -- GAMIFICATION & PROGRESS UI CSS -- */
-
         .progress-dashboard {
             display: flex;
             flex-direction: column;
@@ -928,7 +923,6 @@
         /* -- FIM GAMIFICATION CSS -- */
 
         /* -- INICIO SMART SUGGESTION CSS -- */
-
         .smart-suggestion-wrapper {
             position: relative;
             background: rgba(30, 41, 59, 0.7);
@@ -1048,7 +1042,6 @@
         }
 
         /* -- VENDAS / MÓDULOS PREMIUM CSS -- */
-
         .locked-module-container {
             position: relative;
             overflow: hidden;
@@ -1207,7 +1200,6 @@
         }
 
         /* --- VIP COMBO DE OURO STYLES --- */
-
         .sidebar-link.vip-highlight {
             border: 1px solid #ffd700;
             background: rgba(255, 215, 0, 0.1) !important;
@@ -1292,7 +1284,6 @@
         }
 
         /* --- EXTRAS HUB CSS --- */
-
         .extras-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -1350,7 +1341,6 @@
         }
 
         /* NOVOS ESTILOS PARA PREÇOS ANCORADOS */
-
         .old-price {
             font-size: 13px;
             color: #ef4444;
@@ -1398,8 +1388,8 @@
             }
         }
 
-        /* --- CHALLENGE PAGE (Cronograma) --- */
 
+        /* --- CHALLENGE PAGE (Cronograma) --- */
         .challenge-container {
             padding: 24px;
             width: 100%;
@@ -1483,7 +1473,6 @@
         }
 
         /* 30-Day Challenge Dashboard */
-
         .cronograma-page {
             width: 100%;
             padding-bottom: 40px;
@@ -1592,7 +1581,6 @@
         }
 
         /* --- MODAL UPDATES --- */
-
         .password-modal-content {
             background: var(--bg-card);
             padding: 32px;
@@ -1625,7 +1613,6 @@
         /* -- FIM SMART SUGGESTION CSS -- */
 
         /* -- INSTALL APP CARD CSS -- */
-
         .install-app-card {
             background: linear-gradient(135deg, rgba(22, 30, 50, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
             border: 1px solid rgba(249, 115, 22, 0.2);
@@ -1677,6 +1664,8 @@
         }
 
         /* -- FIM INSTALL APP CARD CSS -- */
+
+
 
         .card-combo {
             width: 100%;
@@ -1773,6 +1762,8 @@
             border-color: #22d3ee;
             box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.2), 0 0 18px rgba(34, 211, 238, 0.22);
         }
+
+
 
         @keyframes pulse-gold {
             0% {
@@ -2309,7 +2300,6 @@
         }
 
         /* GUIDE MODAL CSS */
-
         .guide-hero {
             position: relative;
             width: 100%;
@@ -2388,7 +2378,6 @@
         }
 
         /* --- PREMIUM LIVE TREINO UI --- */
-
         .live-tabs-container {
             display: flex;
             gap: 12px;
@@ -2650,9 +2639,7 @@
         .fallback-button:hover {
             background: rgba(255, 255, 255, 0.1);
         }
-
         /* --- GATED CONTENT / SCANNER IA TEASER --- */
-
         .padlock-overlay {
             position: absolute;
             top: 2px;
@@ -2820,7 +2807,6 @@
         /* ================================================================
            UPGRADE ULTRA-PREMIUM: MODO TITÃ (DESAFIO 30 DIAS)
         ================================================================ */
-
         @keyframes glow-pulse-orange {
             0% { box-shadow: 0 0 5px rgba(249, 115, 22, 0.2), inset 0 0 5px rgba(249, 115, 22, 0.1); }
             50% { box-shadow: 0 0 20px rgba(249, 115, 22, 0.6), inset 0 0 10px rgba(249, 115, 22, 0.3); border-color: #f97316; }
@@ -2881,11 +2867,8 @@
         }
 
         .rank-recruta { background: linear-gradient(135deg, #a85d44, #733e2b); color: #ffd1b3; border: 1px solid rgba(255,255,255,0.1); }
-
         .rank-elite { background: linear-gradient(135deg, #94a3b8, #475569); color: #f1f5f9; border: 1px solid rgba(255,255,255,0.1); }
-
         .rank-guerreiro { background: linear-gradient(135deg, #fbbf24, #b45309); color: #fffbeb; border: 1px solid rgba(255,255,255,0.1); }
-
         .rank-titã { 
             background: linear-gradient(135deg, #ef4444, #7f1d1d); 
             color: #fff; 
@@ -2942,7 +2925,6 @@
         }
 
         /* Fixed CTA Container */
-
         .fixed-cta-container {
             position: fixed;
             bottom: 64px; /* Above bottom nav */
@@ -3007,10 +2989,9 @@
             70% { box-shadow: 0 0 0 20px rgba(249, 115, 22, 0); }
             100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
         }
-
-        @keyframes spinWave { 100% { transform: rotate(360deg); } }
-
-        .water-circle-container {
+    
+            @keyframes spinWave { 100% { transform: rotate(360deg); } }
+            .water-circle-container {
                 position: relative;
                 width: 220px;
                 height: 220px;
@@ -3025,13 +3006,11 @@
                 box-shadow: 0 0 30px rgba(56, 189, 248, 0.2), inset 0 0 20px rgba(0,0,0,0.5);
                 transition: all 0.5s ease;
             }
-
-        .water-circle-container.goal-reached {
+            .water-circle-container.goal-reached {
                 box-shadow: 0 0 50px rgba(56, 189, 248, 0.6), inset 0 0 30px rgba(56, 189, 248, 0.4);
                 border-color: #38bdf8;
             }
-
-        .water-svg {
+            .water-svg {
                 position: absolute;
                 top: 0;
                 left: 0;
@@ -3039,22 +3018,18 @@
                 height: 100%;
                 z-index: 1;
             }
-
-        .wave-anim-1 {
+            .wave-anim-1 {
                 animation: wave-move 4s linear infinite;
                 opacity: 0.4;
             }
-
-        .wave-anim-2 {
+            .wave-anim-2 {
                 animation: wave-move 7s linear infinite;
             }
-
-        @keyframes wave-move {
+            @keyframes wave-move {
                 from { transform: translateX(0); }
                 to { transform: translateX(-120px); }
             }
-
-        .water-text {
+            .water-text {
                 position: relative;
                 z-index: 10;
                 color: #fff;
@@ -3063,8 +3038,7 @@
                 flex-direction: column;
                 text-shadow: 0 2px 4px rgba(0,0,0,0.5);
             }
-
-        .hydration-btn-clean {
+            .hydration-btn-clean {
                 flex: 1;
                 background: rgba(255, 255, 255, 0.05);
                 backdrop-filter: blur(10px);
@@ -3078,23 +3052,20 @@
                 cursor: pointer;
                 transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             }
-
-        .hydration-btn-clean:hover {
+            .hydration-btn-clean:hover {
                 background: rgba(255, 255, 255, 0.1);
                 border-color: rgba(56, 189, 248, 0.5);
                 transform: translateY(-4px);
                 box-shadow: 0 10px 20px rgba(0,0,0,0.2);
             }
-
-        .pill-badge-clean {
+            .pill-badge-clean {
                 background: rgba(56, 189, 248, 0.1);
                 border: 1px solid rgba(56, 189, 248, 0.2);
                 padding: 12px 24px;
                 border-radius: 99px;
                 text-align: center;
             }
-
-        .custom-water-input {
+            .custom-water-input {
                 background: rgba(15, 23, 42, 0.6);
                 border: 1px solid rgba(56, 189, 248, 0.3);
                 border-radius: 12px;
@@ -3107,12 +3078,10 @@
                 outline: none;
                 transition: border-color 0.3s;
             }
-
-        .custom-water-input:focus {
+            .custom-water-input:focus {
                 border-color: #38bdf8;
             }
-
-        .custom-water-add-btn {
+            .custom-water-add-btn {
                 background: #38bdf8;
                 color: #0f172a;
                 border: none;
@@ -3122,13 +3091,11 @@
                 cursor: pointer;
                 transition: all 0.3s;
             }
-
-        .custom-water-add-btn:hover {
+            .custom-water-add-btn:hover {
                 background: #fff;
                 transform: scale(1.05);
             }
-
-        .custom-water-remove-btn {
+            .custom-water-remove-btn {
                 background: rgba(239, 68, 68, 0.1);
                 color: #ef4444;
                 border: 1px solid rgba(239, 68, 68, 0.2);
@@ -3141,21 +3108,18 @@
                 font-size: 13px;
                 letter-spacing: 0.5px;
             }
-
-        .custom-water-remove-btn:hover {
+            .custom-water-remove-btn:hover {
                 background: #ef4444;
                 color: #fff;
                 transform: scale(1.05);
             }
-
-        .water-text {
+            .water-text {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 line-height: 1;
             }
-
-        .water-amount {
+            .water-amount {
                 font-size: 11px;
                 font-weight: 600;
                 color: rgba(255,255,255,0.9);
@@ -3170,220 +3134,18 @@
       window.OneSignalDeferred = window.OneSignalDeferred || [];
       OneSignalDeferred.push(async function(OneSignal) {
         await OneSignal.init({
-          appId: "e3ceef68-5a4e-4406-85ca-39a5a0404c4a",
-          allowLocalhostAsSecureContext: true,
+          appId: "e3ceef68-5a4e-4406-85ca-39a5a0404c4a"
         });
       });
     </script>
-  <script type="module" crossorigin src="/assets/index-CIvXa5cT.js"></script>
+  <script type="module" crossorigin src="/assets/index-DSZuukkZ.js"></script>
 </head>
 
 <body>
     <div id="root"></div>
-    <div id="portal-root"></div>
-    <script src="./exercicios.js"></script>
     <div id="modal-root"></div>
     <div id="portal-root"></div>
-
-
-    <!-- INÍCIO DO SCANNER DE REFEIÇÕES IA -->
-    <div id="scanner-container" class="hidden fixed inset-0 z-[100000] bg-gray-900 flex flex-col">
-      <div class="p-4 bg-gray-800 flex justify-between items-center border-b border-gray-700">
-        <h2 class="text-white font-bold text-lg">Scanner IA</h2>
-        <button id="close-scanner-btn" class="text-orange-500 font-bold">Voltar</button>
-      </div>
-      
-      <div class="relative flex-1 bg-black flex justify-center items-center overflow-hidden">
-        <video id="camera-feed" class="w-full h-full object-cover" autoplay playsinline></video>
-        <img id="photo-preview" class="hidden w-full h-full object-cover" />
-        
-        <div id="ai-loading" class="hidden absolute inset-0 bg-black/80 flex flex-col items-center justify-center">
-          <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-orange-500 mb-4"></div>
-          <p class="text-white font-bold animate-pulse">Analisando macros...</p>
-        </div>
-      </div>
-
-      <div class="p-6 bg-gray-800 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-10">
-        <div class="mb-4 text-center">
-          <p class="text-xs text-gray-400 uppercase tracking-widest">Objetivo Diário</p>
-          <p class="text-sm font-bold text-green-400">Crescer Seco: ~2.700 kcal</p>
-        </div>
-
-        <div id="hidden-calories-form" class="hidden mb-4 flex justify-center gap-4">
-          <label class="flex items-center text-white text-sm"><input type="checkbox" id="add-oil" class="mr-2 rounded text-orange-500 focus:ring-orange-500" /> + Azeite/Óleo</label>
-          <label class="flex items-center text-white text-sm"><input type="checkbox" id="add-sauce" class="mr-2 rounded text-orange-500 focus:ring-orange-500" /> + Molho</label>
-        </div>
-
-        <button id="capture-btn" class="w-full rounded-full bg-orange-500 py-4 font-bold text-white shadow-lg hover:bg-orange-600 transition-colors text-lg flex items-center justify-center gap-2">
-          📸 Tirar Foto
-        </button>
-        
-        <div id="result-actions" class="hidden w-full flex gap-3">
-          <button id="retake-btn" class="flex-1 rounded-xl bg-gray-700 py-3 font-bold text-white hover:bg-gray-600 transition-colors">Repetir</button>
-          <button id="confirm-meal-btn" class="flex-1 rounded-xl bg-green-500 py-3 font-bold text-white shadow-lg hover:bg-green-600 transition-colors">✅ Salvar</button>
-        </div>
-      
-      </div>
-      
-      <canvas id="capture-canvas" class="hidden"></canvas>
-    </div>
-
-    <script>
-        // Lógica do Scanner Vanilla JS
-        let cameraStream = null;
-
-        window.startScannerCamera = async function() {
-            const video = document.getElementById('camera-feed');
-            const photoPreview = document.getElementById('photo-preview');
-            const captureBtn = document.getElementById('capture-btn');
-            const resultActions = document.getElementById('result-actions');
-            const hiddenForm = document.getElementById('hidden-calories-form');
-            
-            // Reset UI
-            if (video) video.classList.remove('hidden');
-            if (photoPreview) {
-                photoPreview.classList.add('hidden');
-                photoPreview.src = '';
-            }
-            if (captureBtn) captureBtn.classList.remove('hidden');
-            if (resultActions) resultActions.classList.add('hidden');
-            if (hiddenForm) hiddenForm.classList.add('hidden');
-
-            try {
-                cameraStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'environment' },
-                    audio: false
-                });
-                if (video) {
-                    video.srcObject = cameraStream;
-                    video.play().catch(e => console.error("Erro ao dar play no video:", e));
-                }
-            } catch (err) {
-                console.error("Erro ao abrir a câmara:", err);
-                alert("Não foi possível acessar a câmera! Autorize as permissões ou verifique se não está sendo usada por outro app.");
-            }
-        };
-
-        window.stopScannerCamera = function() {
-            if (cameraStream) {
-                cameraStream.getTracks().forEach(track => track.stop());
-                cameraStream = null;
-            }
-            const video = document.getElementById('camera-feed');
-            if (video) video.srcObject = null;
-        };
-
-        // Eventos a serem vinculados apenas uma vez
-        window.addEventListener('load', function() {
-            const _closeScannerBtn = document.getElementById('close-scanner-btn');
-            if (_closeScannerBtn) {
-                _closeScannerBtn.addEventListener('click', () => {
-                    window.stopScannerCamera();
-                    const scannerContainer = document.getElementById('scanner-container');
-                    if (scannerContainer) scannerContainer.classList.add('hidden');
-                    
-                    // Restaurar página de extras apenas se necessário
-                    const extrasWrapper = document.getElementById('extras-page');
-                    if (extrasWrapper && extrasWrapper.classList.contains('hidden')) {
-                        extrasWrapper.classList.remove('hidden');
-                        extrasWrapper.style.display = 'block';
-                    }
-                });
-            }
-
-            const _captureBtn = document.getElementById('capture-btn');
-            const _retakeBtn = document.getElementById('retake-btn');
-            const _video = document.getElementById('camera-feed');
-            const _photoPreview = document.getElementById('photo-preview');
-            const _canvas = document.getElementById('capture-canvas');
-            const _resultActions = document.getElementById('result-actions');
-            const _hiddenForm = document.getElementById('hidden-calories-form');
-
-            if (_captureBtn && _video && _canvas) {
-                _captureBtn.addEventListener('click', () => {
-                    const ctx = _canvas.getContext('2d');
-                    _canvas.width = _video.videoWidth || 1080;
-                    _canvas.height = _video.videoHeight || 1920;
-                    ctx.drawImage(_video, 0, 0, _canvas.width, _canvas.height);
-                    
-                    const base64Photo = _canvas.toDataURL('image/jpeg', 0.8);
-                    if (_photoPreview) _photoPreview.src = base64Photo;
-                    
-                    _video.classList.add('hidden');
-                    if (_photoPreview) _photoPreview.classList.remove('hidden');
-                    
-                    _captureBtn.classList.add('hidden');
-                    if (_resultActions) _resultActions.classList.remove('hidden');
-                    if (_hiddenForm) _hiddenForm.classList.remove('hidden');
-                });
-            }
-
-            if (_retakeBtn) {
-                _retakeBtn.addEventListener('click', () => {
-                    if (_video) _video.classList.remove('hidden');
-                    if (_photoPreview) {
-                        _photoPreview.classList.add('hidden');
-                        _photoPreview.src = '';
-                    }
-                    
-                    if (_captureBtn) _captureBtn.classList.remove('hidden');
-                    if (_resultActions) _resultActions.classList.add('hidden');
-                    if (_hiddenForm) _hiddenForm.classList.add('hidden');
-                });
-            }
-
-            const _confirmBtn = document.getElementById('confirm-meal-btn');
-            const _loadingOverlay = document.getElementById('ai-loading');
-            if (_confirmBtn && _loadingOverlay) {
-                _confirmBtn.addEventListener('click', async () => {
-                    _loadingOverlay.classList.remove('hidden');
-                    
-                    try {
-                        if (!window.supabase) throw new Error("Supabase não iniciado");
-                        
-                        // 1. Obter Utilizador
-                        const { data: { user } } = await window.supabase.auth.getUser();
-                        if (!user) {
-                            alert("Sessão expirada. Faça login novamente.");
-                            return;
-                        }
-
-                        // 2. Simular Análise IA (Gerar macros dinâmicos para a demonstração)
-                        const kcal = Math.floor(400 + Math.random() * 500);
-                        const desc = "Refeição Scanner IA";
-
-                        // 3. Gravar no Banco de Dados
-                        const { error } = await window.supabase
-                            .from('nutrition_logs')
-                            .insert([{
-                                user_id: user.id,
-                                description: desc,
-                                calories: kcal,
-                                created_at: new Date().toISOString()
-                            }]);
-
-                        if (error) throw error;
-
-                        // 4. Sucesso e Notificação Global
-                        _loadingOverlay.classList.add('hidden');
-                        
-                        // Disparar evento para o React Dashboard ouvir
-                        window.dispatchEvent(new CustomEvent('nutrition-updated'));
-
-                        alert(`✅ ${desc} registado!\nCalculado: +${kcal} kcal.`);
-                        
-                        const closeBtn = document.getElementById('close-scanner-btn');
-                        if (closeBtn) closeBtn.click();
-
-                    } catch (err) {
-                        console.error("Erro no Scanner:", err);
-                        _loadingOverlay.classList.add('hidden');
-                        alert("Falha ao salvar: " + (err.message || "Erro desconhecido"));
-                    }
-                });
-            }
-        });
-    </script>
+    <script src="./exercicios.js" defer></script>
 </body>
 
 </html>
