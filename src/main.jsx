@@ -5649,17 +5649,9 @@ import { createClient } from '@supabase/supabase-js';
                                 ✉️ Enviar E-mail de Suporte
                             </a>
                         </div>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '14px', marginBottom: '6px' }}>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '14px', marginBottom: 0 }}>
                             E-mail direto: <strong style={{ color: 'var(--text-primary)', userSelect: 'all' }}>grupomachado171@gmail.com</strong>
                         </p>
-                        <a
-                            href="https://atendimento.hotmart.com.br/"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{ color: 'var(--text-muted)', fontSize: '12px', textDecoration: 'underline' }}
-                        >
-                            Central de Compras & Assinaturas Hotmart
-                        </a>
                     </div>
 
                     <h3 className="ps-title" style={{ marginTop: '32px', color: 'var(--red)' }}>Conta & Cache</h3>
