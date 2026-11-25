@@ -6899,7 +6899,7 @@ import { createClient } from '@supabase/supabase-js';
                         const safeAvatar = isSafeImageUrl(ud.userProfile?.avatar_url) ? ud.userProfile.avatar_url : null;
 
                         return (
-                            <div className="w-full min-h-screen pb-24 overflow-y-auto px-5">
+                            <div className="w-full min-h-screen pb-24 px-5">
                                 {/* 1. HEADER DINÂMICO PREMIUM */}
                                 <div className="dashboard-header sticky top-0 z-[100] backdrop-blur-xl bg-slate-900/80 border-b border-white/5 py-3 px-5 -mx-5 -mt-5 mb-6 flex justify-between items-center gap-2">
                                     {/* Lado Esquerdo: Avatar & Identidade */}
@@ -7692,36 +7692,39 @@ import { createClient } from '@supabase/supabase-js';
                         }
                     }} userProfile={ud.userProfile} />
                     <div className="app-content" style={{ position: 'relative', zIndex: 1 }}>
-                        <main className="main" style={{ minHeight: '100vh' }}>{renderPage()}</main>
+                        <main className="main" style={{ minHeight: '100dvh' }}>{renderPage()}</main>
                     </div>
-                    <div className="bottom-nav" style={{ bottom: '0px', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-                        {MOBILE_NAV.map(n => {
-                            const showFreeNutriPill = n.id === 'arsenal-vip' && !temAcessoNutriScan && freeScansRemainingGlobal > 0;
-                            return (
-                                <button 
-                                    key={n.id} 
-                                    type="button"
-                                    className={`bottom-nav-item ${page === n.id ? 'active' : ''}`} 
-                                    style={{ position: 'relative' }}
-                                    onClick={() => {
-                                        if (n.id === 'treinos') { setModFilter('base'); setTreinoSubTab('exercicios'); }
-                                        if (n.id === 'evolucao') setEvolucaoSubTab('peso');
-                                        setPage(n.id);
-                                    }}
-                                >
-                                    {showFreeNutriPill && (
-                                        <span style={{ position: 'absolute', top: '-4px', left: '50%', transform: 'translateX(-50%)', background: '#10b981', color: '#022c22', fontSize: '7.5px', fontWeight: '900', padding: '1px 6px', borderRadius: '99px', lineHeight: '1.25', letterSpacing: '0.03em', whiteSpace: 'nowrap', boxShadow: '0 2px 8px rgba(16,185,129,0.5)' }}>
-                                            {freeScansRemainingGlobal} GRÁTIS
-                                        </span>
-                                    )}
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                                        <path d={n.d} strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                    {n.label}
-                                </button>
-                            );
-                        })}
-                    </div>
+                    {createPortal(
+                        <nav className="bottom-nav" aria-label="Navegação principal">
+                            {MOBILE_NAV.map(n => {
+                                const showFreeNutriPill = n.id === 'arsenal-vip' && !temAcessoNutriScan && freeScansRemainingGlobal > 0;
+                                return (
+                                    <button 
+                                        key={n.id} 
+                                        type="button"
+                                        className={`bottom-nav-item ${page === n.id ? 'active' : ''}`} 
+                                        style={{ position: 'relative' }}
+                                        onClick={() => {
+                                            if (n.id === 'treinos') { setModFilter('base'); setTreinoSubTab('exercicios'); }
+                                            if (n.id === 'evolucao') setEvolucaoSubTab('peso');
+                                            setPage(n.id);
+                                        }}
+                                    >
+                                        {showFreeNutriPill && (
+                                            <span style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', background: '#10b981', color: '#022c22', fontSize: '7.5px', fontWeight: '900', padding: '1px 6px', borderRadius: '99px', lineHeight: '1.25', letterSpacing: '0.03em', whiteSpace: 'nowrap', boxShadow: '0 2px 8px rgba(16,185,129,0.5)', pointerEvents: 'none' }}>
+                                                {freeScansRemainingGlobal} GRÁTIS
+                                            </span>
+                                        )}
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                                            <path d={n.d} strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                        <span>{n.label}</span>
+                                    </button>
+                                );
+                            })}
+                        </nav>,
+                        document.getElementById('portal-root') || document.body
+                    )}
 
                     {sel && (
                         <VideoModal
