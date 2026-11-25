@@ -133,7 +133,7 @@ import { createClient } from '@supabase/supabase-js';
             { id: 'arsenal-vip', label: 'Nutri IA', d: 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z' },
             { id: 'evolucao', label: 'Evolução', d: 'M23 6l-9.5 9.5-5-5L1 18' },
             { id: 'ranking', label: 'Ranking', d: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6' },
-            { id: 'extras', label: 'Extras', d: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z' },
+            { id: 'extras', label: 'Planos', d: 'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' },
             { id: 'ajuda', label: 'Ajuda', d: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' }
         ];
 
@@ -150,7 +150,9 @@ import { createClient } from '@supabase/supabase-js';
         window.supabase = supabase;
 
         function AuthModal() {
-            const [authMode, setAuthMode] = useState("login"); // login | register | recovery
+            const [authMode, setAuthMode] = useState(() => {
+                try { return localStorage.getItem('has_logged_in_before') === '1' ? 'login' : 'register'; } catch { return 'register'; }
+            }); // login | register | recovery
             const [email, setEmail] = useState('');
             const [password, setPassword] = useState('');
             const [showPassword, setShowPassword] = useState(false);
@@ -192,11 +194,14 @@ import { createClient } from '@supabase/supabase-js';
                         }
                     } else if (authMode === "login") {
                         res = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+                        if (!res.error) {
+                            try { localStorage.setItem('has_logged_in_before', '1'); } catch {}
+                        }
                     } else {
                         res = await supabase.auth.signUp({ email: cleanEmail, password });
                         if (!res.error && res.data?.user) {
-                            // Limpa cache de conta anterior apenas após sucesso real do cadastro
                             try {
+                                localStorage.setItem('has_logged_in_before', '1');
                                 ['userProfile', 'completedLog', 'favoritedIds', 'challengeLog', 'xpBonus', 'metaProfile', 'lastEvolucao'].forEach(k => localStorage.removeItem(k));
                             } catch {}
                         }
@@ -223,25 +228,14 @@ import { createClient } from '@supabase/supabase-js';
             return (
                 <div className="auth-overlay" style={{ overflowY: 'auto', padding: '20px 16px' }}>
                     <div className="auth-card">
+                        <div style={{ textAlign: 'center', marginBottom: '14px' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(255,107,74,0.14)', border: '1px solid rgba(255,107,74,0.32)', color: '#ffa28a', fontSize: '10.5px', fontWeight: '900', padding: '4px 12px', borderRadius: '99px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                                ✨ Academia Mariana Barros · ★ 4,9 · +6.000 alunas
+                            </span>
+                        </div>
+
                         {authMode !== 'recovery' && (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '14px', marginBottom: '20px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                                <button
-                                    type="button"
-                                    onClick={() => switchMode('login')}
-                                    style={{
-                                        padding: '10px',
-                                        borderRadius: '10px',
-                                        fontWeight: '800',
-                                        fontSize: '13px',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        background: authMode === 'login' ? 'var(--accent)' : 'transparent',
-                                        color: authMode === 'login' ? '#fff' : 'rgba(255,255,255,0.65)',
-                                        transition: 'all 0.2s'
-                                    }}
-                                >
-                                    Entrar
-                                </button>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', background: 'rgba(255,255,255,0.05)', padding: '4px', borderRadius: '14px', marginBottom: '18px', border: '1px solid rgba(255,255,255,0.08)' }}>
                                 <button
                                     type="button"
                                     onClick={() => switchMode('register')}
@@ -259,17 +253,42 @@ import { createClient } from '@supabase/supabase-js';
                                 >
                                     Criar Conta
                                 </button>
+                                <button
+                                    type="button"
+                                    onClick={() => switchMode('login')}
+                                    style={{
+                                        padding: '10px',
+                                        borderRadius: '10px',
+                                        fontWeight: '800',
+                                        fontSize: '13px',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        background: authMode === 'login' ? 'var(--accent)' : 'transparent',
+                                        color: authMode === 'login' ? '#fff' : 'rgba(255,255,255,0.65)',
+                                        transition: 'all 0.2s'
+                                    }}
+                                >
+                                    Já tenho Conta
+                                </button>
                             </div>
                         )}
 
-                        <h2>{authMode === 'login' ? 'Bem-vindo(a) de volta!' : authMode === 'register' ? 'Criar sua Conta' : 'Recuperar Senha'}</h2>
+                        <h2>{authMode === 'login' ? 'Bem-vinda de volta!' : authMode === 'register' ? 'Comece seu plano em casa' : 'Recuperar Senha'}</h2>
                         <div className="auth-header-desc">
                             {authMode === "recovery"
                                 ? "Digite o mesmo e-mail usado na compra para receber o link de nova senha."
                                 : authMode === "register"
-                                ? "Use o mesmo e-mail da compra na Hotmart para liberar seus treinos e guias automaticamente."
+                                ? "Crie seu acesso em 10 segundos (use o mesmo e-mail da Hotmart para liberar seus bônus)."
                                 : "Entre com seu e-mail e senha para acessar seus treinos, evolução e Nutri-Scan IA."}
                         </div>
+
+                        {authMode === 'register' && (
+                            <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.28)', borderRadius: '14px', padding: '10px 12px', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '12px', color: '#e2dae9', fontWeight: '600' }}>
+                                <div><span style={{ color: '#34d399', fontWeight: '900' }}>✓</span> +500 exercícios em vídeo com elástico em casa</div>
+                                <div><span style={{ color: '#34d399', fontWeight: '900' }}>✓</span> 1º treino rápido de 12 min montado pro seu objetivo</div>
+                                <div><span style={{ color: '#34d399', fontWeight: '900' }}>✓</span> <strong>2 fotos grátis</strong> no Nutri-Scan IA (calorias em 3s)</div>
+                            </div>
+                        )}
                         <form onSubmit={handleSubmit}>
                             <div className="input-group">
                                 <label>E-mail</label>
@@ -1624,28 +1643,119 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function TeaserDesafioPage({ onGoToExtras, ud = null }) {
-            return (
-                <div className="teaser-container">
-                    <div className="teaser-badge">🔥 PROGRAMA MAIS VENDIDO</div>
-                    
-                    <div className="teaser-squares">
-                        <div className="teaser-square"></div>
-                        <div className="teaser-square active"></div>
-                        <div className="teaser-square"></div>
-                        <div className="teaser-square"></div>
-                        <div className="teaser-square active"></div>
-                    </div>
+        function TeaserDesafioPage({ onGoToExtras, ud = null, exercises = [], onSelectExercise = null }) {
+            const [lockedDayClicked, setLockedDayClicked] = React.useState(null);
 
-                    <h1 className="teaser-title" style={{ marginTop: '-10px' }}>
-                        <span className="block text-orange-500 text-4xl sm:text-5xl italic font-black mb-3 tracking-tighter">DESAFIO 30 DIAS</span>
+            const day1Exercises = React.useMemo(() => {
+                const list = (exercises && exercises.length > 0) ? exercises : (window.EXERCISES || []);
+                const filtered = list.filter(ex => {
+                    const c = String(ex.category || '').toLowerCase();
+                    return ['pernas', 'abdominais', 'braços', 'cardio', 'costas', 'peito'].includes(c);
+                });
+                return (filtered.length >= 4 ? filtered : list).slice(0, 4);
+            }, [exercises]);
+
+            return (
+                <div className="teaser-container" style={{ paddingBottom: '210px' }}>
+                    <div className="teaser-badge">🔥 DIA 1 LIBERADO GRÁTIS • TESTE AGORA</div>
+
+                    <h1 className="teaser-title" style={{ marginTop: '4px' }}>
+                        <span className="block text-orange-400 text-3xl sm:text-5xl italic font-black mb-2 tracking-tighter">DESAFIO 30 DIAS</span>
                         SEU PLANO PRONTO PARA <span className="highlight">SECAR E DEFINIR EM CASA.</span>
                     </h1>
                     
                     <p className="teaser-subtitle">
-                        A maioria desiste porque não sabe qual exercício fazer em cada dia. Com o Desafio 30 Dias, cada treino já vem montado na ordem certa para queimar gordura, tonificar e criar constância.
+                        Experimente o <strong>Dia 1 de graça abaixo</strong> e veja como é simples seguir a sequência pronta na ordem certa, sem inventar treino.
                     </p>
-        
+
+                    {/* PRÉVIA INTERATIVA DO CALENDÁRIO 30 DIAS (DIA 1 DESTRAVADO) */}
+                    <div className="w-full max-w-xl mx-auto mb-6 p-4 sm:p-5 rounded-3xl bg-slate-900/90 border border-white/10 text-left shadow-xl">
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                            <div>
+                                <div className="text-[10px] font-black uppercase tracking-widest text-emerald-400">🎁 Amostra Grátis Liberada</div>
+                                <h3 className="text-base font-black text-white m-0">Calendário dos 30 Dias</h3>
+                            </div>
+                            <span className="text-[10px] font-black text-orange-300 bg-orange-500/15 border border-orange-500/30 px-2.5 py-1 rounded-full">1 de 30 grátis</span>
+                        </div>
+
+                        <div className="grid grid-cols-6 gap-1.5 mb-4">
+                            {Array.from({ length: 18 }, (_, i) => i + 1).map(day => {
+                                const isFree = day === 1;
+                                const isPicked = lockedDayClicked === day;
+                                return (
+                                    <button
+                                        key={day}
+                                        type="button"
+                                        onClick={() => {
+                                            if (isFree) {
+                                                setLockedDayClicked(null);
+                                            } else {
+                                                setLockedDayClicked(day);
+                                                trackConversionEvent('desafio_locked_day_click', { placement: 'teaser_desafio_calendar', product: 'desafio_30', metadata: { day } });
+                                            }
+                                        }}
+                                        className={`py-2 rounded-xl text-[10px] font-black flex flex-col items-center justify-center border transition-all ${
+                                            isFree
+                                                ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-lg shadow-emerald-500/20'
+                                                : isPicked
+                                                ? 'bg-orange-500/25 text-orange-200 border-orange-400'
+                                                : 'bg-white/5 text-slate-400 border-white/5 hover:border-orange-500/30'
+                                        }`}
+                                    >
+                                        <span>Dia {day}</span>
+                                        <span className="text-[8px] mt-0.5">{isFree ? 'GRÁTIS' : '🔒'}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {lockedDayClicked ? (
+                            <div className="p-4 rounded-2xl bg-gradient-to-br from-orange-500/20 to-slate-950 border border-orange-500/40 animate-in zoom-in-95 duration-200">
+                                <div className="text-xs font-black text-orange-300 uppercase mb-1">🔒 Dia {lockedDayClicked} bloqueado</div>
+                                <p className="text-xs text-slate-200 leading-relaxed mb-3">
+                                    Destrave todos os <strong>30 dias completos</strong> + Musculação em Casa + Pilates + Sono Profundo no <strong>Combo de Ouro</strong> por apenas <strong>R$ 24,90</strong> (menos de R$ 0,83/dia — pagamento único vitalício!).
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => openHotmartCheckout('https://pay.hotmart.com/O106106388F?checkoutMode=10', { placement: 'teaser_desafio_locked_day', product: 'combo_ouro', ud })}
+                                    className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black text-xs uppercase tracking-wider"
+                                >
+                                    🔓 Destravar os 30 Dias + 5 Guias (R$ 24,90)
+                                </button>
+                            </div>
+                        ) : (
+                            <div>
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="text-[11px] font-black text-emerald-300 uppercase tracking-wider">✅ Dia 1 — Treino de Boas-Vindas (toque para assistir)</span>
+                                </div>
+                                <div className="space-y-2">
+                                    {day1Exercises.map((ex, idx) => (
+                                        <button
+                                            key={ex.id || idx}
+                                            type="button"
+                                            onClick={() => {
+                                                trackConversionEvent('desafio_day1_preview_play', { placement: 'teaser_desafio_day1' });
+                                                onSelectExercise?.(ex);
+                                            }}
+                                            className="w-full p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-between gap-3 text-left transition-all"
+                                        >
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-300 font-black text-xs flex items-center justify-center shrink-0">
+                                                    {idx + 1}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <div className="text-xs font-bold text-white truncate">{ex.title}</div>
+                                                    <div className="text-[10px] text-slate-400">{ex.category} · 3 séries · 12–15 reps</div>
+                                                </div>
+                                            </div>
+                                            <span className="text-[10px] font-black text-emerald-400 shrink-0">▶ Ver vídeo</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     <div className="teaser-benefits">
                         {[
                             { 
@@ -1655,13 +1765,13 @@ import { createClient } from '@supabase/supabase-js';
                             },
                             { 
                                 icon: "⚡", 
-                                title: "Ritmo Progressivo:", 
-                                text: "Treinos equilibrados com dias estratégicos de descanso ativo para o corpo evoluir sem dores." 
+                                title: "Menos de R$ 0,83 por dia:", 
+                                text: "No Combo de Ouro (R$ 24,90 único) você leva o Desafio 30D + 5 guias para sempre." 
                             },
                             { 
-                                icon: "🏆", 
-                                title: "Foco em Resultados Reais:", 
-                                text: "Avaliações semanais dentro do app para você acompanhar sua evolução no espelho e na balança." 
+                                icon: "🛡️", 
+                                title: "Garantia Hotmart 7 Dias:", 
+                                text: "Pagamento seguro no PIX ou Cartão. Se não amar, devolução garantida." 
                             }
                         ].map((b, i) => (
                             <div key={i} className="benefit-card" style={{ animationDelay: `${0.1 * i}s` }}>
@@ -1680,7 +1790,7 @@ import { createClient } from '@supabase/supabase-js';
                                 onClick={() => openHotmartCheckout('https://pay.hotmart.com/O106106388F?checkoutMode=10', { placement: 'teaser_desafio_combo', product: 'combo_ouro', ud })}
                                 className="w-full text-center font-black uppercase px-6 py-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-white shadow-xl transition-transform duration-200 block text-xs sm:text-sm cursor-pointer border-none"
                             >
-                                🥇 LEVAR NO COMBO DE OURO (DESAFIO + 5 GUIAS) — R$ 24,90
+                                🥇 LEVAR NO COMBO DE OURO (30 DIAS + 5 GUIAS) — R$ 24,90
                             </button>
                             <button
                                 type="button"
@@ -1689,13 +1799,16 @@ import { createClient } from '@supabase/supabase-js';
                             >
                                 Ou desbloquear só o Desafio 30 Dias (R$ 19,90 vitalício)
                             </button>
+                            <div className="text-center text-[10px] text-slate-400 font-semibold">
+                                ⚡ PIX ou Cartão na hora · 🛡️ 7 dias de garantia Hotmart
+                            </div>
                             {onGoToExtras && (
                                 <button
                                     type="button"
                                     onClick={onGoToExtras}
-                                    className="w-full py-1.5 text-[11px] text-slate-400 hover:text-white underline font-semibold"
+                                    className="w-full py-1 text-[11px] text-slate-400 hover:text-white underline font-semibold"
                                 >
-                                    Já comprou o Desafio 30 Dias? Clique aqui para ativar seu código
+                                    Já comprou? Clique aqui para ativar seu código
                                 </button>
                             )}
                         </div>
@@ -1705,48 +1818,133 @@ import { createClient } from '@supabase/supabase-js';
         }
 
         function TeaserSonoPage({ onGoToExtras, ud = null }) {
+            const [previewSeconds, setPreviewSeconds] = React.useState(0);
+            const [previewDone, setPreviewDone] = React.useState(false);
+            const [wakeTime, setWakeTime] = React.useState('06:30');
+            const intervalRef = React.useRef(null);
+
+            React.useEffect(() => {
+                return () => {
+                    if (intervalRef.current) clearInterval(intervalRef.current);
+                    ud?.stopAudio?.();
+                };
+            }, []);
+
+            const startFreePreview = (trackId, file) => {
+                if (ud?.currentAudioId === trackId) {
+                    ud?.stopAudio?.();
+                    if (intervalRef.current) clearInterval(intervalRef.current);
+                    setPreviewSeconds(0);
+                    return;
+                }
+                setPreviewDone(false);
+                setPreviewSeconds(20);
+                trackConversionEvent('sono_audio_preview_play', { placement: 'teaser_sono', metadata: { trackId } });
+                ud?.playAudio?.(trackId, file, 20000);
+                if (intervalRef.current) clearInterval(intervalRef.current);
+                intervalRef.current = setInterval(() => {
+                    setPreviewSeconds(prev => {
+                        if (prev <= 1) {
+                            clearInterval(intervalRef.current);
+                            setPreviewDone(true);
+                            return 0;
+                        }
+                        return prev - 1;
+                    });
+                }, 1000);
+            };
+
+            const idealBedtimes = React.useMemo(() => {
+                const [h, m] = (wakeTime || '06:30').split(':').map(Number);
+                if (isNaN(h) || isNaN(m)) return [];
+                const wakeMins = h * 60 + m;
+                return [
+                    { label: 'Ideal (7h30 · 5 ciclos)', mins: wakeMins - 465 },
+                    { label: 'Revigorante (9h · 6 ciclos)', mins: wakeMins - 555 }
+                ].map(item => {
+                    const norm = ((item.mins % 1440) + 1440) % 1440;
+                    const hh = String(Math.floor(norm / 60)).padStart(2, '0');
+                    const mm = String(norm % 60).padStart(2, '0');
+                    return { label: item.label, time: `${hh}:${mm}` };
+                });
+            }, [wakeTime]);
+
             return (
-                <div className="teaser-container">
-                    <div className="teaser-badge">🌙 SONO & DISPOSIÇÃO</div>
+                <div className="teaser-container" style={{ paddingBottom: '210px' }}>
+                    <div className="teaser-badge">🌙 TESTE GRÁTIS • ÁUDIO + CALCULADORA DO SONO</div>
                     
-                    <div className="teaser-ia-icon-wrapper">
-                        <div className="teaser-ia-icon-bg" style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)' }}></div>
-                        <div className="teaser-ia-icon">💤</div>
-                    </div>
-                    
-                    <h1 className="teaser-title">
+                    <h1 className="teaser-title" style={{ marginTop: '4px' }}>
                         Durma melhor e acorde com <span className="highlight">mais energia para treinar.</span>
                     </h1>
                     
                     <p className="teaser-subtitle">
-                        Dormir mal aumenta a vontade de comer doces e trava o emagrecimento. Desbloqueie nossos áudios relaxantes e protocolo de sono profundo para descansar de verdade.
+                        Dormir mal aumenta a vontade de comer doces e trava o emagrecimento. Teste abaixo uma <strong>amostra grátis de 20s</strong> dos nossos áudios relaxantes!
                     </p>
-        
-                    <div className="teaser-benefits">
-                        {[
-                            { 
-                                icon: "🌙", 
-                                title: "Rotina Antiestresse:", 
-                                text: "Orientações simples para desacelerar a mente antes de dormir e combater a insônia." 
-                            },
-                            { 
-                                icon: "🎧", 
-                                title: "Áudios Relaxantes no App:", 
-                                text: "Sons calmantes com timer automático para ajudar você a pegar no sono mais rápido." 
-                            },
-                            { 
-                                icon: "✨", 
-                                title: "Mais Disposição & Menos Ansiedade:", 
-                                text: "Um sono reparador equilibra o metabolismo e acelera a recuperação muscular." 
-                            }
-                        ].map((b, i) => (
-                            <div key={i} className="benefit-card" style={{ animationDelay: `${0.1 * i}s` }}>
-                                <span className="benefit-icon">{b.icon}</span>
-                                <div className="benefit-content">
-                                    <div className="benefit-text"><b>{b.title}</b> {b.text}</div>
-                                </div>
+
+                    {/* AMOSTRA GRÁTIS REAL DE 20 SEGUNDOS */}
+                    <div className="w-full max-w-xl mx-auto mb-5 p-4 sm:p-5 rounded-3xl bg-slate-900/90 border border-indigo-500/30 text-left shadow-xl">
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-indigo-300">🎧 Ouvir prévia grátis (20s)</span>
+                            {previewSeconds > 0 && (
+                                <span className="text-[10px] font-black text-emerald-300 bg-emerald-500/15 px-2.5 py-0.5 rounded-full animate-pulse">
+                                    Tocando: {previewSeconds}s
+                                </span>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {[
+                                { id: 'preview-forest', label: 'Som Relaxante', sub: 'Desacelerar a mente', icon: '🌿', file: 'forest-noise.mp3' },
+                                { id: 'preview-brown', label: 'Ruído Castanho', sub: 'Combater insônia', icon: '🌙', file: 'brown-noise.mp3' }
+                            ].map(tr => {
+                                const playing = ud?.currentAudioId === tr.id;
+                                return (
+                                    <button
+                                        key={tr.id}
+                                        type="button"
+                                        onClick={() => startFreePreview(tr.id, tr.file)}
+                                        className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 text-left transition-all ${playing ? 'bg-indigo-500/25 border-indigo-400' : 'bg-white/5 hover:bg-white/10 border-white/10'}`}
+                                    >
+                                        <div className="flex items-center gap-2.5">
+                                            <span className="text-xl">{tr.icon}</span>
+                                            <div>
+                                                <div className="text-xs font-black text-white">{tr.label}</div>
+                                                <div className="text-[10px] text-slate-400">{tr.sub}</div>
+                                            </div>
+                                        </div>
+                                        <span className="text-xs font-black text-indigo-300 shrink-0">{playing ? '⏸ Parar' : '▶ Ouvir'}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        {previewDone && (
+                            <div className="mt-3 p-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/35 text-xs text-emerald-200 font-bold">
+                                ✨ Gostou da sensação? Libere os áudios completos sem limite + timer automático no Combo de Ouro (R$ 24,90 único)!
                             </div>
-                        ))}
+                        )}
+                    </div>
+
+                    {/* CALCULADORA GRÁTIS DE HORÁRIO IDEAL DE DORMIR */}
+                    <div className="w-full max-w-xl mx-auto mb-6 p-4 sm:p-5 rounded-3xl bg-slate-900/75 border border-white/10 text-left">
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                            <div>
+                                <div className="text-[10px] font-black uppercase tracking-widest text-orange-400">⏰ Ferramenta Grátis</div>
+                                <div className="text-sm font-black text-white">Que horas você quer acordar?</div>
+                            </div>
+                            <input
+                                type="time"
+                                value={wakeTime}
+                                onChange={(e) => setWakeTime(e.target.value)}
+                                className="bg-black/40 border border-white/15 rounded-xl px-3 py-2 text-white font-black text-sm outline-none focus:border-indigo-400"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2.5">
+                            {idealBedtimes.map((b, i) => (
+                                <div key={i} className="p-3 rounded-2xl bg-white/5 border border-white/5 text-center">
+                                    <div className="text-lg font-black text-white">{b.time}</div>
+                                    <div className="text-[10px] text-slate-400 font-semibold">{b.label}</div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
         
                     <div className="fixed-cta-container">
@@ -1765,11 +1963,14 @@ import { createClient } from '@supabase/supabase-js';
                             >
                                 Ou liberar apenas o Sono Profundo (R$ 19,90)
                             </button>
+                            <div className="text-center text-[10px] text-slate-400 font-semibold">
+                                ⚡ PIX ou Cartão na hora · 🛡️ 7 dias de garantia Hotmart
+                            </div>
                             {onGoToExtras && (
                                 <button
                                     type="button"
                                     onClick={onGoToExtras}
-                                    className="w-full py-1.5 text-[11px] text-slate-400 hover:text-white underline font-semibold"
+                                    className="w-full py-1 text-[11px] text-slate-400 hover:text-white underline font-semibold"
                                 >
                                     Já comprou? Ative seu código aqui
                                 </button>
@@ -1784,7 +1985,7 @@ import { createClient } from '@supabase/supabase-js';
             const isGreen = glowColor === 'green';
             const glowClass = isGreen 
                 ? 'shadow-[0_0_35px_-6px_rgba(16,185,129,0.45)] border-2 border-emerald-500/50' 
-                : 'shadow-[0_0_35px_-6px_rgba(255, 107, 74,0.45)] border-2 border-orange-500/50';
+                : 'shadow-[0_0_35px_-6px_rgba(255,107,74,0.45)] border-2 border-orange-500/50';
 
             return (
                 <div className={`p-6 rounded-[24px] bg-[#211b29] flex flex-col relative overflow-hidden transition-all duration-300 ${glow ? glowClass : 'border border-white/10 hover:bg-[#2b2335]'}`}>
@@ -2016,7 +2217,7 @@ import { createClient } from '@supabase/supabase-js';
                                 }
                                 price="24,90"
                                 oldPrice="119,40"
-                                subPrice="Pague 1 única vez (PIX ou Cartão) • Sem mensalidade"
+                                subPrice="Menos de R$ 0,83/dia no Desafio • PIX ou Cartão • 🛡️ Garantia 7 dias Hotmart"
                                 icon="🥇"
                                 ctaLabel="Quero o Combo de Ouro"
                                 unlocked={hasGold}
@@ -2043,7 +2244,7 @@ import { createClient } from '@supabase/supabase-js';
                                 }
                                 price="9,90"
                                 isMonthly={true}
-                                subPrice="7 Dias Grátis na Hotmart • Cancele quando quiser"
+                                subPrice="7 Dias Grátis • Depois só R$ 0,33/dia • 🛡️ Cancele quando quiser na Hotmart"
                                 icon="📸"
                                 ctaLabel="Liberar 7 Dias Grátis"
                                 secondaryCta={!hasScannerIA && freeScansRemaining > 0 && onOpenNutriScan ? `🎁 Usar teste grátis no app (${freeScansRemaining} restante)` : null}
@@ -2070,7 +2271,7 @@ import { createClient } from '@supabase/supabase-js';
                                 }
                                 price="69,90"
                                 oldPrice="119,40 + 19,90/mês"
-                                subPrice="Economia máxima • Pagamento único vitalício"
+                                subPrice="PIX ou Cartão • 🛡️ Garantia 7 dias Hotmart • Zero mensalidade para sempre"
                                 icon="💎"
                                 ribbon="TUDO LIBERADO"
                                 ctaLabel="Quero Acesso Total Vitalício"
@@ -2569,7 +2770,8 @@ import { createClient } from '@supabase/supabase-js';
             hasCustomProfile,
             ud,
             lastSavedTrialBanner,
-            onDismissTrialBanner
+            onDismissTrialBanner,
+            onQuickSampleScan
         }) {
             const [selectedMacro, setSelectedMacro] = React.useState(null);
 
@@ -2651,10 +2853,13 @@ import { createClient } from '@supabase/supabase-js';
                                 >
                                     👉 Liberar Nutri-Scan Ilimitado (7 Dias Grátis)
                                 </button>
+                                <div className="text-center text-[10px] text-slate-400 font-semibold">
+                                    ⚡ Apenas R$ 0,33/dia · PIX ou Cartão · 🛡️ Cancele quando quiser na Hotmart
+                                </div>
                                 <button
                                     type="button"
                                     onClick={() => onNav && onNav('extras', { focusRedeem: true })}
-                                    className="w-full py-2.5 text-[11px] text-slate-400 hover:text-white font-bold underline"
+                                    className="w-full py-2 text-[11px] text-slate-400 hover:text-white font-bold underline"
                                 >
                                     Já assinou ou tem código? Ativar aqui • Ou veja o Acesso Total sem mensalidade
                                 </button>
@@ -2688,7 +2893,36 @@ import { createClient } from '@supabase/supabase-js';
                         </button>
 
                         <div className="p-5 bg-white/5 border border-white/10 rounded-[28px] backdrop-blur-md">
-                            <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mb-3 ml-1">Ou digite o que você comeu</p>
+                            <p className="text-[11px] text-emerald-300 font-black uppercase tracking-[0.14em] mb-1 ml-1">✍️ Não está com prato agora?</p>
+                            <p className="text-xs text-slate-300 mb-3 ml-1">Digite o que comeu na sua última refeição — ou toque em 1 exemplo para testar em 3 segundos:</p>
+                            {(!isTrialMode || freeScansRemaining > 0) && onQuickSampleScan && (
+                                <div className="flex flex-wrap gap-2 mb-3">
+                                    <button
+                                        type="button"
+                                        disabled={isAnalyzing}
+                                        onClick={() => onQuickSampleScan('2 ovos mexidos, 1 fatia de pão integral e 1 xícara de café com leite')}
+                                        className="text-[11px] bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-200 px-3 py-2 rounded-full font-bold transition-all active:scale-95"
+                                    >
+                                        ☕ Café da manhã (1 toque)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={isAnalyzing}
+                                        onClick={() => onQuickSampleScan('150g de frango grelhado, 4 colheres de arroz, feijão e salada verde')}
+                                        className="text-[11px] bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-200 px-3 py-2 rounded-full font-bold transition-all active:scale-95"
+                                    >
+                                        🥗 Almoço (1 toque)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={isAnalyzing}
+                                        onClick={() => onQuickSampleScan('Omelete de 2 ovos com queijo branco e salada de tomate')}
+                                        className="text-[11px] bg-white/5 hover:bg-white/10 border border-white/15 text-slate-200 px-3 py-2 rounded-full font-bold transition-all active:scale-95"
+                                    >
+                                        🍲 Jantar leve (1 toque)
+                                    </button>
+                                </div>
+                            )}
                             <textarea 
                                 id="meal-description-input"
                                 value={aiTextInput}
@@ -2698,31 +2932,11 @@ import { createClient } from '@supabase/supabase-js';
                                 className="w-full bg-slate-900/60 border border-white/10 rounded-2xl p-4 text-white text-sm focus:ring-2 focus:ring-orange-500/50 outline-none transition-all placeholder:text-slate-500 mb-3"
                                 style={{ minHeight: '76px', resize: 'none' }}
                             />
-                            {!aiTextInput?.trim() && (!isTrialMode || freeScansRemaining > 0) && (
-                                <div className="flex flex-wrap gap-2 mb-3">
-                                    <button
-                                        type="button"
-                                        disabled={isAnalyzing}
-                                        onClick={() => setAiTextInput('2 ovos mexidos, 1 fatia de pão integral e 1 café com leite')}
-                                        className="text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 px-3 py-1.5 rounded-full font-semibold transition-all"
-                                    >
-                                        ✨ Testar café da manhã
-                                    </button>
-                                    <button
-                                        type="button"
-                                        disabled={isAnalyzing}
-                                        onClick={() => setAiTextInput('150g de frango grelhado, 4 colheres de arroz, feijão e salada')}
-                                        className="text-[11px] bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 px-3 py-1.5 rounded-full font-semibold transition-all"
-                                    >
-                                        🥗 Testar almoço
-                                    </button>
-                                </div>
-                            )}
                             {aiTextInput?.trim() && (
                                 <button 
                                     type="button"
                                     disabled={isAnalyzing}
-                                    onClick={onTextOnlyScan}
+                                    onClick={() => onTextOnlyScan()}
                                     className="w-full py-3.5 bg-orange-500 hover:bg-orange-400 rounded-xl text-white text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-orange-500/20 disabled:opacity-50"
                                 >
                                     {isAnalyzing ? 'Analisando...' : (isTrialMode && freeScansRemaining === 0 ? '🔒 Liberar para Analisar ➔' : 'Calcular Calorias com IA ➔')}
@@ -2760,7 +2974,7 @@ import { createClient } from '@supabase/supabase-js';
                             </div>
                         </div>
                         <div className="h-4 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 mb-3">
-                            <div className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full shadow-[0_0_15px_rgba(255, 107, 74,0.4)]" style={{ width: `${progressPct}%` }}></div>
+                            <div className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full shadow-[0_0_15px_rgba(255,107,74,0.4)]" style={{ width: `${progressPct}%` }}></div>
                         </div>
                         <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                             <span>Zona Ideal: {Math.round(metaKcal * 0.9)} - {Math.round(metaKcal * 1.1)}</span>
@@ -2982,8 +3196,9 @@ import { createClient } from '@supabase/supabase-js';
                 }
             }
 
-            async function executeTextOnlyScan() {
-                if (!aiTextInput.trim() || isScanningRef.current) return;
+            async function executeTextOnlyScan(overrideText = null) {
+                const targetText = (typeof overrideText === 'string' ? overrideText : aiTextInput).trim();
+                if (!targetText || isScanningRef.current) return;
                 if (isTrialMode && freeScansRemaining <= 0) {
                     if (onOpenNutriUpsell) onOpenNutriUpsell('limit_reached');
                     return;
@@ -2996,7 +3211,7 @@ import { createClient } from '@supabase/supabase-js';
                     const { data, error } = await window.supabase.functions.invoke('analyze-meal', {
                         body: {
                             image: null,
-                            textInput: aiTextInput.trim(),
+                            textInput: targetText,
                             lang: 'pt'
                         }
                     });
@@ -3242,6 +3457,7 @@ import { createClient } from '@supabase/supabase-js';
                         aiTextInput={aiTextInput}
                         setAiTextInput={setAiTextInput}
                         onTextOnlyScan={executeTextOnlyScan}
+                        onQuickSampleScan={(txt) => executeTextOnlyScan(txt)}
                         isAnalyzing={isAnalyzing}
                         scanError={scanError}
                         onDismissScanError={() => setScanError('')}
@@ -3258,7 +3474,7 @@ import { createClient } from '@supabase/supabase-js';
 
                     {isAnalyzing && (
                         <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center z-[250000] p-6 text-center animate-in fade-in duration-300">
-                            <div className="w-16 h-16 border-4 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mb-6 shadow-[0_0_30px_rgba(255, 107, 74,0.3)]"></div>
+                            <div className="w-16 h-16 border-4 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mb-6 shadow-[0_0_30px_rgba(255,107,74,0.3)]"></div>
                             <p className="text-white font-black text-xl uppercase tracking-widest animate-pulse">IA Analisando...</p>
                             <p className="text-slate-400 text-xs mt-2 uppercase tracking-tight">Identificando os alimentos e calorias do seu prato</p>
                             <button
@@ -3747,7 +3963,7 @@ import { createClient } from '@supabase/supabase-js';
                                                 <span className="text-[10px] font-black uppercase text-slate-500 bg-white/5 px-2.5 py-1 rounded-md">12-15 REPS</span>
                                             </div>
                                         </div>
-                                        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-orange-600 group-hover:shadow-[0_0_15px_rgba(255, 107, 74,0.4)] transition-all">
+                                        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-orange-600 group-hover:shadow-[0_0_15px_rgba(255,107,74,0.4)] transition-all">
                                             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                                         </div>
                                     </div>
@@ -4055,7 +4271,7 @@ import { createClient } from '@supabase/supabase-js';
             // Info do Mês Atual
             const currentMonthInfo = React.useMemo(() => {
                 const now = new Date();
-                const mName = new Intl.DateTimeFormat('pt-PT', { month: 'long' }).format(now);
+                const mName = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(now);
                 return {
                     name: mName.charAt(0).toUpperCase() + mName.slice(1),
                     year: now.getFullYear(),
@@ -4080,13 +4296,13 @@ import { createClient } from '@supabase/supabase-js';
                         else if (q >= 50) color = 'bg-orange-500/50';
                         return { color, day };
                     }
-                    return { color: 'bg-slate-800/40', day }; // Cinzento por defeito
+                    return { color: 'bg-slate-800/40', day };
                 });
             }, [sleepLogs, currentMonthInfo]);
 
             // Lógica de Cronotipo e Ciclo Circadiano
             const chronoData = React.useMemo(() => {
-                if (sleepLogs.length === 0) return { type: 'Urso', advice: 'Sincronizado com o dia. Treina ao meio-dia.', bedtime: '23:00', pct: 0 };
+                if (sleepLogs.length === 0) return { type: 'Urso', advice: 'Sincronizado com o dia. Treine perto do meio-dia.', bedtime: '23:00', pct: 0 };
                 
                 // Média de hora de deitar (convertida para minutos desde meia-noite)
                 const avgBedtimeMins = sleepLogs.reduce((acc, log) => {
@@ -4101,13 +4317,13 @@ import { createClient } from '@supabase/supabase-js';
                 const bedtimeStr = `${avgH.toString().padStart(2, '0')}:${avgM.toString().padStart(2, '0')}`;
 
                 let type = 'Urso';
-                let advice = 'Sincronizado com o dia. Treina entre as 11h e as 13h.';
+                let advice = 'Sincronizado com o dia. Treine entre 11h e 13h.';
                 if (avgBedtimeMins < 1320) { // Antes das 22h
                     type = 'Leão';
-                    advice = 'Acorda com o sol. O teu pico de força é matinal (08h - 10h).';
+                    advice = 'Acorda cedo com disposição. Seu pico de energia é pela manhã (08h - 10h).';
                 } else if (avgBedtimeMins > 1440) { // Depois da meia-noite
                     type = 'Lobo';
-                    advice = 'Pico cognitivo à tarde. Evita treinos intensos antes das 10h.';
+                    advice = 'Pico de energia à tarde. Evite treinos intensos antes das 10h.';
                 }
 
                 // Cálculo de aproveitamento da janela hormonal (22:30 - 02:00)
@@ -4126,7 +4342,7 @@ import { createClient } from '@supabase/supabase-js';
                 return [3, 4, 5, 6].map(num => {
                     const time = new Date(now.getTime() + num * 90 * 60 * 1000);
                     return {
-                        time: time.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }),
+                        time: time.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
                         cycles: num,
                         hours: num * 1.5
                     };
@@ -4286,7 +4502,7 @@ import { createClient } from '@supabase/supabase-js';
                                 </span>
                             </div>
                             <p className="text-[9px] text-slate-500 font-bold uppercase tracking-tight max-w-[240px] text-center leading-tight">
-                                Estás a aproveitar {chronoData.pct}% da tua janela de recuperação hormonal profunda (GH).
+                                Você está aproveitando {chronoData.pct}% da sua janela de recuperação hormonal profunda.
                             </p>
                         </div>
                     </div>
@@ -4301,7 +4517,7 @@ import { createClient } from '@supabase/supabase-js';
                         <div className="grid grid-cols-2 gap-3">
                             {wakeUpCycles.map(c => (
                                 <div key={c.cycles} className="bg-slate-900/40 border border-white/5 p-4 rounded-3xl text-center group hover:bg-slate-900/60 transition-all">
-                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Acordar Fresco</p>
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Acordar Descansada</p>
                                     <p className="text-xl font-black text-white italic group-hover:text-orange-400 transition-colors">{c.time}</p>
                                     <p className="text-[8px] font-black text-slate-600 uppercase mt-1 tracking-widest">{c.cycles} CICLOS ({c.hours}H)</p>
                                 </div>
@@ -4313,15 +4529,15 @@ import { createClient } from '@supabase/supabase-js';
                     <div className="bg-gradient-to-br from-slate-900/40 to-slate-800/40 border border-white/5 rounded-[32px] p-6 mb-10 flex items-start gap-4">
                         <div className="text-2xl animate-bounce" style={{ animationDuration: '3s' }}>💡</div>
                         <div>
-                            <h4 className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1">Insight do Coach</h4>
+                            <h4 className="text-[10px] font-black text-orange-400 uppercase tracking-widest mb-1">Dica da Mariana</h4>
                             <p className="text-white text-xs font-medium leading-relaxed">
                                 {sleepDebt.total > 120 ? 
-                                    `Atenção: Acumulaste ${sleepDebt.h}h de dívida. O teu sistema nervoso está sob stress. Tenta dormir 9h hoje.` :
+                                    `Atenção: você acumulou ${sleepDebt.h}h de cansaço. Tente descansar 8h–9h hoje para recuperar sua energia.` :
                                     (lastLog?.qualidade > 85 ? 
-                                        "Recuperação de Elite detetada! O teu corpo está no estado anabólico perfeito para o treino de amanhã." :
+                                        "Ótima noite de descanso! Seu corpo está pronto e cheio de energia para o treino de hoje." :
                                         (checklist.screens ? 
-                                            "Boa! O 'Digital Detox' antes de dormir está a estabilizar o teu ritmo circadiano." :
-                                            "Dica: Desligar os ecrãs 1h antes de deitar pode subir a tua qualidade de sono em 15%."
+                                            "Parabéns! Ficar longe das telas antes de dormir está melhorando muito seu sono." :
+                                            "Dica: desligar o celular 1h antes de deitar pode melhorar sua qualidade de sono em 15%."
                                         )
                                     )
                                 }
@@ -4406,13 +4622,13 @@ import { createClient } from '@supabase/supabase-js';
                     {/* D. Checklist de Higiene do Sono */}
                     <div className="mb-10">
                         <h4 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <span className="text-orange-500">⚔️</span> Preparação para a Batalha
+                            <span className="text-orange-500">🌙</span> Rotina Noturna
                         </h4>
                         <div className="bg-slate-900/40 border border-white/5 rounded-[32px] p-6 space-y-4">
                             {[
-                                { id: 'screens', label: 'Sem ecrãs (1h antes)', icon: '📵' },
-                                { id: 'dark', label: 'Quarto escuro e frio', icon: '❄️' },
-                                { id: 'supplements', label: 'Suplementação feita', icon: '💊' }
+                                { id: 'screens', label: 'Sem celular/telas (1h antes)', icon: '📵' },
+                                { id: 'dark', label: 'Quarto escuro e fresco', icon: '❄️' },
+                                { id: 'supplements', label: 'Chá relaxante ou rotina feita', icon: '🍵' }
                             ].map(item => (
                                 <div 
                                     key={item.id} 
@@ -4434,7 +4650,7 @@ import { createClient } from '@supabase/supabase-js';
                     {/* E. Mixer de Áudio com Temporizador */}
                     <div className="mb-10">
                         <h4 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <span className="text-orange-500">🎧</span> Som de Batalha (Descanso)
+                            <span className="text-orange-500">🎧</span> Áudios Relaxantes
                         </h4>
                         <div className="flex flex-col gap-2 mb-6">
                             {[
@@ -4475,9 +4691,9 @@ import { createClient } from '@supabase/supabase-js';
                         <div className="flex items-center justify-between mb-3 px-1">
                             <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                Paragem Automática
+                                Desligar Automaticamente
                             </span>
-                            {selectedTimer && <span className="text-[9px] text-orange-500 font-bold uppercase animate-pulse">Ativa</span>}
+                            {selectedTimer && <span className="text-[9px] text-orange-500 font-bold uppercase animate-pulse">Ativo</span>}
                         </div>
                         <div className="flex gap-2 px-1">
                             {[30, 60, 90].map(m => (
@@ -4494,42 +4710,42 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
                         {selectedTimer && (
                             <p className="text-[9px] text-orange-500/60 font-bold uppercase tracking-widest text-center mt-3 animate-pulse">
-                                Paragem automática ativa em {selectedTimer} minutos
+                                Desligamento automático ativo em {selectedTimer} minutos
                             </p>
                         )}
                     </div>
 
-                    {/* F. Protocolos de Recuperação Neural (NEW) */}
+                    {/* F. Protocolos de Relaxamento */}
                     <div className="mb-10">
                         <h4 className="text-xs font-black text-white uppercase tracking-widest mb-4 flex items-center gap-2">
-                            <span className="text-orange-500">🧠</span> Protocolos de Recuperação Neural
+                            <span className="text-orange-500">🧠</span> Dicas para Dormir Profundo
                         </h4>
                         <div className="grid grid-cols-1 gap-3">
                             <div className="bg-gradient-to-r from-blue-900/20 to-indigo-900/20 border border-blue-500/20 p-5 rounded-3xl">
                                 <div className="flex items-center gap-3 mb-2">
                                     <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-lg">🧬</div>
-                                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Protocolo 01: Sincronização Alfa</span>
+                                    <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Passo 1: Desacelerar a Mente</span>
                                 </div>
-                                <p className="text-[11px] text-slate-300 font-medium">Utiliza o Mixer de Áudio (Ruído Castanho) durante 20 min antes de dormir para baixar a frequência cerebral de Beta para Alfa.</p>
+                                <p className="text-[11px] text-slate-300 font-medium">Use o Ruído Castanho ou Som Relaxante durante 20 min antes de dormir para acalmar os pensamentos.</p>
                             </div>
                             <div className="bg-gradient-to-r from-purple-900/20 to-fuchsia-900/20 border border-purple-500/20 p-5 rounded-3xl">
                                 <div className="flex items-center gap-3 mb-2">
                                     <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center text-lg">🔥</div>
-                                    <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Protocolo 02: Purgatório Digital</span>
+                                    <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest">Passo 2: Pausa nas Telas</span>
                                 </div>
-                                <p className="text-[11px] text-slate-300 font-medium">Bloqueio total de luz azul 90 min antes do sono. O pico de melatonina ocorre exatamente 45 min após o último estímulo de ecrã.</p>
+                                <p className="text-[11px] text-slate-300 font-medium">Evite luz forte do celular 1h antes de deitar — seu corpo libera melatonina muito mais rápido no escuro.</p>
                             </div>
                         </div>
                     </div>
 
                     {/* CTA Fixo Premium */}
-                    <div className="fixed bottom-[64px] left-0 right-0 z-[500] px-4 py-4 bg-slate-950/80 backdrop-blur-2xl border-t border-white/5 sm:bottom-4 sm:left-auto sm:right-4 sm:w-[400px] sm:rounded-3xl sm:border">
+                    <div className="fixed left-0 right-0 z-[500] px-4 py-4 bg-slate-950/85 backdrop-blur-2xl border-t border-white/5 sm:bottom-4 sm:left-auto sm:right-4 sm:w-[400px] sm:rounded-3xl sm:border" style={{ bottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
                         <div className="max-w-md mx-auto">
                             <button 
                                 onClick={() => setShowModal(true)}
-                                className="w-full bg-gradient-to-r from-orange-600 to-amber-600 text-white font-black py-5 rounded-2xl shadow-[0_12px_30px_rgba(255, 107, 74,0.3)] active:scale-[0.98] transition-all text-sm uppercase tracking-tighter"
+                                className="w-full bg-gradient-to-r from-orange-600 to-amber-600 text-white font-black py-4 rounded-2xl shadow-[0_12px_30px_rgba(255,107,74,0.3)] active:scale-[0.98] transition-all text-sm uppercase tracking-tighter"
                             >
-                                🌙 REGISTAR NOITE DE SONO
+                                🌙 REGISTRAR NOITE DE SONO
                             </button>
                         </div>
                     </div>
@@ -6320,9 +6536,12 @@ import { createClient } from '@supabase/supabase-js';
             const [showNutriScanUpsell, setShowNutriScanUpsell] = useState(false);
             const [nutriUpsellReason, setNutriUpsellReason] = useState('post_workout');
             const [nutriUpsellContext, setNutriUpsellContext] = useState(null);
+            const [showWorkoutVictory, setShowWorkoutVictory] = useState(false);
             const [quickstartDismissed, setQuickstartDismissed] = useState(() => {
                 try { return localStorage.getItem('quickstart_dismissed_v1') === '1'; } catch { return false; }
             });
+            const oneSignalLoggedInRef = useRef(null);
+            const suppressNextUpsellRef = useRef(false);
 
             const openNutriScanUpsell = useCallback((reason = 'post_workout', context = null) => {
                 if (temAcessoNutriScan) return;
@@ -6331,11 +6550,39 @@ import { createClient } from '@supabase/supabase-js';
                 setShowNutriScanUpsell(true);
             }, [temAcessoNutriScan]);
 
-            useEffect(() => {
-                if (!ud.session || !ud.userProfile) return;
-                if (typeof window !== 'undefined' && Array.isArray(window.OneSignalDeferred)) {
+            const promptOneSignalPushIfNeeded = useCallback(() => {
+                if (typeof window === 'undefined' || !Array.isArray(window.OneSignalDeferred)) return;
+                try {
+                    const lastPromptTs = Number(localStorage.getItem('os_smart_prompt_ts') || '0');
+                    if (Date.now() - lastPromptTs < 3 * 24 * 60 * 60 * 1000) return;
                     window.OneSignalDeferred.push(async (OneSignal) => {
                         try {
+                            const optedIn = OneSignal.User?.PushSubscription?.optedIn;
+                            if (!optedIn && OneSignal.Notifications?.permission !== true) {
+                                localStorage.setItem('os_smart_prompt_ts', String(Date.now()));
+                                await OneSignal.Slidedown?.promptPush?.();
+                            }
+                        } catch {}
+                    });
+                } catch {}
+            }, []);
+
+            useEffect(() => {
+                if (!ud.session) return;
+                try { localStorage.setItem('has_logged_in_before', '1'); } catch {}
+                if (!ud.userProfile) return;
+                if (typeof window !== 'undefined' && Array.isArray(window.OneSignalDeferred)) {
+                    const uid = ud.session.user?.id;
+                    const userEmail = (ud.session.user?.email || ud.userProfile?.email || '').trim().toLowerCase();
+                    window.OneSignalDeferred.push(async (OneSignal) => {
+                        try {
+                            if (uid && oneSignalLoggedInRef.current !== uid) {
+                                oneSignalLoggedInRef.current = uid;
+                                await OneSignal.login(uid);
+                            }
+                            if (userEmail && userEmail.includes('@')) {
+                                await OneSignal.User.addEmail(userEmail);
+                            }
                             await OneSignal.User.addTags({
                                 app: 'br',
                                 goal: String(ud.userProfile?.goal || ud.userProfile?.objetivo_principal || 'geral'),
@@ -6351,6 +6598,10 @@ import { createClient } from '@supabase/supabase-js';
             
             useEffect(() => {
                 const handleShowModal = () => {
+                    if (suppressNextUpsellRef.current) {
+                        suppressNextUpsellRef.current = false;
+                        return;
+                    }
                     if (!temAcessoNutriScan) {
                         const todayKey = safeFormatDate(new Date());
                         let lastShown = '';
@@ -6653,6 +6904,7 @@ import { createClient } from '@supabase/supabase-js';
                 try {
                     const idsToCredit = completedDailyIds.length > 0 ? completedDailyIds : dailyWorkout.map(e => e.id);
                     if (idsToCredit.length > 0) {
+                        suppressNextUpsellRef.current = true;
                         ud.completeWorkout(idsToCredit);
                     }
                     if (window.supabase) {
@@ -6662,7 +6914,7 @@ import { createClient } from '@supabase/supabase-js';
                                 user_id: session.user.id,
                                 exercise_id: 'full-body-daily',
                                 weight: 0,
-                                reps: dailyWorkout.length || 7,
+                                reps: dailyWorkout.length || 4,
                                 set_number: 1
                             });
                         }
@@ -6671,9 +6923,11 @@ import { createClient } from '@supabase/supabase-js';
                     console.error('Erro ao concluir treino full body:', e);
                 } finally {
                     setDailyWorkoutOpen(false);
+                    setShowWorkoutVictory(true);
+                    promptOneSignalPushIfNeeded();
                     fetchUserStreaks();
                 }
-            }, [completedDailyIds, dailyWorkout, ud.completeWorkout, fetchUserStreaks]);
+            }, [completedDailyIds, dailyWorkout, ud.completeWorkout, fetchUserStreaks, promptOneSignalPushIfNeeded]);
 
             const isVipUser = temAcessoTotalVIP; 
 
@@ -6780,7 +7034,17 @@ import { createClient } from '@supabase/supabase-js';
 
             const isOnboardingIncomplete = !ud.userProfile || (!ud.userProfile.name && !(ud.userProfile.goal || ud.userProfile.objetivo_principal));
             if (isOnboardingIncomplete) {
-                return <Onboarding onComplete={ud.saveProfile} />;
+                return (
+                    <Onboarding
+                        onComplete={async (n, g, gen, a, est, wa) => {
+                            const res = await ud.saveProfile(n, g, gen, a, est, wa);
+                            if (!res?.error) {
+                                setTimeout(() => promptOneSignalPushIfNeeded(), 3500);
+                            }
+                            return res;
+                        }}
+                    />
+                );
             }
 
             const totalCompleted = ud.completedLog?.length || 0;
@@ -7207,7 +7471,7 @@ import { createClient } from '@supabase/supabase-js';
                                             <button
                                                 onClick={startDailyWorkout}
                                                 disabled={isLoadingExercises}
-                                                className={`flex-1 py-4 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl text-white font-black tracking-[0.14em] uppercase text-sm shadow-[0_8px_25px_rgba(255, 107, 74,0.3)] hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-3 ${isLoadingExercises ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                                className={`flex-1 py-4 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl text-white font-black tracking-[0.14em] uppercase text-sm shadow-[0_8px_25px_rgba(255,107,74,0.3)] hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-3 ${isLoadingExercises ? 'opacity-70 cursor-not-allowed' : ''}`}
                                             >
                                                 {isLoadingExercises ? (
                                                     <>
@@ -7247,7 +7511,7 @@ import { createClient } from '@supabase/supabase-js';
                                             }
                                         }}
                                         className="rounded-[28px] p-6 mb-6 relative overflow-hidden cursor-pointer border border-emerald-500/35 transition-all hover:scale-[1.01] active:scale-[0.99] shadow-2xl"
-                                        style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(27, 22, 34,0.96) 75%)' }}
+                                        style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(27,22,34,0.96) 75%)' }}
                                     >
                                         <div className="flex items-center justify-between gap-2 mb-3">
                                             <span className="inline-flex items-center gap-1.5 bg-emerald-500 text-slate-950 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">
@@ -7258,15 +7522,31 @@ import { createClient } from '@supabase/supabase-js';
                                             <span className="text-2xl">📸</span>
                                         </div>
                                         <h3 className="text-xl sm:text-2xl font-black text-white leading-tight mb-2">
-                                            Descubra as calorias do seu prato tirando uma foto
+                                            Descubra as calorias do seu prato em 3 segundos
                                         </h3>
-                                        <p className="text-[13px] text-slate-300 leading-relaxed font-medium mb-4">
+                                        <p className="text-[13px] text-slate-300 leading-relaxed font-medium mb-3">
                                             {freeScansRemainingGlobal > 0
-                                                ? 'Sem balança e sem anotar tudo na mão! Use agora seus testes grátis do Nutri-Scan™ IA e veja a mágica acontecer em 3 segundos.'
-                                                : 'Você já testou o Nutri-Scan™ IA! Libere análises ilimitadas com 7 dias grátis (depois apenas R$ 9,90/mês).'}
+                                                ? 'Sem balança e sem anotar tudo! Tire uma foto ou toque no que comeu hoje e veja o resultado na hora:'
+                                                : 'Você já testou o Nutri-Scan™ IA! Libere análises ilimitadas com 7 dias grátis (depois só R$ 0,33/dia).'}
                                         </p>
+
+                                        {/* MINI-PRÉVIA VISUAL DE UM PRATO ANALISADO */}
+                                        <div className="mb-4 p-3 rounded-2xl bg-black/35 border border-emerald-400/25 flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <span className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center text-lg shrink-0">🍽️</span>
+                                                <div className="min-w-0">
+                                                    <div className="text-xs font-black text-white truncate">Frango grelhado, arroz e feijão</div>
+                                                    <div className="text-[10px] text-emerald-300 font-bold">Proteína 38g · Carb 42g · Gord 11g</div>
+                                                </div>
+                                            </div>
+                                            <div className="text-right shrink-0">
+                                                <div className="text-sm font-black text-emerald-400 leading-none">460 kcal</div>
+                                                <div className="text-[9px] text-slate-400 font-bold mt-0.5">⚡ 3 seg</div>
+                                            </div>
+                                        </div>
+
                                         <div className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 px-5 rounded-2xl text-xs uppercase tracking-[0.14em] text-center transition-colors shadow-lg shadow-emerald-500/20">
-                                            {freeScansRemainingGlobal > 0 ? '📸 TESTAR NUTRI-SCAN GRÁTIS AGORA' : '👉 LIBERAR MEUS 7 DIAS GRÁTIS'}
+                                            {freeScansRemainingGlobal > 0 ? '📸 TESTAR NUTRI-SCAN GRÁTIS (1 TOQUE)' : '👉 LIBERAR MEUS 7 DIAS GRÁTIS'}
                                         </div>
                                     </div>
                                 )}
@@ -7296,7 +7576,7 @@ import { createClient } from '@supabase/supabase-js';
                                             onClick={() => setPage('extras')}
                                         >
                                             <div className="flex items-center gap-2 mb-2.5">
-                                                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-[0_0_14px_rgba(255, 107, 74,0.6)]"></span>
+                                                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-[0_0_14px_rgba(255,107,74,0.6)]"></span>
                                                 <span className="text-[11px] text-orange-300 font-black uppercase tracking-widest">
                                                     {isGoalMassa ? 'Recomendado para Ganhar Massa em Casa' : 'O Mais Escolhido para Secar e Definir'}
                                                 </span>
@@ -7506,7 +7786,7 @@ import { createClient } from '@supabase/supabase-js';
                                             onSelect={setSel}
                                         />
                                     ) : (
-                                        <TeaserDesafioPage ud={ud} onGoToExtras={() => navigateTo('extras')} />
+                                        <TeaserDesafioPage ud={ud} exercises={allExercises} onSelectExercise={setSel} onGoToExtras={() => navigateTo('extras')} />
                                     )
                                 ) : (
                                     <TreinoModuleLive 
@@ -7698,6 +7978,7 @@ import { createClient } from '@supabase/supabase-js';
                         <nav className="bottom-nav" aria-label="Navegação principal">
                             {MOBILE_NAV.map(n => {
                                 const showFreeNutriPill = n.id === 'arsenal-vip' && !temAcessoNutriScan && freeScansRemainingGlobal > 0;
+                                const showVipPill = n.id === 'extras' && !temAcessoPremium && !temAcessoTotalVIP;
                                 return (
                                     <button 
                                         key={n.id} 
@@ -7713,6 +7994,11 @@ import { createClient } from '@supabase/supabase-js';
                                         {showFreeNutriPill && (
                                             <span style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', background: '#10b981', color: '#022c22', fontSize: '7.5px', fontWeight: '900', padding: '1px 6px', borderRadius: '99px', lineHeight: '1.25', letterSpacing: '0.03em', whiteSpace: 'nowrap', boxShadow: '0 2px 8px rgba(16,185,129,0.5)', pointerEvents: 'none' }}>
                                                 {freeScansRemainingGlobal} GRÁTIS
+                                            </span>
+                                        )}
+                                        {showVipPill && (
+                                            <span style={{ position: 'absolute', top: '-12px', left: '50%', transform: 'translateX(-50%)', background: '#ff6b4a', color: '#ffffff', fontSize: '7.5px', fontWeight: '900', padding: '1px 6px', borderRadius: '99px', lineHeight: '1.25', letterSpacing: '0.04em', whiteSpace: 'nowrap', boxShadow: '0 2px 8px rgba(255,107,74,0.45)', pointerEvents: 'none' }}>
+                                                VIP
                                             </span>
                                         )}
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -7970,6 +8256,81 @@ import { createClient } from '@supabase/supabase-js';
                                 >
                                     Concluir Treino de Hoje (+500 XP)
                                 </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {showWorkoutVictory && (
+                        <div className="fixed inset-0 z-[100001] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && setShowWorkoutVictory(false)}>
+                            <div className="bg-slate-900 border border-white/15 rounded-[28px] w-full max-w-md p-6 text-center relative shadow-2xl animate-in zoom-in-95 duration-300">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowWorkoutVictory(false)}
+                                    aria-label="Fechar"
+                                    className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center"
+                                >&times;</button>
+                                <div className="text-5xl mb-3">🎉</div>
+                                <div className="inline-flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full mb-3">
+                                    +500 XP · 🔥 {Math.max(1, streakCount)} {Math.max(1, streakCount) === 1 ? 'dia seguido' : 'dias seguidos'}
+                                </div>
+                                <h2 className="text-2xl font-black text-white leading-tight mb-2">
+                                    Parabéns, {ud.userProfile?.name || 'campeã'}! Treino pago!
+                                </h2>
+                                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-5">
+                                    {!temAcessoNutriScan && freeScansRemainingGlobal > 0
+                                        ? 'Você mandou super bem! Agora cuide do que faz 70% do resultado: use 1 foto grátis no Nutri-Scan IA para calcular seu pós-treino em 3 segundos.'
+                                        : !temAcessoNutriScan
+                                        ? 'Treino garantido! Libere o Nutri-Scan IA ilimitado com 7 dias grátis para acompanhar sua alimentação sem balança.'
+                                        : !hasDesafio
+                                        ? 'Gostou de treinar em casa? Experimente grátis o Dia 1 do Desafio 30 Dias para ter um plano pronto na ordem certa!'
+                                        : 'Consistência é o que transforma o corpo! Nos vemos no próximo treino amanhã.'}
+                                </p>
+                                <div className="flex flex-col gap-2.5">
+                                    {!temAcessoNutriScan && freeScansRemainingGlobal > 0 ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                trackConversionEvent('victory_cta_nutri_free', { placement: 'workout_victory' });
+                                                setShowWorkoutVictory(false);
+                                                setPage('arsenal-vip');
+                                            }}
+                                            className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-slate-950 font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-600/25"
+                                        >
+                                            📸 Usar 1 Foto Grátis no Nutri-Scan ({freeScansRemainingGlobal} {freeScansRemainingGlobal === 1 ? 'restante' : 'restantes'})
+                                        </button>
+                                    ) : !temAcessoNutriScan ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setShowWorkoutVictory(false);
+                                                openHotmartCheckout('https://pay.hotmart.com/H106107115U?checkoutMode=10', { placement: 'workout_victory_nutri_7d', product: 'nutri_scan', ud });
+                                            }}
+                                            className="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-emerald-600/25"
+                                        >
+                                            👉 Liberar Nutri-Scan (7 Dias Grátis · R$ 0,33/dia)
+                                        </button>
+                                    ) : !hasDesafio ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                trackConversionEvent('victory_cta_desafio', { placement: 'workout_victory' });
+                                                setShowWorkoutVictory(false);
+                                                setTreinoSubTab('desafio30');
+                                                setPage('treinos');
+                                            }}
+                                            className="w-full py-4 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-orange-600/25"
+                                        >
+                                            🔥 Ver Dia 1 Grátis do Desafio 30 Dias →
+                                        </button>
+                                    ) : null}
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowWorkoutVictory(false)}
+                                        className="w-full py-2.5 text-xs text-slate-400 hover:text-white font-bold"
+                                    >
+                                        Voltar para o Início
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
