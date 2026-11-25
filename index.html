@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#0f172a">
+    <meta name="theme-color" content="#141118">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="manifest.json">
@@ -17,16 +17,35 @@
     <script src="./config.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        // Configuração segura do Tailwind
+        // Configuração segura do Tailwind — Paleta Estúdio Ameixa & Coral (Otimizada 35–60+)
         window.tailwind = window.tailwind || {};
         tailwind.config = {
             theme: {
                 extend: {
                     colors: {
                         brand: {
-                            primary: '#f97316',
-                            secondary: '#ea580c',
-                            dark: '#0f172a',
+                            primary: '#ff6b4a',
+                            secondary: '#e85334',
+                            dark: '#141118',
+                        },
+                        slate: {
+                            950: '#110e14',
+                            900: '#1b1622',
+                            800: '#251e2e',
+                            700: '#352b42',
+                            600: '#5a4d6b',
+                            500: '#988ba8',
+                            400: '#c8bed2',
+                            300: '#e2dae9',
+                            200: '#efeaf4',
+                            100: '#faf7f5',
+                        },
+                        orange: {
+                            300: '#ffa28a',
+                            400: '#ff8566',
+                            500: '#ff6b4a',
+                            600: '#e85334',
+                            700: '#c93f22',
                         }
                     },
                     backdropBlur: {
@@ -36,7 +55,7 @@
                         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                     },
                     boxShadow: {
-                        'neon-lg': '0 0 20px rgba(34, 211, 238, 0.4), 0 0 40px rgba(168, 85, 247, 0.2)',
+                        'neon-lg': '0 0 22px rgba(255, 107, 74, 0.32), 0 0 42px rgba(168, 85, 247, 0.16)',
                     }
                 }
             }
@@ -46,28 +65,28 @@
 
     <style>
         :root {
-            --bg-primary: #0a0a0c;
-            --bg-secondary: #0f172a;
-            --bg-card: #111827;
-            --bg-card-hover: #172033;
-            --bg-surface: #1f2937;
-            --bg-modal-overlay: rgba(0, 0, 0, 0.75);
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --accent: #f97316;
-            --accent-rgb: 249, 115, 22;
-            --accent-hover: #ea580c;
-            --accent-glow: rgba(249, 115, 22, 0.35);
-            --accent-soft: rgba(249, 115, 22, 0.12);
-            --green: #22c55e;
+            --bg-primary: #141118;
+            --bg-secondary: #1b1622;
+            --bg-card: #1f1926;
+            --bg-card-hover: #282032;
+            --bg-surface: #251e2e;
+            --bg-modal-overlay: rgba(14, 10, 18, 0.8);
+            --text-primary: #faf7f5;
+            --text-secondary: #c8bed2;
+            --text-muted: #9c90aa;
+            --accent: #ff6b4a;
+            --accent-rgb: 255, 107, 74;
+            --accent-hover: #e85334;
+            --accent-glow: rgba(255, 107, 74, 0.35);
+            --accent-soft: rgba(255, 107, 74, 0.14);
+            --green: #10b981;
             --red: #ef4444;
-            --border: rgba(255, 255, 255, 0.06);
+            --border: rgba(244, 214, 255, 0.09);
             --radius-md: 12px;
             --radius-lg: 16px;
             --radius-xl: 24px;
             --radius-full: 9999px;
-            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+            --shadow-lg: 0 10px 34px rgba(8, 5, 12, 0.55);
             --shadow-glow: 0 0 40px var(--accent-glow);
             --font-technical: 'Orbitron', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
@@ -102,7 +121,7 @@
             margin: 0;
             padding: 0;
             min-height: 100%;
-            background: #020617;
+            background: #141118;
             overflow-x: clip;
         }
 
@@ -112,7 +131,7 @@
             padding: 0;
             min-height: 100vh;
             min-height: 100dvh;
-            background: linear-gradient(135deg, #020617, #0f172a, #000000);
+            background: #141118;
             color: var(--text-primary);
             overflow-x: clip;
             position: relative;
@@ -136,17 +155,17 @@
         }
 
         @keyframes flash-pulse {
-            0%, 100% { box-shadow: 0 0 15px rgba(249, 115, 22, 0.2), inset 0 0 5px rgba(249, 115, 22, 0.1); }
-            50% { box-shadow: 0 0 35px rgba(249, 115, 22, 0.6), inset 0 0 15px rgba(249, 115, 22, 0.3); }
+            0%, 100% { box-shadow: 0 0 15px rgba(255, 107, 74, 0.18), inset 0 0 5px rgba(255, 107, 74, 0.08); }
+            50% { box-shadow: 0 0 32px rgba(255, 107, 74, 0.45), inset 0 0 14px rgba(255, 107, 74, 0.22); }
         }
         .flash-quest-card {
-            background: linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, rgba(15, 23, 42, 0.9) 100%);
-            border: 2px solid rgba(249, 115, 22, 0.4);
+            background: linear-gradient(135deg, rgba(255, 107, 74, 0.13) 0%, rgba(27, 22, 34, 0.94) 100%);
+            border: 2px solid rgba(255, 107, 74, 0.38);
             animation: flash-pulse 3s infinite;
         }
 
         h1, h2, h3, h4, h5, h6 {
-            color: #ffffff;
+            color: #faf7f5;
             margin-bottom: 0.5em;
         }
 
@@ -154,11 +173,7 @@
             content: '';
             position: fixed;
             inset: 0;
-            opacity: 0.05;
-            background-image: url('muscles.png');
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
+            background: radial-gradient(ellipse 95% 42% at 50% 0%, rgba(155, 93, 229, 0.11) 0%, rgba(255, 107, 74, 0.06) 36%, transparent 72%);
             pointer-events: none;
             z-index: 0;
         }
@@ -184,7 +199,7 @@
         .auth-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(15, 23, 42, 0.95);
+            background: rgba(27, 22, 34, 0.95);
             backdrop-filter: blur(12px);
             z-index: 10000;
             display: flex;
@@ -194,7 +209,7 @@
         }
 
         .auth-card {
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
+            background: linear-gradient(135deg, rgba(37, 30, 46, 0.95) 0%, rgba(27, 22, 34, 0.95) 100%);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: var(--radius-xl);
             padding: 48px 40px;
@@ -325,7 +340,7 @@
             position: sticky;
             top: 0;
             z-index: 50;
-            background: rgba(15, 23, 42, 0.65);
+            background: rgba(27, 22, 34, 0.65);
             backdrop-filter: blur(24px);
             -webkit-backdrop-filter: blur(24px);
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -357,7 +372,7 @@
         .search-input {
             width: 100%;
             height: 44px;
-            background: rgba(30, 41, 59, 0.5);
+            background: rgba(37, 30, 46, 0.5);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: var(--radius-full);
             padding: 0 16px 0 44px;
@@ -367,7 +382,7 @@
         }
 
         .search-input:focus {
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(37, 30, 46, 0.8);
             border-color: var(--accent);
             box-shadow: 0 0 0 3px var(--accent-soft);
         }
@@ -389,7 +404,7 @@
         }
 
         .hero {
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 40%, rgba(26, 8, 0, 0.8) 100%);
+            background: linear-gradient(135deg, rgba(37, 30, 46, 0.8) 0%, rgba(27, 22, 34, 0.9) 40%, rgba(26, 8, 0, 0.8) 100%);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -561,7 +576,7 @@
         }
 
         .onboarding-card {
-            background: rgba(30, 41, 59, 0.7);
+            background: rgba(37, 30, 46, 0.7);
             backdrop-filter: blur(32px);
             -webkit-backdrop-filter: blur(32px);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -600,7 +615,7 @@
 
         .ob-input {
             width: 100%;
-            background: rgba(15, 23, 42, 0.6);
+            background: rgba(27, 22, 34, 0.6);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: var(--radius-md);
             padding: 16px;
@@ -610,7 +625,7 @@
         }
 
         .ob-input option {
-            background-color: #0f172a;
+            background-color: #1b1622;
             color: #ffffff;
         }
 
@@ -618,7 +633,7 @@
             outline: none;
             border-color: var(--accent);
             box-shadow: 0 0 0 4px var(--accent-soft);
-            background: rgba(15, 23, 42, 0.8);
+            background: rgba(27, 22, 34, 0.8);
         }
 
         .goal-grid {
@@ -628,7 +643,7 @@
         }
 
         .goal-btn {
-            background: rgba(15, 23, 42, 0.6);
+            background: rgba(27, 22, 34, 0.6);
             border: 1px solid rgba(255, 255, 255, 0.1);
             padding: 16px;
             border-radius: var(--radius-md);
@@ -691,7 +706,7 @@
         }
 
         .progress-level-card {
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(15, 23, 42, 0.95) 100%);
+            background: linear-gradient(135deg, rgba(37, 30, 46, 0.9) 0%, rgba(27, 22, 34, 0.95) 100%);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.1);
@@ -732,7 +747,7 @@
         }
 
         .stat-premium-card {
-            background: rgba(30, 41, 59, 0.6);
+            background: rgba(37, 30, 46, 0.6);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.05);
@@ -746,7 +761,7 @@
 
         .stat-premium-card:hover {
             transform: translateY(-4px);
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(37, 30, 46, 0.8);
             border-color: rgba(255, 255, 255, 0.1);
         }
 
@@ -787,7 +802,7 @@
         }
 
         .progress-section-card {
-            background: rgba(30, 41, 59, 0.6);
+            background: rgba(37, 30, 46, 0.6);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.05);
@@ -847,7 +862,7 @@
         }
 
         .badge-card {
-            background: rgba(15, 23, 42, 0.5);
+            background: rgba(27, 22, 34, 0.5);
             border: 1px solid rgba(255, 255, 255, 0.05);
             border-radius: var(--radius-md);
             padding: 16px;
@@ -860,7 +875,7 @@
         .badge-card.unlocked {
             border-color: var(--bc);
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2), inset 0 0 20px -10px var(--bc);
-            background: rgba(30, 41, 59, 0.8);
+            background: rgba(37, 30, 46, 0.8);
         }
 
         .badge-card.locked {
@@ -894,7 +909,7 @@
             display: flex;
             align-items: center;
             padding: 16px;
-            background: rgba(15, 23, 42, 0.4);
+            background: rgba(27, 22, 34, 0.4);
             border: 1px solid rgba(255, 255, 255, 0.03);
             border-radius: var(--radius-md);
             gap: 16px;
@@ -942,7 +957,7 @@
         /* -- INICIO SMART SUGGESTION CSS -- */
         .smart-suggestion-wrapper {
             position: relative;
-            background: rgba(30, 41, 59, 0.7);
+            background: rgba(37, 30, 46, 0.7);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: var(--radius-xl);
             padding: 24px;
@@ -1084,7 +1099,7 @@
             align-items: center;
             justify-content: center;
             z-index: 10;
-            background: radial-gradient(circle at center, rgba(15, 23, 42, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%);
+            background: radial-gradient(circle at center, rgba(27, 22, 34, 0.8) 0%, rgba(27, 22, 34, 0.95) 100%);
             padding: 20px;
         }
 
@@ -1141,7 +1156,7 @@
 
         .btn-checkout {
             width: 100%;
-            background: linear-gradient(135deg, #f97316, #ea580c);
+            background: linear-gradient(135deg, #ff6b4a, #e85334);
             color: white;
             border: none;
             padding: 16px;
@@ -1415,10 +1430,10 @@
         .challenge-header {
             text-align: center;
             margin-bottom: 40px;
-            background: linear-gradient(135deg, rgba(249, 115, 22, 0.15), rgba(15, 23, 42, 0));
+            background: linear-gradient(135deg, rgba(255, 107, 74, 0.15), rgba(27, 22, 34, 0));
             padding: 40px;
             border-radius: var(--radius-xl);
-            border: 1px solid rgba(249, 115, 22, 0.2);
+            border: 1px solid rgba(255, 107, 74, 0.2);
         }
 
         .challenge-title {
@@ -1631,8 +1646,8 @@
 
         /* -- INSTALL APP CARD CSS -- */
         .install-app-card {
-            background: linear-gradient(135deg, rgba(22, 30, 50, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
-            border: 1px solid rgba(249, 115, 22, 0.2);
+            background: linear-gradient(135deg, rgba(35, 27, 45, 0.95) 0%, rgba(27, 22, 34, 0.98) 100%);
+            border: 1px solid rgba(255, 107, 74, 0.2);
             border-radius: 20px;
             padding: 28px;
             margin-bottom: 32px;
@@ -1643,7 +1658,7 @@
         }
 
         .install-app-card:hover {
-            border-color: rgba(249, 115, 22, 0.4);
+            border-color: rgba(255, 107, 74, 0.4);
         }
 
         .install-app-card::before {
@@ -1653,7 +1668,7 @@
             right: -20%;
             width: 40%;
             height: 180%;
-            background: radial-gradient(circle, rgba(249, 115, 22, 0.06) 0%, transparent 60%);
+            background: radial-gradient(circle, rgba(255, 107, 74, 0.06) 0%, transparent 60%);
             pointer-events: none;
         }
 
@@ -1687,7 +1702,7 @@
         .card-combo {
             width: 100%;
             text-align: left;
-            background: linear-gradient(145deg, rgba(15, 23, 42, 0.96) 0%, rgba(15, 23, 42, 0.9) 52%, rgba(124, 45, 18, 0.34) 100%);
+            background: linear-gradient(145deg, rgba(27, 22, 34, 0.96) 0%, rgba(27, 22, 34, 0.9) 52%, rgba(124, 45, 18, 0.34) 100%);
             backdrop-filter: blur(8px);
             border: 1px solid rgba(34, 211, 238, 0.32);
             border-radius: 20px;
@@ -1730,8 +1745,8 @@
             }
 
             50% {
-                border-color: rgba(15, 23, 42, 0.85);
-                box-shadow: 0 24px 60px rgba(0, 0, 0, 0.72), 0 0 8px rgba(15, 23, 42, 0.6);
+                border-color: rgba(27, 22, 34, 0.85);
+                box-shadow: 0 24px 60px rgba(0, 0, 0, 0.72), 0 0 8px rgba(27, 22, 34, 0.6);
             }
 
             100% {
@@ -1747,14 +1762,14 @@
             display: flex;
             flex-direction: column;
             gap: 12px;
-            background: rgba(2, 6, 23, 0.6);
+            background: rgba(17, 14, 20, 0.6);
             border: 1px solid rgba(255, 255, 255, 0.05);
             border-radius: 16px;
             padding: 12px;
         }
 
         .daily-workout-item {
-            background: linear-gradient(145deg, rgba(15, 23, 42, 0.92), rgba(17, 24, 39, 0.9));
+            background: linear-gradient(145deg, rgba(27, 22, 34, 0.92), rgba(31, 25, 38, 0.9));
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 16px;
             padding: 12px;
@@ -1772,7 +1787,7 @@
             border: 2px solid transparent;
             border-radius: 12px;
             margin-top: 10px;
-            background: #020617;
+            background: #110e14;
         }
 
         .daily-workout-item.active iframe {
@@ -1813,7 +1828,7 @@
         }
 
         .card-diff-badge.Intermediário {
-            background: rgba(249, 115, 22, 0.9);
+            background: rgba(255, 107, 74, 0.9);
             color: white;
         }
 
@@ -2077,7 +2092,7 @@
                 bottom: 0;
                 width: 100%;
                 z-index: 9999;
-                background: rgba(15, 23, 42, 0.96);
+                background: rgba(27, 22, 34, 0.96);
                 -webkit-backdrop-filter: blur(18px);
                 backdrop-filter: blur(18px);
                 border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -2616,7 +2631,7 @@
         }
 
         .streak-glow {
-            filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.6));
+            filter: drop-shadow(0 0 8px rgba(255, 107, 74, 0.6));
             animation: flame-flicker 3s infinite alternate;
         }
 
@@ -2680,7 +2695,7 @@
             position: absolute;
             top: 2px;
             right: 2px;
-            background: #f97316;
+            background: #ff6b4a;
             color: white;
             width: 16px;
             height: 16px;
@@ -2700,8 +2715,8 @@
             flex-direction: column;
             align-items: center;
             padding: 60px 24px 120px;
-            background: radial-gradient(circle at top right, rgba(249, 115, 22, 0.12), transparent 40%),
-                        radial-gradient(circle at bottom left, rgba(15, 23, 42, 0.8), transparent 50%),
+            background: radial-gradient(circle at top right, rgba(255, 107, 74, 0.12), transparent 40%),
+                        radial-gradient(circle at bottom left, rgba(27, 22, 34, 0.8), transparent 50%),
                         var(--bg-primary);
             text-align: center;
             animation: fade-in 1s cubic-bezier(0.16, 1, 0.3, 1);
@@ -2721,8 +2736,8 @@
         }
 
         .teaser-badge {
-            background: linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(249, 115, 22, 0.1));
-            color: #f97316;
+            background: linear-gradient(135deg, rgba(255, 107, 74, 0.2), rgba(255, 107, 74, 0.1));
+            color: #ff6b4a;
             padding: 10px 20px;
             border-radius: var(--radius-full);
             font-size: 13px;
@@ -2730,14 +2745,14 @@
             text-transform: uppercase;
             letter-spacing: 2.5px;
             margin-bottom: 32px;
-            border: 1px solid rgba(249, 115, 22, 0.4);
-            box-shadow: 0 0 20px rgba(249, 115, 22, 0.15);
+            border: 1px solid rgba(255, 107, 74, 0.4);
+            box-shadow: 0 0 20px rgba(255, 107, 74, 0.15);
             animation: pulse-border 2s infinite ease-in-out;
         }
 
         @keyframes pulse-border {
-            0%, 100% { border-color: rgba(249, 115, 22, 0.4); box-shadow: 0 0 20px rgba(249, 115, 22, 0.15); }
-            50% { border-color: rgba(249, 115, 22, 0.8); box-shadow: 0 0 35px rgba(249, 115, 22, 0.3); }
+            0%, 100% { border-color: rgba(255, 107, 74, 0.4); box-shadow: 0 0 20px rgba(255, 107, 74, 0.15); }
+            50% { border-color: rgba(255, 107, 74, 0.8); box-shadow: 0 0 35px rgba(255, 107, 74, 0.3); }
         }
 
         .teaser-title {
@@ -2751,7 +2766,7 @@
         }
 
         .teaser-title span.highlight {
-            background: linear-gradient(to right, #f97316, #fb923c);
+            background: linear-gradient(to right, #ff6b4a, #fb923c);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             display: block;
@@ -2777,14 +2792,14 @@
         .teaser-square {
             width: 20px;
             height: 20px;
-            background: rgba(249, 115, 22, 0.2);
-            border: 1px solid rgba(249, 115, 22, 0.4);
+            background: rgba(255, 107, 74, 0.2);
+            border: 1px solid rgba(255, 107, 74, 0.4);
             border-radius: 4px;
         }
 
         .teaser-square.active {
-            background: #f97316;
-            box-shadow: 0 0 10px rgba(249, 115, 22, 0.5);
+            background: #ff6b4a;
+            box-shadow: 0 0 10px rgba(255, 107, 74, 0.5);
         }
 
         .teaser-ia-icon-wrapper {
@@ -2797,7 +2812,7 @@
 
         .teaser-ia-icon {
             font-size: 84px;
-            filter: drop-shadow(0 0 30px rgba(249, 115, 22, 0.4));
+            filter: drop-shadow(0 0 30px rgba(255, 107, 74, 0.4));
             animation: float 4s ease-in-out infinite;
             z-index: 2;
         }
@@ -2806,7 +2821,7 @@
             position: absolute;
             width: 160px;
             height: 160px;
-            background: radial-gradient(circle, rgba(249, 115, 22, 0.15) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(255, 107, 74, 0.15) 0%, transparent 70%);
             border-radius: 50%;
             z-index: 1;
             animation: pulse-slow 3s infinite;
@@ -2822,7 +2837,7 @@
         }
 
         .benefit-card {
-            background: rgba(30, 41, 59, 0.4);
+            background: rgba(37, 30, 46, 0.4);
             backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.08);
             padding: 20px 24px;
@@ -2835,8 +2850,8 @@
         }
 
         .benefit-card:hover {
-            background: rgba(30, 41, 59, 0.7);
-            border-color: rgba(249, 115, 22, 0.4);
+            background: rgba(37, 30, 46, 0.7);
+            border-color: rgba(255, 107, 74, 0.4);
             transform: translateX(8px);
         }
 
@@ -2844,16 +2859,16 @@
            UPGRADE ULTRA-PREMIUM: MODO TITÃ (DESAFIO 30 DIAS)
         ================================================================ */
         @keyframes glow-pulse-orange {
-            0% { box-shadow: 0 0 5px rgba(249, 115, 22, 0.2), inset 0 0 5px rgba(249, 115, 22, 0.1); }
-            50% { box-shadow: 0 0 20px rgba(249, 115, 22, 0.6), inset 0 0 10px rgba(249, 115, 22, 0.3); border-color: #f97316; }
-            100% { box-shadow: 0 0 5px rgba(249, 115, 22, 0.2), inset 0 0 5px rgba(249, 115, 22, 0.1); }
+            0% { box-shadow: 0 0 5px rgba(255, 107, 74, 0.2), inset 0 0 5px rgba(255, 107, 74, 0.1); }
+            50% { box-shadow: 0 0 20px rgba(255, 107, 74, 0.6), inset 0 0 10px rgba(255, 107, 74, 0.3); border-color: #ff6b4a; }
+            100% { box-shadow: 0 0 5px rgba(255, 107, 74, 0.2), inset 0 0 5px rgba(255, 107, 74, 0.1); }
         }
 
         .day-current {
             animation: glow-pulse-orange 2s infinite ease-in-out;
             z-index: 10;
-            border-color: #f97316 !important;
-            background: rgba(249, 115, 22, 0.1) !important;
+            border-color: #ff6b4a !important;
+            background: rgba(255, 107, 74, 0.1) !important;
         }
 
         .day-locked {
@@ -2918,7 +2933,7 @@
         }
 
         .tactical-stat {
-            background: rgba(15, 23, 42, 0.6);
+            background: rgba(27, 22, 34, 0.6);
             border: 1px solid rgba(255,255,255,0.05);
             padding: 16px;
             border-radius: 20px;
@@ -2935,7 +2950,7 @@
             content: '';
             position: absolute;
             top: 0; left: 0; right: 0; height: 1px;
-            background: linear-gradient(90deg, transparent, rgba(249, 115, 22, 0.5), transparent);
+            background: linear-gradient(90deg, transparent, rgba(255, 107, 74, 0.5), transparent);
             animation: scan-line 4s linear infinite;
         }
 
@@ -2957,7 +2972,7 @@
         }
 
         .benefit-text b {
-            color: #f97316;
+            color: #ff6b4a;
         }
 
         /* Fixed CTA Container */
@@ -2975,7 +2990,7 @@
         }
 
         .btn-premium-unlock {
-            background: linear-gradient(135deg, #f97316, #ea580c);
+            background: linear-gradient(135deg, #ff6b4a, #e85334);
             color: white;
             width: 100%;
             max-width: 500px;
@@ -2985,7 +3000,7 @@
             font-weight: 900;
             text-transform: uppercase;
             letter-spacing: 1.5px;
-            box-shadow: 0 12px 32px rgba(249, 115, 22, 0.45);
+            box-shadow: 0 12px 32px rgba(255, 107, 74, 0.45);
             cursor: pointer;
             transition: all 0.3s;
             border: 1px solid rgba(255, 255, 255, 0.2);
@@ -3012,7 +3027,7 @@
 
         .btn-premium-unlock:active {
             transform: scale(0.97);
-            box-shadow: 0 6px 20px rgba(249, 115, 22, 0.3);
+            box-shadow: 0 6px 20px rgba(255, 107, 74, 0.3);
         }
 
         @keyframes slide-up {
@@ -3021,9 +3036,9 @@
         }
 
         @keyframes pulse-glow {
-            0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4); }
-            70% { box-shadow: 0 0 0 20px rgba(249, 115, 22, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
+            0% { box-shadow: 0 0 0 0 rgba(255, 107, 74, 0.4); }
+            70% { box-shadow: 0 0 0 20px rgba(255, 107, 74, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 107, 74, 0); }
         }
     
             @keyframes spinWave { 100% { transform: rotate(360deg); } }
@@ -3032,7 +3047,7 @@
                 width: 220px;
                 height: 220px;
                 border-radius: 50%;
-                background: rgba(15, 23, 42, 0.6);
+                background: rgba(27, 22, 34, 0.6);
                 border: 4px solid rgba(56, 189, 248, 0.3);
                 overflow: hidden;
                 margin: 0 auto;
@@ -3102,7 +3117,7 @@
                 text-align: center;
             }
             .custom-water-input {
-                background: rgba(15, 23, 42, 0.6);
+                background: rgba(27, 22, 34, 0.6);
                 border: 1px solid rgba(56, 189, 248, 0.3);
                 border-radius: 12px;
                 color: #fff;
@@ -3119,7 +3134,7 @@
             }
             .custom-water-add-btn {
                 background: #38bdf8;
-                color: #0f172a;
+                color: #1b1622;
                 border: none;
                 border-radius: 12px;
                 padding: 12px 24px;

@@ -765,10 +765,10 @@ import { createClient } from '@supabase/supabase-js';
                     {axes.map((a, i) => (
                         <line key={i} x1={cx} y1={cy} x2={cx + r * Math.cos(a.angle)} y2={cy + r * Math.sin(a.angle)} stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
                     ))}
-                    <polygon points={dataPolygon} fill="rgba(249,115,22,0.25)" stroke="#f97316" strokeWidth="2" strokeLinejoin="round" />
+                    <polygon points={dataPolygon} fill="rgba(255, 107, 74,0.25)" stroke="#ff6b4a" strokeWidth="2" strokeLinejoin="round" />
                     {axes.map((a, i) => {
                         const scale = (a.pct / 100) || 0;
-                        return <circle key={i} cx={cx + r * scale * Math.cos(a.angle)} cy={cy + r * scale * Math.sin(a.angle)} r="3.5" fill="#f97316" />;
+                        return <circle key={i} cx={cx + r * scale * Math.cos(a.angle)} cy={cy + r * scale * Math.sin(a.angle)} r="3.5" fill="#ff6b4a" />;
                     })}
                     {axes.map((a, i) => {
                         const labelR = r + 28; // Slightly more distance for safety
@@ -830,7 +830,7 @@ import { createClient } from '@supabase/supabase-js';
             }, [form, saveMetaProfile]);
 
             return (
-                <div className="progress-section-card" style={{ marginBottom: '24px', animation: 'fade-in 0.5s ease-out', border: '1px solid rgba(249,115,22,0.2)', background: 'linear-gradient(135deg, rgba(249,115,22,0.05), rgba(15,23,42,0.8))' }}>
+                <div className="progress-section-card" style={{ marginBottom: '24px', animation: 'fade-in 0.5s ease-out', border: '1px solid rgba(255, 107, 74,0.2)', background: 'linear-gradient(135deg, rgba(255, 107, 74,0.05), rgba(27, 22, 34,0.8))' }}>
                     <h3 className="ps-title">{goalIcon} Combustível de Crescimento</h3>
                     {!hasProfile || showForm ? (
                         <div>
@@ -876,7 +876,7 @@ import { createClient } from '@supabase/supabase-js';
                                             <span>{kcalPct}%</span>
                                         </div>
                                         <div style={{ height: '8px', background: 'rgba(255,255,255,0.08)', borderRadius: '99px', overflow: 'hidden' }}>
-                                            <div style={{ height: '100%', width: `${kcalPct}%`, background: 'linear-gradient(90deg, #f97316, #fbbf24)', borderRadius: '99px', transition: 'width 0.8s ease' }}></div>
+                                            <div style={{ height: '100%', width: `${kcalPct}%`, background: 'linear-gradient(90deg, #ff6b4a, #fbbf24)', borderRadius: '99px', transition: 'width 0.8s ease' }}></div>
                                         </div>
                                     </div>
                                     <p style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
@@ -922,11 +922,11 @@ import { createClient } from '@supabase/supabase-js';
                                         <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{m.cat} · Esta semana</div>
                                     </div>
                                 </div>
-                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#f97316', flexShrink: 0 }}>+{m.xp} XP</span>
+                                <span style={{ fontSize: '12px', fontWeight: '700', color: '#ff6b4a', flexShrink: 0 }}>+{m.xp} XP</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <div style={{ flex: 1, height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '99px', overflow: 'hidden' }}>
-                                    <div style={{ height: '100%', width: `${(m.done / m.target) * 100}%`, background: m.completed ? '#22c55e' : 'linear-gradient(90deg, #f97316, #fbbf24)', borderRadius: '99px', transition: 'width 0.8s ease' }}></div>
+                                    <div style={{ height: '100%', width: `${(m.done / m.target) * 100}%`, background: m.completed ? '#22c55e' : 'linear-gradient(90deg, #ff6b4a, #fbbf24)', borderRadius: '99px', transition: 'width 0.8s ease' }}></div>
                                 </div>
                                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)', flexShrink: 0 }}>{m.done}/{m.target}</span>
                             </div>
@@ -1082,8 +1082,8 @@ import { createClient } from '@supabase/supabase-js';
 
                         {!isEditMode && (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '14px' }}>
-                                <span style={{ height: '5px', width: '44px', borderRadius: '99px', background: '#f97316' }}></span>
-                                <span style={{ height: '5px', width: '44px', borderRadius: '99px', background: step === 2 ? '#f97316' : 'rgba(255,255,255,0.14)' }}></span>
+                                <span style={{ height: '5px', width: '44px', borderRadius: '99px', background: '#ff6b4a' }}></span>
+                                <span style={{ height: '5px', width: '44px', borderRadius: '99px', background: step === 2 ? '#ff6b4a' : 'rgba(255,255,255,0.14)' }}></span>
                                 <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Passo {step} de 2</span>
                             </div>
                         )}
@@ -1118,8 +1118,8 @@ import { createClient } from '@supabase/supabase-js';
                                                 style={{
                                                     padding: '12px 10px',
                                                     borderRadius: '14px',
-                                                    border: goal === g.value ? '2px solid #f97316' : '1px solid rgba(255,255,255,0.1)',
-                                                    background: goal === g.value ? 'rgba(249, 115, 22, 0.18)' : 'rgba(255,255,255,0.03)',
+                                                    border: goal === g.value ? '2px solid #ff6b4a' : '1px solid rgba(255,255,255,0.1)',
+                                                    background: goal === g.value ? 'rgba(255, 107, 74, 0.18)' : 'rgba(255,255,255,0.03)',
                                                     color: '#fff',
                                                     textAlign: 'left',
                                                     cursor: 'pointer',
@@ -1153,7 +1153,7 @@ import { createClient } from '@supabase/supabase-js';
                                     </div>
                                 )}
 
-                                <button type="submit" className="ob-submit-btn" style={{ width: '100%', marginTop: '16px', padding: '15px', background: 'linear-gradient(135deg, #f97316, #ea580c)', color: '#fff', borderRadius: '14px', fontWeight: '900', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: isStep1Ready ? 1 : 0.65 }}>
+                                <button type="submit" className="ob-submit-btn" style={{ width: '100%', marginTop: '16px', padding: '15px', background: 'linear-gradient(135deg, #ff6b4a, #e85334)', color: '#fff', borderRadius: '14px', fontWeight: '900', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: isStep1Ready ? 1 : 0.65 }}>
                                     CONTINUAR <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
                                 </button>
                             </form>
@@ -1169,7 +1169,7 @@ import { createClient } from '@supabase/supabase-js';
                                             <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU PRINCIPAL OBJETIVO</label>
                                             <div className="goal-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '6px' }}>
                                                 {GOAL_OPTIONS.map(g => (
-                                                    <button type="button" key={g.value} onClick={() => setGoal(g.value)} style={{ padding: '10px', borderRadius: '12px', border: goal === g.value ? '2px solid #f97316' : '1px solid rgba(255,255,255,0.1)', background: goal === g.value ? 'rgba(249, 115, 22, 0.18)' : 'rgba(255,255,255,0.03)', color: goal === g.value ? '#fff' : 'var(--text-secondary)', fontSize: '12.5px', fontWeight: '700' }}>
+                                                    <button type="button" key={g.value} onClick={() => setGoal(g.value)} style={{ padding: '10px', borderRadius: '12px', border: goal === g.value ? '2px solid #ff6b4a' : '1px solid rgba(255,255,255,0.1)', background: goal === g.value ? 'rgba(255, 107, 74, 0.18)' : 'rgba(255,255,255,0.03)', color: goal === g.value ? '#fff' : 'var(--text-secondary)', fontSize: '12.5px', fontWeight: '700' }}>
                                                         {g.emoji} {g.title}
                                                     </button>
                                                 ))}
@@ -1209,14 +1209,14 @@ import { createClient } from '@supabase/supabase-js';
                                                     borderRadius: '12px',
                                                     borderWidth: selectedGender === g.id ? '2px' : '1.5px',
                                                     borderStyle: 'solid',
-                                                    borderColor: selectedGender === g.id ? '#f97316' : 'rgba(255,255,255,0.1)',
-                                                    background: selectedGender === g.id ? 'rgba(249,115,22,0.18)' : 'rgba(255,255,255,0.03)',
+                                                    borderColor: selectedGender === g.id ? '#ff6b4a' : 'rgba(255,255,255,0.1)',
+                                                    background: selectedGender === g.id ? 'rgba(255, 107, 74,0.18)' : 'rgba(255,255,255,0.03)',
                                                     color: selectedGender === g.id ? '#fff' : 'var(--text-secondary)',
                                                     transition: 'all 0.2s'
                                                 }}
                                             >
                                                 <span style={{ fontSize: '22px' }}>{g.emoji}</span>
-                                                <span style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', color: selectedGender === g.id ? '#f97316' : 'inherit' }}>{g.label}</span>
+                                                <span style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', color: selectedGender === g.id ? '#ff6b4a' : 'inherit' }}>{g.label}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -1224,9 +1224,9 @@ import { createClient } from '@supabase/supabase-js';
 
                                 <div className="input-group" style={{ marginTop: '14px' }}>
                                     <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU ESTADO <span style={{ opacity: 0.65 }}>(OPCIONAL)</span></label>
-                                    <select className="ob-input" value={estado} onChange={e => setEstado(e.target.value)} style={{ width: '100%', background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px', colorScheme: 'dark' }}>
-                                        <option value="" style={{ background: '#0f172a', color: '#94a3b8' }}>Selecione o seu estado (opcional)...</option>
-                                        {ESTADOS_BR.map(uf => <option key={uf} value={uf} style={{ background: '#0f172a', color: '#fff' }}>{uf}</option>)}
+                                    <select className="ob-input" value={estado} onChange={e => setEstado(e.target.value)} style={{ width: '100%', background: '#1b1622', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px', colorScheme: 'dark' }}>
+                                        <option value="" style={{ background: '#1b1622', color: '#94a3b8' }}>Selecione o seu estado (opcional)...</option>
+                                        {ESTADOS_BR.map(uf => <option key={uf} value={uf} style={{ background: '#1b1622', color: '#fff' }}>{uf}</option>)}
                                     </select>
                                 </div>
 
@@ -1243,7 +1243,7 @@ import { createClient } from '@supabase/supabase-js';
                                     </div>
                                 )}
 
-                                <button type="submit" className="ob-submit-btn" disabled={saving} style={{ width: '100%', marginTop: '16px', padding: '15px', background: 'linear-gradient(135deg, #f97316, #ea580c)', color: '#fff', borderRadius: '14px', fontWeight: '900', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: saving ? 0.65 : 1 }}>
+                                <button type="submit" className="ob-submit-btn" disabled={saving} style={{ width: '100%', marginTop: '16px', padding: '15px', background: 'linear-gradient(135deg, #ff6b4a, #e85334)', color: '#fff', borderRadius: '14px', fontWeight: '900', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: saving ? 0.65 : 1 }}>
                                     {saving ? 'SALVANDO...' : (isEditMode ? 'SALVAR ALTERAÇÕES' : 'ENTRAR NO MEU PLANO')} <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" /></svg>
                                 </button>
 
@@ -1382,7 +1382,7 @@ import { createClient } from '@supabase/supabase-js';
                 >
                     <div
                         className="relative w-full max-w-md max-h-[90vh] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl pointer-events-auto isolation-auto modal"
-                        style={{ position: 'relative', width: '100%', maxWidth: '28rem', maxHeight: '90vh', background: '#0f172a', borderRadius: '1rem', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', pointerEvents: 'auto', isolation: 'auto' }}
+                        style={{ position: 'relative', width: '100%', maxWidth: '28rem', maxHeight: '90vh', background: '#1b1622', borderRadius: '1rem', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', pointerEvents: 'auto', isolation: 'auto' }}
                         onClick={e => e.stopPropagation()}
                     >
                         {/* Botão Fechar */}
@@ -1413,7 +1413,7 @@ import { createClient } from '@supabase/supabase-js';
                                         <button
                                             type="button"
                                             onClick={() => { setVideoError(false); setVideoQuality('720p'); }}
-                                            style={{ background: '#f97316', color: '#fff', border: 'none', borderRadius: '10px', padding: '8px 14px', fontSize: '12px', fontWeight: '800', cursor: 'pointer' }}
+                                            style={{ background: '#ff6b4a', color: '#fff', border: 'none', borderRadius: '10px', padding: '8px 14px', fontSize: '12px', fontWeight: '800', cursor: 'pointer' }}
                                         >
                                             🔄 Tentar novamente
                                         </button>
@@ -1465,7 +1465,7 @@ import { createClient } from '@supabase/supabase-js';
                                             aria-label="Reproduzir exercício"
                                             onClick={(e) => { e.stopPropagation(); startPlayback(); }}
                                             className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center text-white shadow-lg outline-none focus:outline-none select-none pointer-events-auto hover:bg-orange-600 transition-transform hover:scale-105"
-                                            style={{ width: '64px', height: '64px', background: '#f97316', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)', pointerEvents: 'auto', border: 'none', cursor: 'pointer', transition: 'transform 0.2s, background-color 0.2s', WebkitTapHighlightColor: 'transparent' }}
+                                            style={{ width: '64px', height: '64px', background: '#ff6b4a', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)', pointerEvents: 'auto', border: 'none', cursor: 'pointer', transition: 'transform 0.2s, background-color 0.2s', WebkitTapHighlightColor: 'transparent' }}
                                         >
                                             <svg className="w-8 h-8 ml-1" style={{ width: '32px', height: '32px', marginLeft: '4px' }} fill="currentColor" viewBox="0 0 20 20">
                                                 <path d="M4 4l12 6-12 6z" />
@@ -1478,7 +1478,7 @@ import { createClient } from '@supabase/supabase-js';
                             {/* Área de Conteúdo ("Guia Técnico") */}
                             <div
                                 className="p-5 relative z-10 pointer-events-auto bg-slate-900 modal-body"
-                                style={{ padding: '20px', position: 'relative', zIndex: 10, pointerEvents: 'auto', background: '#0f172a', margin: 0, marginTop: 0 }}
+                                style={{ padding: '20px', position: 'relative', zIndex: 10, pointerEvents: 'auto', background: '#1b1622', margin: 0, marginTop: 0 }}
                             >
                                 <h2 className="modal-title" style={{ fontSize: '26px', lineHeight: '1.2' }}>{title}</h2>
                                 {(category || difficulty) && (
@@ -1513,17 +1513,17 @@ import { createClient } from '@supabase/supabase-js';
 
                                 {!['cardio', 'outros'].includes(category.toLowerCase()) && (
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', width: '100%', marginTop: '16px' }}>
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '94px', borderRadius: '16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(74, 222, 128, 0.3)' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '94px', borderRadius: '16px', background: 'rgba(37, 30, 46, 0.5)', border: '1px solid rgba(74, 222, 128, 0.3)' }}>
                                             <span style={{ color: '#4ade80', fontSize: '13px', fontWeight: 'bold' }}>Séries</span>
                                             <span style={{ color: '#ffffff', fontSize: '22px', fontWeight: '800', margin: '4px 0' }}>{ex.sets || '3'}</span>
                                             <span style={{ color: '#94a3b8', fontSize: '11px' }}>Blocos</span>
                                         </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '94px', borderRadius: '16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(250, 204, 21, 0.3)' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '94px', borderRadius: '16px', background: 'rgba(37, 30, 46, 0.5)', border: '1px solid rgba(250, 204, 21, 0.3)' }}>
                                             <span style={{ color: '#facc15', fontSize: '13px', fontWeight: 'bold' }}>Repetições</span>
                                             <span style={{ color: '#ffffff', fontSize: '22px', fontWeight: '800', margin: '4px 0' }}>{ex.reps ? String(ex.reps).replace(/reps|movimentos/gi, '').trim() : '15'}</span>
                                             <span style={{ color: '#94a3b8', fontSize: '11px' }}>Movimentos</span>
                                         </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '94px', borderRadius: '16px', background: 'rgba(30, 41, 59, 0.5)', border: '1px solid rgba(248, 113, 113, 0.3)' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '94px', borderRadius: '16px', background: 'rgba(37, 30, 46, 0.5)', border: '1px solid rgba(248, 113, 113, 0.3)' }}>
                                             <span style={{ color: '#f87171', fontSize: '13px', fontWeight: 'bold' }}>Descanso</span>
                                             <span style={{ color: '#ffffff', fontSize: '22px', fontWeight: '800', margin: '4px 0' }}>{ex.rest ? String(ex.rest).replace(/s|seg|segundos/gi, '').trim() : '60'}</span>
                                             <span style={{ color: '#94a3b8', fontSize: '11px' }}>Segundos</span>
@@ -1561,7 +1561,7 @@ import { createClient } from '@supabase/supabase-js';
                     <div className="teaser-badge">🔒 CONTEÚDO EXCLUSIVO</div>
                     
                     <div className="teaser-ia-icon-wrapper">
-                        <div className="teaser-ia-icon-bg" style={{ background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' }}></div>
+                        <div className="teaser-ia-icon-bg" style={{ background: 'linear-gradient(135deg, #ff6b4a 0%, #e85334 100%)' }}></div>
                         <div className="teaser-ia-icon">✨💪</div>
                     </div>
                     
@@ -1784,10 +1784,10 @@ import { createClient } from '@supabase/supabase-js';
             const isGreen = glowColor === 'green';
             const glowClass = isGreen 
                 ? 'shadow-[0_0_35px_-6px_rgba(16,185,129,0.45)] border-2 border-emerald-500/50' 
-                : 'shadow-[0_0_35px_-6px_rgba(249,115,22,0.45)] border-2 border-orange-500/50';
+                : 'shadow-[0_0_35px_-6px_rgba(255, 107, 74,0.45)] border-2 border-orange-500/50';
 
             return (
-                <div className={`p-6 rounded-[24px] bg-[#1e2330] flex flex-col relative overflow-hidden transition-all duration-300 ${glow ? glowClass : 'border border-white/10 hover:bg-[#252b3a]'}`}>
+                <div className={`p-6 rounded-[24px] bg-[#211b29] flex flex-col relative overflow-hidden transition-all duration-300 ${glow ? glowClass : 'border border-white/10 hover:bg-[#2b2335]'}`}>
                     {ribbon && (
                         <div className="absolute top-0 right-0 w-28 h-28 overflow-hidden pointer-events-none z-20">
                             <div className={`absolute top-4 -right-8 w-36 ${isGreen ? 'bg-gradient-to-r from-emerald-600 to-emerald-500' : 'bg-gradient-to-r from-orange-600 to-amber-500'} text-white text-center font-black text-[8px] py-1.5 rotate-45 shadow-2xl uppercase tracking-[0.15em] border-y border-white/10`}>
@@ -2150,7 +2150,7 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
                     )}
 
-                    <div id="redeem-code-section" ref={redeemSectionRef} className="mt-12 p-7 bg-[#1e2330] rounded-[28px] border border-dashed border-white/15 text-center">
+                    <div id="redeem-code-section" ref={redeemSectionRef} className="mt-12 p-7 bg-[#211b29] rounded-[28px] border border-dashed border-white/15 text-center">
                         <h3 className="text-white font-black uppercase tracking-[0.2em] text-xs mb-2">Já comprou na Hotmart? Ative seu código aqui</h3>
                         <p className="text-slate-400 text-xs mb-5">Digite o código que você recebeu por e-mail para liberar imediatamente na sua conta.</p>
                         <form onSubmit={handleRedeemCode} className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto">
@@ -2215,7 +2215,7 @@ import { createClient } from '@supabase/supabase-js';
                                 <iframe 
                                     src={`https://docs.google.com/gview?url=${encodeURIComponent(viewingPdf.url)}&embedded=true`}
                                     className="w-full h-full border-none"
-                                    style={{ background: '#0f172a' }}
+                                    style={{ background: '#1b1622' }}
                                     title={viewingPdf.title}
                                     onLoad={() => setPdfLoading(false)}
                                 />
@@ -2760,7 +2760,7 @@ import { createClient } from '@supabase/supabase-js';
                             </div>
                         </div>
                         <div className="h-4 w-full bg-white/5 rounded-full overflow-hidden border border-white/5 mb-3">
-                            <div className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full shadow-[0_0_15px_rgba(249,115,22,0.4)]" style={{ width: `${progressPct}%` }}></div>
+                            <div className="h-full bg-gradient-to-r from-orange-500 to-amber-400 rounded-full shadow-[0_0_15px_rgba(255, 107, 74,0.4)]" style={{ width: `${progressPct}%` }}></div>
                         </div>
                         <div className="flex justify-between text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                             <span>Zona Ideal: {Math.round(metaKcal * 0.9)} - {Math.round(metaKcal * 1.1)}</span>
@@ -3258,7 +3258,7 @@ import { createClient } from '@supabase/supabase-js';
 
                     {isAnalyzing && (
                         <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex flex-col items-center justify-center z-[250000] p-6 text-center animate-in fade-in duration-300">
-                            <div className="w-16 h-16 border-4 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mb-6 shadow-[0_0_30px_rgba(249,115,22,0.3)]"></div>
+                            <div className="w-16 h-16 border-4 border-orange-500/20 border-t-orange-500 rounded-full animate-spin mb-6 shadow-[0_0_30px_rgba(255, 107, 74,0.3)]"></div>
                             <p className="text-white font-black text-xl uppercase tracking-widest animate-pulse">IA Analisando...</p>
                             <p className="text-slate-400 text-xs mt-2 uppercase tracking-tight">Identificando os alimentos e calorias do seu prato</p>
                             <button
@@ -3329,8 +3329,8 @@ import { createClient } from '@supabase/supabase-js';
             else img = './assets/categories/outros.png';
 
             return (
-                <div className="bg-[#1e2330] rounded-[20px] overflow-hidden border border-white/5 flex flex-row items-stretch transition-all active:scale-95 shadow-lg shadow-black/40" onClick={() => onClick({id: ex.id, nome: ex.title, media: ex.video_url})} style={{ cursor: 'pointer' }}>
-                    <div className="w-24 bg-[#0a0a0c] relative flex-shrink-0">
+                <div className="bg-[#211b29] rounded-[20px] overflow-hidden border border-white/5 flex flex-row items-stretch transition-all active:scale-95 shadow-lg shadow-black/40" onClick={() => onClick({id: ex.id, nome: ex.title, media: ex.video_url})} style={{ cursor: 'pointer' }}>
+                    <div className="w-24 bg-[#141118] relative flex-shrink-0">
                         <img src={img} onError={(e) => { e.target.src = "muscles.png" }} className="w-full h-full object-cover opacity-50 mix-blend-screen" />
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="w-8 h-8 rounded-full bg-orange-600 shadow-lg shadow-orange-600/30 flex items-center justify-center pl-1 backdrop-blur-sm">
@@ -3514,7 +3514,7 @@ import { createClient } from '@supabase/supabase-js';
                 <div className="cronograma-page p-4 sm:p-6 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-40">
                     
                     {/* Header Dinâmico Modo Titã */}
-                    <div className="bg-[#1e2330] rounded-[32px] p-8 mb-8 border border-white/5 relative overflow-hidden shadow-2xl">
+                    <div className="bg-[#211b29] rounded-[32px] p-8 mb-8 border border-white/5 relative overflow-hidden shadow-2xl">
                         <div className="absolute top-0 right-0 p-4 opacity-10 rotate-12 scale-150 pointer-events-none text-orange-500">
                             <svg width="120" height="120" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                         </div>
@@ -3539,7 +3539,7 @@ import { createClient } from '@supabase/supabase-js';
                         <div className="h-3 bg-black/40 rounded-full overflow-hidden mb-6 border border-white/5">
                             <div 
                                 className={`h-full transition-all duration-1000 ${rank.name === 'DESTAQUE' ? 'bg-gradient-to-r from-red-600 via-orange-500 to-yellow-400' : 'bg-gradient-to-r from-orange-600 to-orange-400'}`}
-                                style={{ width: `${progressPercent}%`, boxShadow: '0 0 20px rgba(249, 115, 22, 0.4)' }}
+                                style={{ width: `${progressPercent}%`, boxShadow: '0 0 20px rgba(255, 107, 74, 0.4)' }}
                             ></div>
                         </div>
 
@@ -3596,7 +3596,7 @@ import { createClient } from '@supabase/supabase-js';
                                         {day}
                                     </span>
                                     {isDone && (
-                                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center border-2 border-[#0f172a] shadow-lg">
+                                        <div className="absolute -top-1 -right-1 w-5 h-5 bg-green-500 rounded-full flex items-center justify-center border-2 border-[#1b1622] shadow-lg">
                                             <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="white" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg>
                                         </div>
                                     )}
@@ -3611,7 +3611,7 @@ import { createClient } from '@supabase/supabase-js';
                     </div>
 
                     {/* Área de Missão / Boss Level */}
-                    <div className="bg-[#1e2330] rounded-[40px] p-8 border border-white/5 shadow-2xl relative">
+                    <div className="bg-[#211b29] rounded-[40px] p-8 border border-white/5 shadow-2xl relative">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                             <div>
                                 <div className="flex items-center gap-2 mb-2">
@@ -3736,7 +3736,7 @@ import { createClient } from '@supabase/supabase-js';
                                         onClick={() => onSelect(ex)}
                                         className="bg-white/5 rounded-[24px] p-5 flex items-center gap-5 group cursor-pointer hover:bg-white/10 transition-all border border-white/5 active:scale-[0.98]"
                                     >
-                                        <div className="w-20 h-20 rounded-2xl bg-[#0a0a0c] flex items-center justify-center font-black italic text-orange-500 text-xs border border-white/5 overflow-hidden relative">
+                                        <div className="w-20 h-20 rounded-2xl bg-[#141118] flex items-center justify-center font-black italic text-orange-500 text-xs border border-white/5 overflow-hidden relative">
                                             <div className="absolute inset-0 bg-orange-600/10 group-hover:bg-orange-600/0 transition-colors"></div>
                                             <svg className="opacity-20 group-hover:opacity-100 transition-opacity" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                                         </div>
@@ -3747,7 +3747,7 @@ import { createClient } from '@supabase/supabase-js';
                                                 <span className="text-[10px] font-black uppercase text-slate-500 bg-white/5 px-2.5 py-1 rounded-md">12-15 REPS</span>
                                             </div>
                                         </div>
-                                        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-orange-600 group-hover:shadow-[0_0_15px_rgba(249,115,22,0.4)] transition-all">
+                                        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-orange-600 group-hover:shadow-[0_0_15px_rgba(255, 107, 74,0.4)] transition-all">
                                             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                                         </div>
                                     </div>
@@ -3821,7 +3821,7 @@ import { createClient } from '@supabase/supabase-js';
                 onMouseEnter={() => setActive(text)} onMouseLeave={() => setActive(null)}>
                 <span style={{ cursor: 'pointer', background: 'rgba(255,255,255,0.1)', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold' }}>i</span>
                 {active === text && (
-                    <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', background: '#1e293b', color: '#fff', padding: '12px', borderRadius: '8px', fontSize: '13px', width: '220px', zIndex: 999, border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)', marginBottom: '8px', lineHeight: '1.5' }}>
+                    <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', background: '#251e2e', color: '#fff', padding: '12px', borderRadius: '8px', fontSize: '13px', width: '220px', zIndex: 999, border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.5)', marginBottom: '8px', lineHeight: '1.5' }}>
                         {text}
                     </div>
                 )}
@@ -3963,7 +3963,7 @@ import { createClient } from '@supabase/supabase-js';
             }, [session]);
 
             return (
-                <div className="progress-section-card" style={{ background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '28px', padding: '24px', marginBottom: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+                <div className="progress-section-card" style={{ background: 'linear-gradient(135deg, rgba(37, 30, 46, 0.4) 0%, rgba(27, 22, 34, 0.6) 100%)', border: '1px solid rgba(56, 189, 248, 0.2)', borderRadius: '28px', padding: '24px', marginBottom: '24px', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
                     <div style={{ textAlign: 'center', marginBottom: '16px' }}>
                         <h3 style={{ color: '#fff', fontSize: '18px', fontWeight: '900', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', margin: 0 }}>
                             <span style={{ color: '#38bdf8', fontSize: '24px' }}>💧</span> Hidratação Dinâmica
@@ -4252,13 +4252,13 @@ import { createClient } from '@supabase/supabase-js';
                             </svg>
 
                             <svg className="relative w-56 h-56 -rotate-90">
-                                <circle cx="112" cy="112" r="100" fill="none" stroke="rgba(249, 115, 22, 0.05)" strokeWidth="12" />
+                                <circle cx="112" cy="112" r="100" fill="none" stroke="rgba(255, 107, 74, 0.05)" strokeWidth="12" />
                                 <circle cx="112" cy="112" r="100" fill="none" stroke="url(#sleepOrangeGradient)" strokeWidth="12" 
                                     strokeDasharray="628" strokeDashoffset={lastLog ? 628 - (628 * lastLog.qualidade) / 100 : 628} 
                                     strokeLinecap="round" className="transition-all duration-1000" />
                                 <defs>
                                     <linearGradient id="sleepOrangeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stopColor="#f97316" />
+                                        <stop offset="0%" stopColor="#ff6b4a" />
                                         <stop offset="100%" stopColor="#fbbf24" />
                                     </linearGradient>
                                 </defs>
@@ -4527,7 +4527,7 @@ import { createClient } from '@supabase/supabase-js';
                         <div className="max-w-md mx-auto">
                             <button 
                                 onClick={() => setShowModal(true)}
-                                className="w-full bg-gradient-to-r from-orange-600 to-amber-600 text-white font-black py-5 rounded-2xl shadow-[0_12px_30px_rgba(249,115,22,0.3)] active:scale-[0.98] transition-all text-sm uppercase tracking-tighter"
+                                className="w-full bg-gradient-to-r from-orange-600 to-amber-600 text-white font-black py-5 rounded-2xl shadow-[0_12px_30px_rgba(255, 107, 74,0.3)] active:scale-[0.98] transition-all text-sm uppercase tracking-tighter"
                             >
                                 🌙 REGISTAR NOITE DE SONO
                             </button>
@@ -4713,10 +4713,10 @@ import { createClient } from '@supabase/supabase-js';
         };
 
         const MetricCard = ({ title, value, delta, suffix, icon, decimals = 1 }) => (
-            <div className="stat-premium-card group relative overflow-hidden" style={{ flex: 1, background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(249, 115, 22, 0.1)', padding: '20px', borderRadius: '24px', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+            <div className="stat-premium-card group relative overflow-hidden" style={{ flex: 1, background: 'rgba(27, 22, 34, 0.6)', border: '1px solid rgba(255, 107, 74, 0.1)', padding: '20px', borderRadius: '24px', transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)' }}>
                 <div className="absolute inset-0 shimmer opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity"></div>
                 <div className="flex justify-between items-start mb-4">
-                    <div style={{ background: 'rgba(249, 115, 22, 0.1)', color: 'var(--accent)', padding: '10px', borderRadius: '14px', boxShadow: '0 0 15px rgba(249, 115, 22, 0.2)' }}>
+                    <div style={{ background: 'rgba(255, 107, 74, 0.1)', color: 'var(--accent)', padding: '10px', borderRadius: '14px', boxShadow: '0 0 15px rgba(255, 107, 74, 0.2)' }}>
                         {icon}
                     </div>
                     {delta !== 0 && (
@@ -5042,7 +5042,7 @@ import { createClient } from '@supabase/supabase-js';
                             </div>
                             <div className="h-[180px] w-full">
                                 {(() => {
-                                    const color = abaGrafico === 'cintura' ? '#10b981' : '#f97316';
+                                    const color = abaGrafico === 'cintura' ? '#10b981' : '#ff6b4a';
                                     const vals = chartData.map(d => d.y);
                                     const minVal = Math.min(...vals);
                                     const maxVal = Math.max(...vals);
@@ -5070,7 +5070,7 @@ import { createClient } from '@supabase/supabase-js';
                                             <path d={lineD} fill="none" stroke={color} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                                             {pts.map((p, i) => (
                                                 <g key={i}>
-                                                    <circle cx={p.x} cy={p.y} r="1.6" fill="#0f172a" stroke={color} strokeWidth="0.9" />
+                                                    <circle cx={p.x} cy={p.y} r="1.6" fill="#1b1622" stroke={color} strokeWidth="0.9" />
                                                     <text x={p.x} y={p.y - 3.2} textAnchor="middle" fill="#fff" fontSize="2.9" fontWeight="800">{p.val.toFixed(1)}</text>
                                                     <text x={p.x} y="47" textAnchor="middle" fill="rgba(255,255,255,0.45)" fontSize="2.5">{p.label}</text>
                                                 </g>
@@ -5371,8 +5371,8 @@ import { createClient } from '@supabase/supabase-js';
                                 }
 
                                 if (isMe) {
-                                    tierStyle.bg = 'rgba(249, 115, 22, 0.15)';
-                                    tierStyle.border = 'rgba(249, 115, 22, 0.6)';
+                                    tierStyle.bg = 'rgba(255, 107, 74, 0.15)';
+                                    tierStyle.border = 'rgba(255, 107, 74, 0.6)';
                                 }
 
                                 return (
@@ -5413,9 +5413,9 @@ import { createClient } from '@supabase/supabase-js';
                     {session && (
                         <div style={{ position: 'fixed', bottom: '90px', left: '20px', right: '20px', zIndex: 100 }}>
                             <div style={{ 
-                                background: 'rgba(15, 23, 42, 0.8)', 
+                                background: 'rgba(27, 22, 34, 0.8)', 
                                 backdropFilter: 'blur(12px)',
-                                border: '1px solid rgba(249, 115, 22, 0.5)', 
+                                border: '1px solid rgba(255, 107, 74, 0.5)', 
                                 borderRadius: '28px', 
                                 padding: '16px 24px',
                                 display: 'flex',
@@ -5429,7 +5429,7 @@ import { createClient } from '@supabase/supabase-js';
                                     width: '50px', height: '50px', background: 'var(--accent)', borderRadius: '18px', 
                                     display: 'flex', alignItems: 'center', justifyContent: 'center', 
                                     fontSize: '20px', fontWeight: '900', color: '#fff',
-                                    boxShadow: '0 0 20px rgba(249,115,22,0.3)'
+                                    boxShadow: '0 0 20px rgba(255, 107, 74,0.3)'
                                 }}>
                                     #{(!myRank || myRank > 50) ? '?' : myRank}
                                 </div>
@@ -5448,7 +5448,7 @@ import { createClient } from '@supabase/supabase-js';
                                 <button 
                                     onClick={() => onGoToTreinos && onGoToTreinos()}
                                     style={{ 
-                                        background: 'rgba(249,115,22,0.2)', border: '1px solid rgba(249,115,22,0.4)', borderRadius: '14px', 
+                                        background: 'rgba(255, 107, 74,0.2)', border: '1px solid rgba(255, 107, 74,0.4)', borderRadius: '14px', 
                                         padding: '10px 14px', color: '#fff', fontSize: '10px', fontWeight: '900', 
                                         textTransform: 'uppercase', cursor: 'pointer' 
                                     }}
@@ -5507,17 +5507,17 @@ import { createClient } from '@supabase/supabase-js';
 
                     <h3 className="ps-title" style={{ marginTop: '32px' }}>Guia Rápido do Aplicativo</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', marginBottom: '32px' }}>
-                        <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.4), rgba(15,23,42,0.8))', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <div style={{ background: 'linear-gradient(135deg, rgba(37, 30, 46,0.4), rgba(27, 22, 34,0.8))', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
                             <div style={{ fontSize: '24px', marginBottom: '8px' }}>📸</div>
                             <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>Nutri IA</h4>
                             <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Tire foto do seu prato e descubra calorias e macros em segundos (2 testes grátis!).</p>
                         </div>
-                        <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.4), rgba(15,23,42,0.8))', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <div style={{ background: 'linear-gradient(135deg, rgba(37, 30, 46,0.4), rgba(27, 22, 34,0.8))', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
                             <div style={{ fontSize: '24px', marginBottom: '8px' }}>📈</div>
                             <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>Evolução</h4>
                             <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Acompanhe seu peso, medidas e progresso semana a semana.</p>
                         </div>
-                        <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.4), rgba(15,23,42,0.8))', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <div style={{ background: 'linear-gradient(135deg, rgba(37, 30, 46,0.4), rgba(27, 22, 34,0.8))', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
                             <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔓</div>
                             <h4 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '4px' }}>Extras & Guias</h4>
                             <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Acesse o Desafio 30 Dias, Musculação em Casa, Pilates e ative seus códigos.</p>
@@ -5542,7 +5542,7 @@ import { createClient } from '@supabase/supabase-js';
                     </div>
 
                     <h3 className="ps-title" style={{ marginTop: '32px' }}>Suporte & Atendimento</h3>
-                    <div style={{ background: 'linear-gradient(135deg, rgba(30,41,59,0.5), rgba(15,23,42,0.8))', padding: '24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', marginBottom: '32px', textAlign: 'center' }}>
+                    <div style={{ background: 'linear-gradient(135deg, rgba(37, 30, 46,0.5), rgba(27, 22, 34,0.8))', padding: '24px', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)', marginBottom: '32px', textAlign: 'center' }}>
                         <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginBottom: '18px', lineHeight: '1.55' }}>
                             Precisa de ajuda com seu acesso, código ou assinatura? Fale com a nossa equipe pelo Instagram ou por e-mail:
                         </p>
@@ -5551,7 +5551,7 @@ import { createClient } from '@supabase/supabase-js';
                                 href="https://www.instagram.com/__mariana_barros_/"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'linear-gradient(135deg, #f97316, #ec4899)', color: '#fff', padding: '12px 20px', borderRadius: '10px', fontWeight: '800', fontSize: '14px', textDecoration: 'none', boxShadow: '0 4px 14px rgba(236,72,153,0.3)', flex: '1 1 220px', maxWidth: '280px' }}
+                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: 'linear-gradient(135deg, #ff6b4a, #ec4899)', color: '#fff', padding: '12px 20px', borderRadius: '10px', fontWeight: '800', fontSize: '14px', textDecoration: 'none', boxShadow: '0 4px 14px rgba(236,72,153,0.3)', flex: '1 1 220px', maxWidth: '280px' }}
                             >
                                 📸 Instagram @__mariana_barros_
                             </a>
@@ -5663,7 +5663,7 @@ import { createClient } from '@supabase/supabase-js';
             const strokeDashoffset = circ - (pct / 100) * circ;
 
             return (
-                <div className="modal-overlay" style={{ background: 'rgba(15,23,42,0.95)', zIndex: 11000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="modal-overlay" style={{ background: 'rgba(27, 22, 34,0.95)', zIndex: 11000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                     <h2 style={{ color: '#fff', fontSize: '24px', marginBottom: '40px', fontWeight: '800' }}>Tempo de Descanso</h2>
                     <div style={{ position: 'relative', width: '160px', height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <svg width="160" height="160" style={{ transform: 'rotate(-90deg)', position: 'absolute' }}>
@@ -5984,7 +5984,7 @@ import { createClient } from '@supabase/supabase-js';
                                                     alignItems: 'center',
                                                     justifyContent: 'center',
                                                     padding: '24px 12px',
-                                                    background: 'linear-gradient(180deg, rgba(30, 41, 59, 0.45) 0%, rgba(2, 6, 23, 0.98) 100%)',
+                                                    background: 'linear-gradient(180deg, rgba(37, 30, 46, 0.45) 0%, rgba(17, 14, 20, 0.98) 100%)',
                                                     backdropFilter: 'blur(20px)',
                                                     border: '1px solid rgba(255, 255, 255, 0.1)',
                                                     borderRadius: '36px',
@@ -6172,13 +6172,13 @@ import { createClient } from '@supabase/supabase-js';
             return (
                 <div style={{ position: 'fixed', inset: 0, zIndex: 100000, background: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }} onClick={(e) => { if (e.target === e.currentTarget) { if (onTrackEvent) onTrackEvent('no'); onClose(); } }}>
                     <div style={{ background: 'var(--bg-surface)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '26px', width: '100%', maxWidth: '410px', maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 50px rgba(0,0,0,0.6)', animation: 'slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-                        <div style={{ width: '100%', height: '130px', flexShrink: 0, background: 'linear-gradient(135deg, #0f172a, #1e293b)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', position: 'relative' }}>
+                        <div style={{ width: '100%', height: '130px', flexShrink: 0, background: 'linear-gradient(135deg, #1b1622, #251e2e)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)', overflow: 'hidden', position: 'relative' }}>
                             <img src="./nutri_scan_illustration.png" alt="Nutri-Scan IA" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.92 }} />
                             <button
                                 onClick={() => { if (onTrackEvent) onTrackEvent('no'); onClose(); }}
                                 style={{ position: 'absolute', top: '12px', right: '12px', width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(0,0,0,0.65)', color: '#fff', border: '1px solid rgba(255,255,255,0.15)', fontSize: '18px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                             >&times;</button>
-                            <div style={{ position: 'absolute', bottom: '10px', left: '14px', background: isLimitReached ? '#f97316' : '#10b981', color: '#fff', fontSize: '10px', fontWeight: '900', padding: '4px 10px', borderRadius: '99px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                            <div style={{ position: 'absolute', bottom: '10px', left: '14px', background: isLimitReached ? '#ff6b4a' : '#10b981', color: '#fff', fontSize: '10px', fontWeight: '900', padding: '4px 10px', borderRadius: '99px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                                 {isLimitReached ? '✨ Testes grátis concluídos' : `🎁 ${freeScansRemaining} testes grátis liberados`}
                             </div>
                         </div>
@@ -6220,7 +6220,7 @@ import { createClient } from '@supabase/supabase-js';
                                             onClose();
                                             onTryFreeNow();
                                         }}
-                                        style={{ width: '100%', padding: '15px', background: 'linear-gradient(135deg, #f97316, #ea580c)', color: '#fff', borderRadius: '16px', fontWeight: '900', fontSize: '15px', border: 'none', cursor: 'pointer', boxShadow: '0 6px 18px rgba(249, 115, 22, 0.35)' }}
+                                        style={{ width: '100%', padding: '15px', background: 'linear-gradient(135deg, #ff6b4a, #e85334)', color: '#fff', borderRadius: '16px', fontWeight: '900', fontSize: '15px', border: 'none', cursor: 'pointer', boxShadow: '0 6px 18px rgba(255, 107, 74, 0.35)' }}
                                     >
                                         📸 Testar Agora Grátis ({freeScansRemaining} {freeScansRemaining === 1 ? 'uso' : 'usos'} no app)
                                     </button>
@@ -6730,7 +6730,7 @@ import { createClient } from '@supabase/supabase-js';
             const recovery = calculateRecovery();
 
             if (ud.authLoading || (ud.session && !ud.localSynced && !ud.userProfile)) {
-                return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#0f172a', color: '#f97316', fontWeight: 'bold', fontSize: '1.1rem' }}>Preparando seu plano...</div>;
+                return <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1b1622', color: '#ff6b4a', fontWeight: 'bold', fontSize: '1.1rem' }}>Preparando seu plano...</div>;
             }
 
             if (!ud.session) {
@@ -6766,7 +6766,7 @@ import { createClient } from '@supabase/supabase-js';
                                     <input type="password" name="newPwd" className="ob-input" placeholder="Mínimo 6 caracteres" required disabled={recoverySaving} style={{ width: '100%', padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} />
                                 </div>
                                 {recoveryError && <div style={{ color: '#f87171', fontSize: '12px', fontWeight: '700', marginBottom: '12px' }}>{recoveryError}</div>}
-                                <button type="submit" disabled={recoverySaving} className="ob-submit-btn" style={{ width: '100%', padding: '14px', borderRadius: '14px', background: '#f97316', color: '#fff', fontWeight: '900', border: 'none', cursor: 'pointer', opacity: recoverySaving ? 0.6 : 1 }}>
+                                <button type="submit" disabled={recoverySaving} className="ob-submit-btn" style={{ width: '100%', padding: '14px', borderRadius: '14px', background: '#ff6b4a', color: '#fff', fontWeight: '900', border: 'none', cursor: 'pointer', opacity: recoverySaving ? 0.6 : 1 }}>
                                     {recoverySaving ? 'Salvando...' : 'Salvar Nova Senha'}
                                 </button>
                                 <button type="button" onClick={() => ud.setRecoveryMode(false)} style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer' }}>
@@ -6918,7 +6918,7 @@ import { createClient } from '@supabase/supabase-js';
                                                         ? 'url(avatar_female.png) center / 220% no-repeat'
                                                         : safeAvatar
                                                         ? `url("${encodeURI(safeAvatar)}") center/cover`
-                                                        : 'linear-gradient(135deg, #f97316, #ea580c)',
+                                                        : 'linear-gradient(135deg, #ff6b4a, #e85334)',
                                                     border: '2px solid rgba(255,255,255,0.1)'
                                                 }}
                                                 className="flex items-center justify-center font-bold text-white shadow-lg flex-shrink-0 group-hover:border-orange-400/50 transition-colors"
@@ -7163,7 +7163,7 @@ import { createClient } from '@supabase/supabase-js';
                                         className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 pointer-events-none z-0 opacity-80"
                                         alt="Treino de Hoje"
                                     />
-                                    <div className="absolute inset-0 bg-gradient-to-t from-[#0f172a] via-[#0f172a]/80 to-transparent pointer-events-none z-0"></div>
+                                    <div className="absolute inset-0 bg-gradient-to-t from-[#1b1622] via-[#1b1622]/80 to-transparent pointer-events-none z-0"></div>
 
                                     <div className="absolute top-5 left-5 z-20 bg-black/45 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-2 pointer-events-none">
                                         <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></div>
@@ -7207,7 +7207,7 @@ import { createClient } from '@supabase/supabase-js';
                                             <button
                                                 onClick={startDailyWorkout}
                                                 disabled={isLoadingExercises}
-                                                className={`flex-1 py-4 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl text-white font-black tracking-[0.14em] uppercase text-sm shadow-[0_8px_25px_rgba(249,115,22,0.3)] hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-3 ${isLoadingExercises ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                                className={`flex-1 py-4 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl text-white font-black tracking-[0.14em] uppercase text-sm shadow-[0_8px_25px_rgba(255, 107, 74,0.3)] hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-3 ${isLoadingExercises ? 'opacity-70 cursor-not-allowed' : ''}`}
                                             >
                                                 {isLoadingExercises ? (
                                                     <>
@@ -7247,7 +7247,7 @@ import { createClient } from '@supabase/supabase-js';
                                             }
                                         }}
                                         className="rounded-[28px] p-6 mb-6 relative overflow-hidden cursor-pointer border border-emerald-500/35 transition-all hover:scale-[1.01] active:scale-[0.99] shadow-2xl"
-                                        style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(15,23,42,0.96) 75%)' }}
+                                        style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(27, 22, 34,0.96) 75%)' }}
                                     >
                                         <div className="flex items-center justify-between gap-2 mb-3">
                                             <span className="inline-flex items-center gap-1.5 bg-emerald-500 text-slate-950 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">
@@ -7296,7 +7296,7 @@ import { createClient } from '@supabase/supabase-js';
                                             onClick={() => setPage('extras')}
                                         >
                                             <div className="flex items-center gap-2 mb-2.5">
-                                                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-[0_0_14px_rgba(249,115,22,0.6)]"></span>
+                                                <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-[0_0_14px_rgba(255, 107, 74,0.6)]"></span>
                                                 <span className="text-[11px] text-orange-300 font-black uppercase tracking-widest">
                                                     {isGoalMassa ? 'Recomendado para Ganhar Massa em Casa' : 'O Mais Escolhido para Secar e Definir'}
                                                 </span>
@@ -7331,7 +7331,7 @@ import { createClient } from '@supabase/supabase-js';
                                     ) : (
                                         <div
                                             className="flash-quest-card rounded-[28px] p-6 relative overflow-hidden border-amber-500/30"
-                                            style={{ background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(15, 23, 42, 0.9) 100%)', borderColor: 'rgba(251, 191, 36, 0.4)' }}
+                                            style={{ background: 'linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(27, 22, 34, 0.9) 100%)', borderColor: 'rgba(251, 191, 36, 0.4)' }}
                                         >
                                             <div className="flex items-center gap-2 mb-2">
                                                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
@@ -7349,7 +7349,7 @@ import { createClient } from '@supabase/supabase-js';
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                                     {/* Body Status Card */}
-                                    <div className="bg-[#1e293b]/40 backdrop-blur-md border border-white/5 rounded-[28px] p-6 flex flex-col shadow-xl">
+                                    <div className="bg-[#251e2e]/40 backdrop-blur-md border border-white/5 rounded-[28px] p-6 flex flex-col shadow-xl">
                                         <div className="flex justify-between items-start mb-6">
                                             <div>
                                                 <h3 className="text-xs text-slate-400 font-black uppercase tracking-widest mb-1">Status de Recuperação</h3>
@@ -7367,8 +7367,8 @@ import { createClient } from '@supabase/supabase-js';
                                                     <circle cx="50" cy="20" r="15" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)" strokeWidth="1"/>
                                                     {/* Torso - Dinâmico baseado em Superior */}
                                                     <rect x="35" y="40" width="30" height="50" rx="5" 
-                                                        fill={recovery.superior < 50 ? "rgba(239, 68, 68, 0.4)" : recovery.superior < 90 ? "rgba(249, 115, 22, 0.4)" : "rgba(34, 197, 94, 0.3)"} 
-                                                        stroke={recovery.superior < 50 ? "#ef4444" : recovery.superior < 90 ? "#f97316" : "#22c55e"} 
+                                                        fill={recovery.superior < 50 ? "rgba(239, 68, 68, 0.4)" : recovery.superior < 90 ? "rgba(255, 107, 74, 0.4)" : "rgba(34, 197, 94, 0.3)"} 
+                                                        stroke={recovery.superior < 50 ? "#ef4444" : recovery.superior < 90 ? "#ff6b4a" : "#22c55e"} 
                                                         strokeWidth="1"/>
                                                     {/* Arms - Dinâmico */}
                                                     <rect x="20" y="40" width="12" height="60" rx="4" 
@@ -7381,12 +7381,12 @@ import { createClient } from '@supabase/supabase-js';
                                                         strokeWidth="1"/>
                                                     {/* Legs - Dinâmico baseado em Inferior */}
                                                     <rect x="36" y="95" width="13" height="80" rx="4" 
-                                                        fill={recovery.inferior < 50 ? "rgba(239, 68, 68, 0.4)" : recovery.inferior < 90 ? "rgba(249, 115, 22, 0.4)" : "rgba(34, 197, 94, 0.3)"} 
-                                                        stroke={recovery.inferior < 50 ? "#ef4444" : recovery.inferior < 90 ? "#f97316" : "#22c55e"} 
+                                                        fill={recovery.inferior < 50 ? "rgba(239, 68, 68, 0.4)" : recovery.inferior < 90 ? "rgba(255, 107, 74, 0.4)" : "rgba(34, 197, 94, 0.3)"} 
+                                                        stroke={recovery.inferior < 50 ? "#ef4444" : recovery.inferior < 90 ? "#ff6b4a" : "#22c55e"} 
                                                         strokeWidth="1"/>
                                                     <rect x="51" y="95" width="13" height="80" rx="4" 
-                                                        fill={recovery.inferior < 50 ? "rgba(239, 68, 68, 0.4)" : recovery.inferior < 90 ? "rgba(249, 115, 22, 0.4)" : "rgba(34, 197, 94, 0.3)"} 
-                                                        stroke={recovery.inferior < 50 ? "#ef4444" : recovery.inferior < 90 ? "#f97316" : "#22c55e"} 
+                                                        fill={recovery.inferior < 50 ? "rgba(239, 68, 68, 0.4)" : recovery.inferior < 90 ? "rgba(255, 107, 74, 0.4)" : "rgba(34, 197, 94, 0.3)"} 
+                                                        stroke={recovery.inferior < 50 ? "#ef4444" : recovery.inferior < 90 ? "#ff6b4a" : "#22c55e"} 
                                                         strokeWidth="1"/>
                                                 </svg>
                                             </div>
@@ -7397,21 +7397,21 @@ import { createClient } from '@supabase/supabase-js';
                                                         <span className={recovery.superior < 50 ? "text-red-500" : recovery.superior < 90 ? "text-orange-500" : "text-green-500"}>{recovery.superior}%</span>
                                                     </div>
                                                     <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                                                        <div className="h-full transition-all duration-1000" style={{ width: `${recovery.superior}%`, backgroundColor: recovery.superior < 50 ? '#ef4444' : recovery.superior < 90 ? '#f97316' : '#22c55e' }}></div>
+                                                        <div className="h-full transition-all duration-1000" style={{ width: `${recovery.superior}%`, backgroundColor: recovery.superior < 50 ? '#ef4444' : recovery.superior < 90 ? '#ff6b4a' : '#22c55e' }}></div>
                                                     </div>
                                                     <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
                                                         <span className="text-slate-400">Core (Abdominais)</span>
                                                         <span className={recovery.core < 50 ? "text-red-500" : recovery.core < 90 ? "text-orange-500" : "text-green-500"}>{recovery.core}%</span>
                                                     </div>
                                                     <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                                                        <div className="h-full transition-all duration-1000" style={{ width: `${recovery.core}%`, backgroundColor: recovery.core < 50 ? '#ef4444' : recovery.core < 90 ? '#f97316' : '#22c55e' }}></div>
+                                                        <div className="h-full transition-all duration-1000" style={{ width: `${recovery.core}%`, backgroundColor: recovery.core < 50 ? '#ef4444' : recovery.core < 90 ? '#ff6b4a' : '#22c55e' }}></div>
                                                     </div>
                                                     <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
                                                         <span className="text-slate-400">Membros Inferiores</span>
                                                         <span className={recovery.inferior < 50 ? "text-red-500" : recovery.inferior < 90 ? "text-orange-500" : "text-green-500"}>{recovery.inferior}%</span>
                                                     </div>
                                                     <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                                                        <div className="h-full transition-all duration-1000" style={{ width: `${recovery.inferior}%`, backgroundColor: recovery.inferior < 50 ? '#ef4444' : recovery.inferior < 90 ? '#f97316' : '#22c55e' }}></div>
+                                                        <div className="h-full transition-all duration-1000" style={{ width: `${recovery.inferior}%`, backgroundColor: recovery.inferior < 50 ? '#ef4444' : recovery.inferior < 90 ? '#ff6b4a' : '#22c55e' }}></div>
                                                     </div>
                                                 </div>
                                                 <p className="text-[11px] text-slate-300 font-medium leading-relaxed mt-4 italic">
@@ -7595,7 +7595,7 @@ import { createClient } from '@supabase/supabase-js';
                         if (isLoadingExercises) {
                             return (
                                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', background: 'rgba(255,255,255,0.02)', margin: '20px', borderRadius: '32px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <div style={{ width: '40px', height: '40px', border: '3px solid rgba(249,115,22,0.1)', borderTopColor: '#f97316', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                                    <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255, 107, 74,0.1)', borderTopColor: '#ff6b4a', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
                                     <p style={{ marginTop: '20px', color: 'var(--text-secondary)', fontSize: '13px', fontWeight: '600', letterSpacing: '1px' }}>A SINCRONIZAR DADOS...</p>
                                 </div>
                             );
@@ -7622,7 +7622,7 @@ import { createClient } from '@supabase/supabase-js';
                                             <p style={{ color: 'var(--text-secondary)' }}>Faltam {xpNextLevel - progressXP} XP</p>
                                         </div>
                                     </div>
-                                    <div style={{ marginTop: '16px', padding: '12px 16px', background: 'rgba(249,115,22,0.08)', border: '1px solid rgba(249,115,22,0.18)', borderRadius: '12px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                                    <div style={{ marginTop: '16px', padding: '12px 16px', background: 'rgba(255, 107, 74,0.08)', border: '1px solid rgba(255, 107, 74,0.18)', borderRadius: '12px', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                                         <span style={{ fontSize: '20px', flexShrink: 0 }}>🧠</span>
                                         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.6', margin: 0 }}>
                                             {progressStreak === 0 && 'O descanso é parte do treino! Amanhã voltamos à carga com tudo. 💪'}
@@ -7805,7 +7805,7 @@ import { createClient } from '@supabase/supabase-js';
                                     <div 
                                         onClick={() => { setNotifOpen(false); setPage('treinos'); }}
                                         className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
-                                        style={{ background: 'linear-gradient(90deg, rgba(249, 115, 22, 0.16) 0%, rgba(249, 115, 22, 0.05) 100%)', borderLeft: '4px solid #f97316', padding: '16px', borderRadius: '0 12px 12px 0' }}
+                                        style={{ background: 'linear-gradient(90deg, rgba(255, 107, 74, 0.16) 0%, rgba(255, 107, 74, 0.05) 100%)', borderLeft: '4px solid #ff6b4a', padding: '16px', borderRadius: '0 12px 12px 0' }}
                                     >
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                             <h4 style={{ color: '#fff', marginBottom: '6px', fontSize: '14px', fontWeight: '800' }}>⚡ +500 Exercícios em Vídeo</h4>
@@ -7835,7 +7835,7 @@ import { createClient } from '@supabase/supabase-js';
                     {dailyWorkoutOpen && dailyWorkout.length > 0 && (
                         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDailyWorkoutOpen(false)} style={{ zIndex: 12000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <div className="password-modal-content" style={{ width: '95%', maxWidth: '860px', padding: '16px', maxHeight: '95vh', overflowY: 'auto' }}>
-                                <div style={{ position: 'sticky', top: '-16px', background: '#0f172a', padding: '12px 0 10px', marginBottom: '12px', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                                <div style={{ position: 'sticky', top: '-16px', background: '#1b1622', padding: '12px 0 10px', marginBottom: '12px', zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                                     <div>
                                         <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#fff', margin: 0, textAlign: 'left' }}>Treino do Dia</h2>
                                         <p style={{ color: 'var(--text-secondary)', fontSize: '12px', margin: '2px 0 0', textAlign: 'left' }}>
