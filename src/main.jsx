@@ -159,6 +159,29 @@ import { createClient } from '@supabase/supabase-js';
             const [error, setError] = useState('');
             const [successMsg, setSuccessMsg] = useState('');
             const [loading, setLoading] = useState(false);
+            const [recoveryCooldown, setRecoveryCooldown] = useState(0);
+
+            useEffect(() => {
+                if (recoveryCooldown <= 0) return;
+                const timer = setInterval(() => {
+                    setRecoveryCooldown(prev => (prev <= 1 ? 0 : prev - 1));
+                }, 1000);
+                return () => clearInterval(timer);
+            }, [recoveryCooldown]);
+
+            useEffect(() => {
+                try {
+                    const hashParams = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+                    const searchParams = new URLSearchParams(window.location.search || '');
+                    const errCode = hashParams.get('error_code') || searchParams.get('error_code') || '';
+                    const errDesc = hashParams.get('error_description') || searchParams.get('error_description') || '';
+                    if (errCode === 'otp_expired' || errDesc.toLowerCase().includes('expired') || errDesc.toLowerCase().includes('invalid')) {
+                        setAuthMode('recovery');
+                        setError('Este link de recuperação expirou ou já foi usado. Digite seu e-mail abaixo para pedir um novo link.');
+                        window.history.replaceState(null, '', window.location.pathname);
+                    }
+                } catch {}
+            }, []);
 
             const switchMode = (nextMode) => {
                 setAuthMode(nextMode);
@@ -175,6 +198,9 @@ import { createClient } from '@supabase/supabase-js';
                 if (!cleanEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(cleanEmail)) {
                     return setError('Digite um e-mail válido.');
                 }
+                if (authMode === 'recovery' && recoveryCooldown > 0) {
+                    return setError(`Aguarde ${recoveryCooldown}s antes de pedir outro link.`);
+                }
                 if (authMode !== 'recovery' && !password) {
                     return setError('Por favor, digite sua senha.');
                 }
@@ -188,7 +214,8 @@ import { createClient } from '@supabase/supabase-js';
                     if (authMode === "recovery") {
                         res = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo: window.location.origin });
                         if (!res.error) {
-                            setSuccessMsg('✅ Link enviado! Verifique sua caixa de entrada (e o spam).');
+                            setRecoveryCooldown(60);
+                            setSuccessMsg(`✅ Link enviado para ${cleanEmail}! Verifique sua caixa de entrada, Spam e aba Promoções.`);
                             setLoading(false);
                             return;
                         }
@@ -204,6 +231,18 @@ import { createClient } from '@supabase/supabase-js';
                                 localStorage.setItem('has_logged_in_before', '1');
                                 ['userProfile', 'completedLog', 'favoritedIds', 'challengeLog', 'xpBonus', 'metaProfile', 'lastEvolucao'].forEach(k => localStorage.removeItem(k));
                             } catch {}
+                        } else if (res?.error && (res.error.message || '').includes('User already registered')) {
+                            // Aluna antiga tentou entrar na aba "Criar Conta": tenta login automático transparente!
+                            const autoLogin = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+                            if (!autoLogin.error) {
+                                try { localStorage.setItem('has_logged_in_before', '1'); } catch {}
+                                setLoading(false);
+                                return;
+                            }
+                            setAuthMode('login');
+                            setError('Este e-mail já tem conta cadastrada! Confira sua senha abaixo ou toque em "Esqueci minha senha".');
+                            setLoading(false);
+                            return;
                         }
                     }
 
@@ -211,9 +250,12 @@ import { createClient } from '@supabase/supabase-js';
                         const raw = res.error.message || '';
                         let msg = raw;
                         if (raw.includes('Invalid login credentials')) msg = 'E-mail ou senha incorretos. Confira seus dados ou clique em "Esqueci minha senha".';
-                        else if (raw.includes('User already registered')) msg = 'Este e-mail já está cadastrado. Toque em "Entrar" acima para acessar sua conta.';
+                        else if (raw.includes('User already registered')) msg = 'Este e-mail já está cadastrado. Toque em "Já tenho Conta" acima para entrar.';
                         else if (raw.includes('Email not confirmed')) msg = 'Confirme seu e-mail clicando no link que enviamos na sua caixa de entrada.';
-                        else if (raw.includes('rate limit')) msg = 'Muitas tentativas seguidas. Aguarde um minuto e tente novamente.';
+                        else if (raw.toLowerCase().includes('rate limit') || raw.toLowerCase().includes('security purposes')) {
+                            setRecoveryCooldown(60);
+                            msg = 'Limite temporário de envio de e-mail atingido. Aguarde alguns minutos e tente novamente — ou volte e tente entrar com sua senha.';
+                        }
                         setError(msg);
                     } else if (authMode === "register" && !res?.data?.session) {
                         setSuccessMsg('✅ Conta criada! Verifique sua caixa de entrada para confirmar seu e-mail e liberar o acesso.');
@@ -337,8 +379,16 @@ import { createClient } from '@supabase/supabase-js';
                                 </div>
                             )}
 
-                            <button type="submit" className="ob-submit-btn" disabled={loading}>
-                                {loading ? "Carregando..." : (authMode === "login" ? "Entrar no Aplicativo" : authMode === "register" ? "Criar Minha Conta" : "Enviar Link de Recuperação")}
+                            <button type="submit" className="ob-submit-btn" disabled={loading || (authMode === 'recovery' && recoveryCooldown > 0)}>
+                                {loading
+                                    ? "Carregando..."
+                                    : authMode === "login"
+                                    ? "Entrar no Aplicativo"
+                                    : authMode === "register"
+                                    ? "Criar Minha Conta"
+                                    : recoveryCooldown > 0
+                                    ? `Aguarde ${recoveryCooldown}s para reenviar...`
+                                    : "Enviar Link de Recuperação"}
                             </button>
                         </form>
 
@@ -373,7 +423,14 @@ import { createClient } from '@supabase/supabase-js';
             const [session, setSession] = useState(null);
             const [authLoading, setAuthLoading] = useState(true);
             const [localSynced, setLocalSynced] = useState(false);
-            const [recoveryMode, setRecoveryMode] = useState(false);
+            const [recoveryMode, setRecoveryMode] = useState(() => {
+                try {
+                    const combined = `${window.location.hash || ''}&${window.location.search || ''}`;
+                    return combined.includes('type=recovery');
+                } catch {
+                    return false;
+                }
+            });
 
             const [completedLog, setC] = useState(() => {
                 try {
@@ -3047,7 +3104,7 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function NutritionDashboard({ ud, onNav, hasNutriScanAccess = false, onOpenNutriUpsell }) {
+        function NutritionDashboard({ ud, onNav, hasNutriScanAccess = false, onOpenNutriUpsell, pendingQuickMeal = null, onClearPendingQuickMeal = null }) {
             const [localHistory, setLocalHistory] = React.useState([]);
             const [nutritionProfile, setNutritionProfile] = React.useState(null);
             const [isLoading, setIsLoading] = React.useState(true);
@@ -3399,6 +3456,13 @@ import { createClient } from '@supabase/supabase-js';
                 window.addEventListener('nutrition-updated', handleUpdate);
                 return () => window.removeEventListener('nutrition-updated', handleUpdate);
             }, [loadNutritionDashboard]);
+
+            React.useEffect(() => {
+                if (!pendingQuickMeal || isLoading || isScanningRef.current) return;
+                const mealToRun = pendingQuickMeal;
+                onClearPendingQuickMeal?.();
+                executeTextOnlyScan(mealToRun);
+            }, [pendingQuickMeal, isLoading]);
 
             if (isLoading) {
                 return (
@@ -6366,7 +6430,7 @@ import { createClient } from '@supabase/supabase-js';
             );
         }
 
-        function ArsenalVIP({ ud, onNav, temAcessoNutriScan, onOpenNutriUpsell }) {
+        function ArsenalVIP({ ud, onNav, temAcessoNutriScan, onOpenNutriUpsell, pendingQuickMeal = null, onClearPendingQuickMeal = null }) {
             return (
                 <div className="arsenal-vip-container animate-in fade-in duration-500">
                     <NutritionDashboard
@@ -6374,6 +6438,8 @@ import { createClient } from '@supabase/supabase-js';
                         onNav={onNav}
                         hasNutriScanAccess={temAcessoNutriScan}
                         onOpenNutriUpsell={onOpenNutriUpsell}
+                        pendingQuickMeal={pendingQuickMeal}
+                        onClearPendingQuickMeal={onClearPendingQuickMeal}
                     />
                 </div>
             );
@@ -6516,9 +6582,73 @@ import { createClient } from '@supabase/supabase-js';
             const [workoutSwappedMsg, setWorkoutSwappedMsg] = useState('');
             const [recoverySaving, setRecoverySaving] = useState(false);
             const [recoveryError, setRecoveryError] = useState('');
+            const [recoveryShowPwd, setRecoveryShowPwd] = useState(false);
+            const [recoverySuccess, setRecoverySuccess] = useState('');
+            const [pendingQuickMeal, setPendingQuickMeal] = useState(null);
+            const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
+            const [showIosInstallGuide, setShowIosInstallGuide] = useState(false);
+            const [pwaDismissed, setPwaDismissed] = useState(() => {
+                try { return localStorage.getItem('pwa_install_dismissed_v1') === '1'; } catch { return false; }
+            });
+            const [isStandaloneMode, setIsStandaloneMode] = useState(() => {
+                try {
+                    return Boolean(window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator?.standalone === true);
+                } catch {
+                    return false;
+                }
+            });
+            const isIosDevice = useMemo(() => {
+                try { return /iphone|ipad|ipod/i.test(navigator.userAgent || ''); } catch { return false; }
+            }, []);
+            const lastTrackedTabRef = useRef('inicio');
             const [notifUnread, setNotifUnread] = useState(() => {
                 try { return localStorage.getItem('notifs_seen_v2') !== '1'; } catch { return true; }
             });
+
+            useEffect(() => {
+                const onBeforeInstall = (e) => {
+                    e.preventDefault();
+                    setDeferredInstallPrompt(e);
+                };
+                const onInstalled = () => {
+                    setDeferredInstallPrompt(null);
+                    setIsStandaloneMode(true);
+                    trackConversionEvent('pwa_installed', { placement: 'home_banner' });
+                };
+                window.addEventListener('beforeinstallprompt', onBeforeInstall);
+                window.addEventListener('appinstalled', onInstalled);
+                return () => {
+                    window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+                    window.removeEventListener('appinstalled', onInstalled);
+                };
+            }, []);
+
+            const handlePwaInstallClick = useCallback(async () => {
+                if (deferredInstallPrompt) {
+                    trackConversionEvent('pwa_install_prompt_click', { placement: 'home_banner', metadata: { platform: 'android' } });
+                    try {
+                        deferredInstallPrompt.prompt();
+                        const choice = await deferredInstallPrompt.userChoice;
+                        if (choice?.outcome === 'accepted') {
+                            setDeferredInstallPrompt(null);
+                        }
+                    } catch {}
+                } else {
+                    trackConversionEvent('pwa_install_prompt_click', { placement: 'home_banner', metadata: { platform: isIosDevice ? 'ios' : 'other' } });
+                    setShowIosInstallGuide(v => !v);
+                }
+            }, [deferredInstallPrompt, isIosDevice]);
+
+            const launchQuickNutriScan = useCallback((sampleMealText, sampleLabel) => {
+                trackConversionEvent('home_nutri_quick_sample_click', {
+                    placement: 'home_nutri_card',
+                    product: 'nutri_scan',
+                    metadata: { sample: sampleLabel }
+                });
+                setPendingQuickMeal(sampleMealText);
+                setArsenalSubTab('nutricao');
+                setPage('arsenal-vip');
+            }, []);
 
             const ent = useMemo(() => resolveEntitlements(ud.userProfile), [ud.userProfile]);
             const temAcessoTotalVIP = ent.hasTotalVip;
@@ -6657,6 +6787,40 @@ import { createClient } from '@supabase/supabase-js';
                 }
                 setPage(nextPage);
             }, []);
+
+            useEffect(() => {
+                if (!ud.session || !ud.localSynced) return;
+                try {
+                    if (sessionStorage.getItem('app_open_tracked_v1') === '1') return;
+                    sessionStorage.setItem('app_open_tracked_v1', '1');
+                } catch {}
+                trackConversionEvent('app_open', {
+                    placement: isStandaloneMode ? 'pwa' : 'browser',
+                    metadata: {
+                        goal: ud.userProfile?.goal || ud.userProfile?.objetivo_principal || null,
+                        has_nutriscan: temAcessoNutriScan,
+                        has_combo_ouro: temAcessoPremium,
+                        has_desafio: hasDesafio
+                    }
+                });
+            }, [ud.session, ud.localSynced, ud.userProfile, isStandaloneMode, temAcessoNutriScan, temAcessoPremium, hasDesafio]);
+
+            useEffect(() => {
+                if (!ud.session) return;
+                const tabKey = page === 'treinos'
+                    ? `treinos:${treinoSubTab}`
+                    : page === 'evolucao'
+                    ? `evolucao:${evolucaoSubTab}`
+                    : page;
+                if (tabKey === lastTrackedTabRef.current) return;
+                lastTrackedTabRef.current = tabKey;
+                trackConversionEvent('tab_view', {
+                    placement: page,
+                    metadata: {
+                        subTab: page === 'treinos' ? treinoSubTab : page === 'evolucao' ? evolucaoSubTab : null
+                    }
+                });
+            }, [ud.session, page, treinoSubTab, evolucaoSubTab]);
 
             const handleLogout = useCallback(async () => {
                 if (window.supabase) {
@@ -6995,35 +7159,74 @@ import { createClient } from '@supabase/supabase-js';
                 return (
                     <div className="fixed inset-0 z-[15000] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4">
                         <div className="auth-card" style={{ maxWidth: '400px', width: '100%', position: 'relative' }}>
-                            <h2 style={{ color: '#fff', fontSize: '20px', fontWeight: '900', marginBottom: '12px' }}>Definir Nova Senha</h2>
-                            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', marginBottom: '20px' }}>
-                                Insira sua nova senha abaixo para recuperar o acesso à sua conta.
+                            <h2 style={{ color: '#fff', fontSize: '20px', fontWeight: '900', marginBottom: '10px' }}>🔑 Definir Nova Senha</h2>
+                            <div style={{ color: 'rgba(255,255,255,0.68)', fontSize: '13px', marginBottom: '18px' }}>
+                                Crie sua nova senha abaixo (mínimo 6 caracteres) para voltar ao seu plano.
                             </div>
                             <form onSubmit={async (e) => {
                                 e.preventDefault();
                                 setRecoveryError('');
+                                setRecoverySuccess('');
                                 const pwd = e.target.newPwd.value;
                                 if (pwd.length < 6) return setRecoveryError('A senha deve ter pelo menos 6 caracteres.');
                                 setRecoverySaving(true);
                                 try {
                                     const { error } = await window.supabase.auth.updateUser({ password: pwd });
-                                    if (error) setRecoveryError(error.message || 'Erro ao atualizar senha.');
-                                    else {
-                                        ud.setRecoveryMode(false);
+                                    if (error) {
+                                        const raw = error.message || '';
+                                        if (raw.toLowerCase().includes('different from the old')) {
+                                            setRecoveryError('Escolha uma senha diferente da senha anterior.');
+                                        } else {
+                                            setRecoveryError(raw || 'Erro ao atualizar senha. Solicite um novo link.');
+                                        }
+                                    } else {
+                                        try { window.history.replaceState(null, '', window.location.pathname); } catch {}
+                                        setRecoverySuccess('✅ Senha atualizada com sucesso! Entrando...');
+                                        setTimeout(() => {
+                                            setRecoverySuccess('');
+                                            ud.setRecoveryMode(false);
+                                        }, 1100);
                                     }
                                 } finally {
                                     setRecoverySaving(false);
                                 }
                             }}>
                                 <div className="input-group" style={{ marginBottom: '16px' }}>
-                                    <label style={{ color: '#94a3b8', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Nova Senha</label>
-                                    <input type="password" name="newPwd" className="ob-input" placeholder="Mínimo 6 caracteres" required disabled={recoverySaving} style={{ width: '100%', padding: '12px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#fff' }} />
+                                    <label style={{ color: '#c8bed2', fontSize: '12px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '8px', display: 'block' }}>Nova Senha</label>
+                                    <div style={{ position: 'relative' }}>
+                                        <input
+                                            type={recoveryShowPwd ? 'text' : 'password'}
+                                            name="newPwd"
+                                            autoComplete="new-password"
+                                            className="ob-input"
+                                            placeholder="Mínimo 6 caracteres"
+                                            required
+                                            disabled={recoverySaving}
+                                            style={{ width: '100%', padding: '12px 46px 12px 12px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff' }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setRecoveryShowPwd(v => !v)}
+                                            aria-label={recoveryShowPwd ? 'Ocultar senha' : 'Mostrar senha'}
+                                            style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'rgba(255,255,255,0.65)', cursor: 'pointer', fontSize: '16px', padding: '4px 6px' }}
+                                        >
+                                            {recoveryShowPwd ? '🙈' : '👁️'}
+                                        </button>
+                                    </div>
                                 </div>
                                 {recoveryError && <div style={{ color: '#f87171', fontSize: '12px', fontWeight: '700', marginBottom: '12px' }}>{recoveryError}</div>}
+                                {recoverySuccess && <div style={{ color: '#6ee7b7', background: 'rgba(16,185,129,0.14)', border: '1px solid rgba(16,185,129,0.35)', padding: '10px 12px', borderRadius: '10px', fontSize: '12.5px', fontWeight: '700', marginBottom: '12px', textAlign: 'center' }}>{recoverySuccess}</div>}
                                 <button type="submit" disabled={recoverySaving} className="ob-submit-btn" style={{ width: '100%', padding: '14px', borderRadius: '14px', background: '#ff6b4a', color: '#fff', fontWeight: '900', border: 'none', cursor: 'pointer', opacity: recoverySaving ? 0.6 : 1 }}>
                                     {recoverySaving ? 'Salvando...' : 'Salvar Nova Senha'}
                                 </button>
-                                <button type="button" onClick={() => ud.setRecoveryMode(false)} style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '12px', cursor: 'pointer' }}>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        try { window.history.replaceState(null, '', window.location.pathname); } catch {}
+                                        ud.setRecoveryMode(false);
+                                    }}
+                                    style={{ width: '100%', marginTop: '10px', padding: '10px', background: 'transparent', border: 'none', color: '#c8bed2', fontSize: '12px', cursor: 'pointer' }}
+                                >
                                     Cancelar
                                 </button>
                             </form>
@@ -7160,6 +7363,7 @@ import { createClient } from '@supabase/supabase-js';
                         // Variáveis Dinâmicas de Texto do Objetivo
                         const resolvedUserGoal = ud.metaProfile?.user_goal || ud.metaProfile?.objetivo_principal || ud.userProfile?.goal || ud.userProfile?.objetivo_principal || '';
                         const isGoalMassa = resolvedUserGoal.toLowerCase().includes('massa');
+                        const isGoalTonificar = resolvedUserGoal.toLowerCase().includes('tonificar') || resolvedUserGoal.toLowerCase().includes('definir');
                         const safeAvatar = isSafeImageUrl(ud.userProfile?.avatar_url) ? ud.userProfile.avatar_url : null;
 
                         return (
@@ -7295,7 +7499,7 @@ import { createClient } from '@supabase/supabase-js';
 
                                 <div className="home-dashboard p-4 sm:p-6 max-w-4xl mx-auto">
                                 {/* 1. Indicador de Comunidade isolado */}
-                                <div className="flex items-center justify-between gap-3 mb-5 opacity-90">
+                                <div className="flex items-center justify-between gap-3 mb-3 opacity-90">
                                     <WarriorCountBadge />
                                     {resolvedUserGoal && (
                                         <span className="text-[10px] font-black text-orange-400 bg-orange-500/10 border border-orange-500/20 px-2.5 py-1 rounded-full uppercase tracking-wider">
@@ -7304,17 +7508,16 @@ import { createClient } from '@supabase/supabase-js';
                                     )}
                                 </div>
 
-                                {/* 1.5 CHECKLIST DE INÍCIO RÁPIDO (ATIVAÇÃO DIA 1) */}
+                                {/* 1.5 CHECKLIST COMPACTO DE INÍCIO RÁPIDO (MANTÉM TREINO ACIMA DA DOBRA) */}
                                 {!quickstartDismissed && (totalCompleted === 0 || (!temAcessoNutriScan && freeScansRemainingGlobal >= NUTRISCAN_FREE_LIMIT)) && (() => {
                                     const stepWorkoutDone = totalCompleted > 0;
                                     const stepNutriDone = temAcessoNutriScan || freeScansRemainingGlobal < NUTRISCAN_FREE_LIMIT;
                                     const doneCount = 1 + (stepWorkoutDone ? 1 : 0) + (stepNutriDone ? 1 : 0);
                                     return (
-                                        <div className="mb-6 p-5 rounded-[26px] bg-gradient-to-br from-slate-800/80 to-slate-900/90 border border-orange-500/25 shadow-xl">
-                                            <div className="flex items-center justify-between gap-2 mb-3">
-                                                <div>
-                                                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-400">Comece por aqui · {doneCount}/3</span>
-                                                    <h3 className="text-base font-black text-white leading-tight">Seus Primeiros Passos Hoje</h3>
+                                        <div className="mb-3 p-3.5 rounded-[22px] bg-gradient-to-br from-slate-800/85 to-slate-900/95 border border-orange-500/25 shadow-xl">
+                                            <div className="flex items-center justify-between gap-2 mb-2">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-400 shrink-0">Comece por aqui · {doneCount}/3</span>
                                                 </div>
                                                 <button
                                                     type="button"
@@ -7323,26 +7526,19 @@ import { createClient } from '@supabase/supabase-js';
                                                         setQuickstartDismissed(true);
                                                         try { localStorage.setItem('quickstart_dismissed_v1', '1'); } catch {}
                                                     }}
-                                                    className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 text-sm flex items-center justify-center"
+                                                    className="w-6 h-6 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 text-xs flex items-center justify-center shrink-0"
                                                 >&times;</button>
                                             </div>
-                                            <div className="space-y-2.5">
-                                                <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-                                                    <div className="flex items-center gap-2.5">
-                                                        <span className="text-sm">✅</span>
-                                                        <span className="text-xs font-bold text-emerald-200 line-through opacity-80">Conta criada & objetivo definido</span>
-                                                    </div>
-                                                    <span className="text-[10px] font-black text-emerald-400 uppercase">Feito</span>
-                                                </div>
+                                            <div className="space-y-1.5">
                                                 <button
                                                     type="button"
                                                     onClick={startDailyWorkout}
-                                                    className={`w-full flex items-center justify-between gap-3 px-3.5 py-3 rounded-2xl border text-left transition-all ${stepWorkoutDone ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-white/5 hover:bg-white/10 border-orange-500/35'}`}
+                                                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left transition-all ${stepWorkoutDone ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-white/5 hover:bg-white/10 border-orange-500/35'}`}
                                                 >
-                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                    <div className="flex items-center gap-2 min-w-0">
                                                         <span className="text-sm">{stepWorkoutDone ? '✅' : '⚡'}</span>
                                                         <span className={`text-xs font-bold truncate ${stepWorkoutDone ? 'text-emerald-200 line-through opacity-80' : 'text-white'}`}>
-                                                            Fazer seu 1º treino rápido ({Math.max(12, dailyWorkout.length * 3)} min)
+                                                            Fazer 1º treino rápido ({Math.max(12, dailyWorkout.length * 3)} min)
                                                         </span>
                                                     </div>
                                                     <span className={`text-[10px] font-black uppercase shrink-0 ${stepWorkoutDone ? 'text-emerald-400' : 'text-orange-400'}`}>
@@ -7352,15 +7548,15 @@ import { createClient } from '@supabase/supabase-js';
                                                 <button
                                                     type="button"
                                                     onClick={() => { setArsenalSubTab('nutricao'); setPage('arsenal-vip'); }}
-                                                    className={`w-full flex items-center justify-between gap-3 px-3.5 py-3 rounded-2xl border text-left transition-all ${stepNutriDone ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-white/5 hover:bg-white/10 border-emerald-500/35'}`}
+                                                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border text-left transition-all ${stepNutriDone ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-white/5 hover:bg-white/10 border-emerald-500/35'}`}
                                                 >
-                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                    <div className="flex items-center gap-2 min-w-0">
                                                         <span className="text-sm">{stepNutriDone ? '✅' : '📸'}</span>
                                                         <span className={`text-xs font-bold truncate ${stepNutriDone ? 'text-emerald-200 line-through opacity-80' : 'text-white'}`}>
-                                                            Testar 1 foto grátis no Nutri-Scan IA
+                                                            Testar Nutri-Scan grátis (foto ou 1 toque)
                                                         </span>
                                                     </div>
-                                                    <span className={`text-[10px] font-black uppercase shrink-0 ${stepNutriDone ? 'text-emerald-400' : 'text-emerald-400'}`}>
+                                                    <span className="text-[10px] font-black uppercase shrink-0 text-emerald-400">
                                                         {stepNutriDone ? 'Feito' : 'Testar →'}
                                                     </span>
                                                 </button>
@@ -7369,41 +7565,39 @@ import { createClient } from '@supabase/supabase-js';
                                     );
                                 })()}
 
-                                {/* 1.8 ATALHOS VISÍVEIS: DESAFIO 30 DIAS + SONO PROFUNDO */}
-                                <div className="grid grid-cols-2 gap-3 mb-6">
+                                {/* 1.8 ATALHOS COMPACTOS LOGO ABAIXO DO COMECE AQUI: DESAFIO 30 DIAS + SONO PROFUNDO */}
+                                <div className="grid grid-cols-2 gap-2 mb-4">
                                     <button
                                         type="button"
                                         onClick={() => { setTreinoSubTab('desafio30'); setPage('treinos'); }}
-                                        className="text-left p-4 rounded-3xl bg-gradient-to-br from-orange-500/15 to-slate-900/90 border border-orange-500/25 hover:border-orange-400/50 transition-all active:scale-[0.98]"
+                                        className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-2xl bg-gradient-to-r from-orange-500/15 to-slate-900/90 border border-orange-500/25 hover:border-orange-400/50 transition-all active:scale-[0.98] text-left"
                                     >
-                                        <div className="flex items-center justify-between mb-1.5">
-                                            <span className="text-xl">🔥</span>
-                                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${hasDesafio ? 'bg-emerald-500/20 text-emerald-300' : 'bg-orange-500/20 text-orange-300'}`}>
-                                                {hasDesafio ? 'Liberado' : '🔒 Plano 30D'}
-                                            </span>
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <span className="text-base shrink-0">🔥</span>
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-black text-white leading-tight truncate">Desafio 30 Dias</div>
+                                                <div className="text-[10px] text-orange-300 font-bold truncate">{hasDesafio ? 'Liberado →' : 'Dia 1 grátis →'}</div>
+                                            </div>
                                         </div>
-                                        <div className="text-sm font-black text-white leading-tight">Desafio 30 Dias</div>
-                                        <div className="text-[11px] text-slate-400 font-medium mt-0.5">Treino pronto dia a dia →</div>
                                     </button>
                                     <button
                                         type="button"
                                         onClick={() => { setEvolucaoSubTab('sono'); setPage('evolucao'); }}
-                                        className="text-left p-4 rounded-3xl bg-gradient-to-br from-indigo-500/15 to-slate-900/90 border border-indigo-500/25 hover:border-indigo-400/50 transition-all active:scale-[0.98]"
+                                        className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-2xl bg-gradient-to-r from-indigo-500/15 to-slate-900/90 border border-indigo-500/25 hover:border-indigo-400/50 transition-all active:scale-[0.98] text-left"
                                     >
-                                        <div className="flex items-center justify-between mb-1.5">
-                                            <span className="text-xl">🌙</span>
-                                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${hasSono ? 'bg-emerald-500/20 text-emerald-300' : 'bg-indigo-500/20 text-indigo-300'}`}>
-                                                {hasSono ? 'Liberado' : '🔒 Áudios'}
-                                            </span>
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <span className="text-base shrink-0">🌙</span>
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-black text-white leading-tight truncate">Sono Profundo</div>
+                                                <div className="text-[10px] text-indigo-300 font-bold truncate">{hasSono ? 'Liberado →' : 'Ouvir prévia →'}</div>
+                                            </div>
                                         </div>
-                                        <div className="text-sm font-black text-white leading-tight">Sono Profundo</div>
-                                        <div className="text-[11px] text-slate-400 font-medium mt-0.5">Dormir melhor & energia →</div>
                                     </button>
                                 </div>
 
-                                {/* 2. TREINO DO DIA NO TOPO */}
-                                <div className="flex items-center justify-between gap-3 mb-3">
-                                    <h2 className="text-xs sm:text-sm font-black text-slate-300 uppercase tracking-[0.18em] flex items-center gap-2">
+                                {/* 2. TREINO DO DIA ACIMA DA DOBRA */}
+                                <div className="flex items-center justify-between gap-3 mb-2.5">
+                                    <h2 className="text-xs sm:text-sm font-black text-slate-300 uppercase tracking-[0.16em] flex items-center gap-2">
                                         ⚡ Seu Treino de Hoje em Casa
                                     </h2>
                                     <button
@@ -7421,24 +7615,24 @@ import { createClient } from '@supabase/supabase-js';
                                     </div>
                                 )}
 
-                                <div className="relative overflow-hidden w-full bg-slate-800/40 rounded-3xl shadow-xl group mb-6">
+                                <div className="relative overflow-hidden w-full bg-slate-800/40 rounded-3xl shadow-xl group mb-5">
                                     <img
                                         src="./assets/hero-bg.webp"
                                         className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 pointer-events-none z-0 opacity-80"
                                         alt="Treino de Hoje"
                                     />
-                                    <div className="absolute inset-0 bg-gradient-to-t from-[#1b1622] via-[#1b1622]/80 to-transparent pointer-events-none z-0"></div>
+                                    <div className="absolute inset-0 bg-gradient-to-t from-[#1b1622] via-[#1b1622]/85 to-transparent pointer-events-none z-0"></div>
 
-                                    <div className="absolute top-5 left-5 z-20 bg-black/45 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-2 pointer-events-none">
+                                    <div className="absolute top-3.5 left-4 z-20 bg-black/45 backdrop-blur-md px-3 py-1 rounded-xl border border-white/10 flex items-center gap-2 pointer-events-none">
                                         <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse"></div>
                                         <span className="text-[10px] font-black text-white uppercase tracking-widest">
                                             {totalCompleted === 0 ? 'Treino Rápido de Boas-Vindas' : 'Corpo Inteiro com Elásticos'}
                                         </span>
                                     </div>
 
-                                    <div className="relative z-10 p-6 pointer-events-auto flex flex-col gap-4 mt-[115px]">
+                                    <div className="relative z-10 p-4 sm:p-6 pointer-events-auto flex flex-col gap-3 mt-[56px] sm:mt-[85px]">
                                         <div>
-                                            <h3 className="text-2xl sm:text-3xl font-black text-white leading-tight mb-1.5 drop-shadow-xl">
+                                            <h3 className="text-xl sm:text-3xl font-black text-white leading-tight mb-1 drop-shadow-xl">
                                                 {resolvedUserGoal.toLowerCase().includes('massa')
                                                     ? '💪 Força & Massa Muscular em Casa'
                                                     : resolvedUserGoal.toLowerCase().includes('tonificar') || resolvedUserGoal.toLowerCase().includes('definir')
@@ -7447,31 +7641,31 @@ import { createClient } from '@supabase/supabase-js';
                                                     ? '🌿 Mobilidade & Disposição em Casa'
                                                     : '🔥 Queima-Gordura Prática em Casa'}
                                             </h3>
-                                            <p className="text-[13px] text-slate-300 font-medium leading-relaxed">
+                                            <p className="text-xs sm:text-[13px] text-slate-300 font-medium leading-relaxed">
                                                 {getMotivationalPhrase(resolvedUserGoal)}
                                             </p>
                                         </div>
 
-                                        <div className="grid grid-cols-3 gap-2.5">
-                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
-                                                <div className="text-sm font-black text-white">{dailyWorkout.length} exercícios</div>
-                                                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Treino pronto</div>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-2.5 py-2">
+                                                <div className="text-xs sm:text-sm font-black text-white">{dailyWorkout.length} exercícios</div>
+                                                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Treino pronto</div>
                                             </div>
-                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
-                                                <div className="text-sm font-black text-white">{Math.max(12, dailyWorkout.length * 3)} min</div>
-                                                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Duração</div>
+                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-2.5 py-2">
+                                                <div className="text-xs sm:text-sm font-black text-white">{Math.max(12, dailyWorkout.length * 3)} min</div>
+                                                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Duração</div>
                                             </div>
-                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2.5">
-                                                <div className="text-sm font-black text-white">{homeStreak} dias</div>
-                                                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Sequência</div>
+                                            <div className="rounded-2xl border border-white/10 bg-white/5 px-2.5 py-2">
+                                                <div className="text-xs sm:text-sm font-black text-white">{homeStreak} dias</div>
+                                                <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Sequência</div>
                                             </div>
                                         </div>
 
-                                        <div className="flex flex-col sm:flex-row gap-2.5">
+                                        <div className="flex flex-col sm:flex-row gap-2">
                                             <button
                                                 onClick={startDailyWorkout}
                                                 disabled={isLoadingExercises}
-                                                className={`flex-1 py-4 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl text-white font-black tracking-[0.14em] uppercase text-sm shadow-[0_8px_25px_rgba(255,107,74,0.3)] hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-3 ${isLoadingExercises ? 'opacity-70 cursor-not-allowed' : ''}`}
+                                                className={`flex-1 py-3.5 sm:py-4 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl text-white font-black tracking-[0.14em] uppercase text-sm shadow-[0_8px_25px_rgba(255,107,74,0.35)] hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-3 ${isLoadingExercises ? 'opacity-70 cursor-not-allowed' : ''}`}
                                             >
                                                 {isLoadingExercises ? (
                                                     <>
@@ -7487,7 +7681,7 @@ import { createClient } from '@supabase/supabase-js';
                                             </button>
                                             <button
                                                 onClick={() => setPage('treinos')}
-                                                className="py-3.5 px-5 bg-white/10 hover:bg-white/15 border border-white/10 rounded-2xl text-white font-bold text-xs uppercase tracking-wider transition-all"
+                                                className="py-3 px-4 bg-white/10 hover:bg-white/15 border border-white/10 rounded-2xl text-white font-bold text-xs uppercase tracking-wider transition-all"
                                             >
                                                 Ver +500 Exercícios
                                             </button>
@@ -7495,7 +7689,7 @@ import { createClient } from '@supabase/supabase-js';
                                     </div>
                                 </div>
 
-                                {/* 3. GANCHO DE DEGUSTAÇÃO NUTRI-SCAN (2 TESTES GRÁTIS NO DIA 1!) */}
+                                {/* 3. GANCHO DE DEGUSTAÇÃO NUTRI-SCAN COM TESTE EM 1 TOQUE DIRETO DA HOME */}
                                 {!temAcessoNutriScan && (
                                     <div
                                         onClick={() => {
@@ -7510,10 +7704,10 @@ import { createClient } from '@supabase/supabase-js';
                                                 });
                                             }
                                         }}
-                                        className="rounded-[28px] p-6 mb-6 relative overflow-hidden cursor-pointer border border-emerald-500/35 transition-all hover:scale-[1.01] active:scale-[0.99] shadow-2xl"
+                                        className="rounded-[28px] p-5 sm:p-6 mb-5 relative overflow-hidden cursor-pointer border border-emerald-500/35 transition-all hover:scale-[1.005] active:scale-[0.99] shadow-2xl"
                                         style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(27,22,34,0.96) 75%)' }}
                                     >
-                                        <div className="flex items-center justify-between gap-2 mb-3">
+                                        <div className="flex items-center justify-between gap-2 mb-2.5">
                                             <span className="inline-flex items-center gap-1.5 bg-emerald-500 text-slate-950 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">
                                                 {freeScansRemainingGlobal > 0
                                                     ? `🎁 ${freeScansRemainingGlobal} ${freeScansRemainingGlobal === 1 ? 'TESTE GRÁTIS' : 'TESTES GRÁTIS'} LIBERADOS`
@@ -7521,17 +7715,43 @@ import { createClient } from '@supabase/supabase-js';
                                             </span>
                                             <span className="text-2xl">📸</span>
                                         </div>
-                                        <h3 className="text-xl sm:text-2xl font-black text-white leading-tight mb-2">
+                                        <h3 className="text-xl sm:text-2xl font-black text-white leading-tight mb-1.5">
                                             Descubra as calorias do seu prato em 3 segundos
                                         </h3>
                                         <p className="text-[13px] text-slate-300 leading-relaxed font-medium mb-3">
                                             {freeScansRemainingGlobal > 0
-                                                ? 'Sem balança e sem anotar tudo! Tire uma foto ou toque no que comeu hoje e veja o resultado na hora:'
+                                                ? 'Não está com prato agora? Toque em 1 opção abaixo para ver a IA calculando na hora (ou envie sua foto):'
                                                 : 'Você já testou o Nutri-Scan™ IA! Libere análises ilimitadas com 7 dias grátis (depois só R$ 0,33/dia).'}
                                         </p>
 
+                                        {freeScansRemainingGlobal > 0 && (
+                                            <div className="grid grid-cols-3 gap-2 mb-3.5" onClick={(e) => e.stopPropagation()}>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => launchQuickNutriScan('2 ovos mexidos, 1 fatia de pão integral e 1 xícara de café com leite', 'cafe')}
+                                                    className="py-2.5 px-2 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-400/35 text-emerald-100 text-[11px] font-black text-center transition-all active:scale-95"
+                                                >
+                                                    ☕ Café
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => launchQuickNutriScan('150g de frango grelhado, 4 colheres de arroz, feijão e salada verde', 'almoco')}
+                                                    className="py-2.5 px-2 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-400/35 text-emerald-100 text-[11px] font-black text-center transition-all active:scale-95"
+                                                >
+                                                    🥗 Almoço
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => launchQuickNutriScan('Omelete de 2 ovos com queijo branco e salada de tomate', 'jantar')}
+                                                    className="py-2.5 px-2 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-400/35 text-emerald-100 text-[11px] font-black text-center transition-all active:scale-95"
+                                                >
+                                                    🍲 Jantar
+                                                </button>
+                                            </div>
+                                        )}
+
                                         {/* MINI-PRÉVIA VISUAL DE UM PRATO ANALISADO */}
-                                        <div className="mb-4 p-3 rounded-2xl bg-black/35 border border-emerald-400/25 flex items-center justify-between gap-3">
+                                        <div className="mb-3.5 p-3 rounded-2xl bg-black/35 border border-emerald-400/25 flex items-center justify-between gap-3">
                                             <div className="flex items-center gap-2.5 min-w-0">
                                                 <span className="w-9 h-9 rounded-xl bg-emerald-500/20 flex items-center justify-center text-lg shrink-0">🍽️</span>
                                                 <div className="min-w-0">
@@ -7546,13 +7766,13 @@ import { createClient } from '@supabase/supabase-js';
                                         </div>
 
                                         <div className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-3.5 px-5 rounded-2xl text-xs uppercase tracking-[0.14em] text-center transition-colors shadow-lg shadow-emerald-500/20">
-                                            {freeScansRemainingGlobal > 0 ? '📸 TESTAR NUTRI-SCAN GRÁTIS (1 TOQUE)' : '👉 LIBERAR MEUS 7 DIAS GRÁTIS'}
+                                            {freeScansRemainingGlobal > 0 ? '📸 ABRIR CÂMERA DO NUTRI-SCAN GRÁTIS' : '👉 LIBERAR MEUS 7 DIAS GRÁTIS'}
                                         </div>
                                     </div>
                                 )}
 
-                                {/* 4. OFERTA CONTEXTUAL PERSONALIZADA (OBJETIVO + STATUS DO DESAFIO 30D) */}
-                                <div className="grid grid-cols-1 gap-4 mb-8">
+                                {/* 4. OFERTA CONTEXTUAL PERSONALIZADA (OBJETIVO + ACESSO TOTAL VIP EM DESTAQUE) */}
+                                <div className="grid grid-cols-1 gap-4 mb-5">
                                     {hasDesafio && !temAcessoPremium ? (
                                         <div
                                             className="flash-quest-card rounded-[28px] p-6 relative overflow-hidden group cursor-pointer border border-amber-500/30"
@@ -7569,6 +7789,17 @@ import { createClient } from '@supabase/supabase-js';
                                                 Você já garantiu o Desafio 30 Dias! Libere agora <strong className="text-white">Musculação em Casa + Pilates Modelador + Sono Profundo + Mini-Bands</strong> em um único pagamento vitalício de <strong className="text-amber-300">R$ 24,90</strong>.
                                             </p>
                                             <div className="bg-orange-500 text-white font-black py-3.5 px-6 rounded-2xl text-xs uppercase tracking-[0.15em] text-center group-hover:bg-orange-400 transition-colors">VER COMBO DE OURO (R$ 24,90 VITALÍCIO)</div>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    trackConversionEvent('home_acesso_total_interest', { placement: 'home_offer_card', product: 'acesso_total' });
+                                                    setPage('extras');
+                                                }}
+                                                className="w-full mt-2.5 py-2.5 px-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[11px] font-black text-center transition-colors"
+                                            >
+                                                💎 Quer TUDO + Nutri-Scan sem mensalidade? Ver Acesso Total VIP (R$ 69,90) →
+                                            </button>
                                         </div>
                                     ) : !temAcessoPremium ? (
                                         <div
@@ -7578,18 +7809,35 @@ import { createClient } from '@supabase/supabase-js';
                                             <div className="flex items-center gap-2 mb-2.5">
                                                 <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shadow-[0_0_14px_rgba(255,107,74,0.6)]"></span>
                                                 <span className="text-[11px] text-orange-300 font-black uppercase tracking-widest">
-                                                    {isGoalMassa ? 'Recomendado para Ganhar Massa em Casa' : 'O Mais Escolhido para Secar e Definir'}
+                                                    {isGoalMassa
+                                                        ? 'Recomendado para Ganhar Massa em Casa'
+                                                        : isGoalTonificar
+                                                        ? 'Ideal para Firmar Corpo e Glúteos em Casa'
+                                                        : 'O Mais Escolhido para Secar e Definir'}
                                                 </span>
                                             </div>
                                             <div className="text-2xl sm:text-[26px] font-black text-white leading-tight tracking-tight mb-2">
                                                 {isGoalMassa
                                                     ? 'Combo de Ouro: Musculação em Casa + Desafio 30D'
+                                                    : isGoalTonificar
+                                                    ? 'Combo de Ouro: Desafio 30D + Pilates + Musculação'
                                                     : 'Combo de Ouro: Desafio 30 Dias + 5 Programas VIP'}
                                             </div>
-                                            <p className="text-[13px] text-slate-300 leading-relaxed font-medium mb-5">
+                                            <p className="text-[13px] text-slate-300 leading-relaxed font-medium mb-4">
                                                 Leve o <strong className="text-white">Desafio 30 Dias passo a passo + Musculação em Casa + Pilates + Guias Bônus</strong> pagando uma única vez <strong className="text-orange-300">R$ 24,90</strong> (sem mensalidade!).
                                             </p>
-                                            <div className="bg-orange-500 text-white font-black py-3.5 px-6 rounded-2xl text-xs uppercase tracking-[0.15em] text-center group-hover:bg-orange-400 transition-colors">CONHECER O COMBO DE OURO</div>
+                                            <div className="bg-orange-500 text-white font-black py-3.5 px-6 rounded-2xl text-xs uppercase tracking-[0.15em] text-center group-hover:bg-orange-400 transition-colors">CONHECER O COMBO DE OURO (R$ 24,90)</div>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    trackConversionEvent('home_acesso_total_interest', { placement: 'home_offer_card', product: 'acesso_total' });
+                                                    setPage('extras');
+                                                }}
+                                                className="w-full mt-2.5 py-2.5 px-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-[11px] font-black text-center transition-colors"
+                                            >
+                                                💎 Quer TUDO + Nutri-Scan sem mensalidade? Ver Acesso Total VIP (R$ 69,90) →
+                                            </button>
                                         </div>
                                     ) : !temAcessoTotalVIP ? (
                                         <div
@@ -7626,6 +7874,45 @@ import { createClient } from '@supabase/supabase-js';
                                         </div>
                                     )}
                                 </div>
+
+                                {/* 4.5 BANNER LEVE PWA: INSTALAR APP NA TELA INICIAL (RETENÇÃO DIA 2-7) */}
+                                {!isStandaloneMode && !pwaDismissed && (deferredInstallPrompt || isIosDevice) && (
+                                    <div className="mb-6 p-4 rounded-3xl bg-white/5 border border-white/10 shadow-lg">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="w-10 h-10 rounded-2xl bg-orange-500/15 border border-orange-500/30 flex items-center justify-center text-xl shrink-0">📲</div>
+                                                <div className="min-w-0">
+                                                    <div className="text-xs sm:text-sm font-black text-white leading-tight">Instale na Tela Inicial</div>
+                                                    <div className="text-[11px] text-slate-300 leading-snug mt-0.5">
+                                                        Abra em 1 toque como aplicativo real (tela cheia, sem barra do navegador).
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                aria-label="Ocultar aviso de instalação"
+                                                onClick={() => {
+                                                    setPwaDismissed(true);
+                                                    try { localStorage.setItem('pwa_install_dismissed_v1', '1'); } catch {}
+                                                }}
+                                                className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 text-sm flex items-center justify-center shrink-0"
+                                            >&times;</button>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handlePwaInstallClick}
+                                            className="w-full mt-3 py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white font-black text-xs uppercase tracking-wider transition-all active:scale-95"
+                                        >
+                                            {deferredInstallPrompt ? '📲 Instalar Aplicativo Agora (1 Toque)' : (showIosInstallGuide ? 'Ocultar passo a passo' : '📲 Ver como colocar no iPhone (2 passos)')}
+                                        </button>
+                                        {showIosInstallGuide && !deferredInstallPrompt && (
+                                            <div className="mt-3 p-3 rounded-2xl bg-black/30 border border-white/10 text-xs text-slate-200 space-y-1.5 leading-relaxed">
+                                                <div><strong>1.</strong> Toque no botão <strong>Compartilhar (⬆️)</strong> na barra inferior do Safari.</div>
+                                                <div><strong>2.</strong> Role um pouco e toque em <strong>"Adicionar à Tela de Início"</strong> → <strong>Adicionar</strong>.</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
                                     {/* Body Status Card */}
@@ -7811,6 +8098,8 @@ import { createClient } from '@supabase/supabase-js';
                                 onNav={navigateTo} 
                                 temAcessoNutriScan={temAcessoNutriScan}
                                 onOpenNutriUpsell={openNutriScanUpsell}
+                                pendingQuickMeal={pendingQuickMeal}
+                                onClearPendingQuickMeal={() => setPendingQuickMeal(null)}
                             />
                         );
                     }
