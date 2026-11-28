@@ -123,6 +123,66 @@ import { createClient } from '@supabase/supabase-js';
         };
 
 
+        const estimateDailyNutrition = (profile) => {
+            const goalRaw = String(profile?.goal || profile?.objetivo_principal || 'Perder Peso');
+            const lowerGoal = goalRaw.toLowerCase();
+            const isMale = ['male', 'masculino', 'm'].includes(String(profile?.gender || '').toLowerCase());
+            const ageNum = Math.min(85, Math.max(18, Number(profile?.idade || profile?.age) || 41));
+            let savedWeight = null;
+            try {
+                const evo = JSON.parse(localStorage.getItem('lastEvolucao') || 'null');
+                if (evo?.peso && Number(evo.peso) > 30 && Number(evo.peso) < 220) savedWeight = Number(evo.peso);
+            } catch {}
+            const baseWeight = savedWeight || (isMale ? 78 : 66);
+            let multiplier = 25;
+            let goalLabel = 'Secar e Emagrecer';
+            if (lowerGoal.includes('massa')) {
+                multiplier = 31;
+                goalLabel = 'Ganhar Força e Massa';
+            } else if (lowerGoal.includes('tonificar') || lowerGoal.includes('definir')) {
+                multiplier = 26;
+                goalLabel = 'Firmar e Tonificar';
+            } else if (lowerGoal.includes('saúde') || lowerGoal.includes('saude') || lowerGoal.includes('mobilidade')) {
+                multiplier = 26;
+                goalLabel = 'Saúde e Disposição';
+            } else {
+                multiplier = 23;
+                goalLabel = 'Emagrecer e Secar';
+            }
+            const ageAdj = ageNum >= 40 ? Math.max(-160, -Math.round((ageNum - 35) * 4)) : 0;
+            const kcal = Math.max(1250, Math.round((baseWeight * multiplier + ageAdj) / 10) * 10);
+            const protein = Math.max(75, Math.round(baseWeight * 1.65));
+            return { kcal, protein, goalLabel, ageNum };
+        };
+
+        const getWelcomeOfferRemainingMs = (ud) => {
+            try {
+                const rawDate = ud?.session?.user?.created_at || ud?.userProfile?.created_at || null;
+                let startMs = rawDate ? new Date(rawDate).getTime() : NaN;
+                if (!startMs || isNaN(startMs)) {
+                    const stored = Number(localStorage.getItem('welcome_offer_start_ts') || '0');
+                    if (stored > 0) {
+                        startMs = stored;
+                    } else {
+                        startMs = Date.now();
+                        localStorage.setItem('welcome_offer_start_ts', String(startMs));
+                    }
+                }
+                const WINDOW_MS = 48 * 60 * 60 * 1000;
+                return Math.max(0, WINDOW_MS - (Date.now() - startMs));
+            } catch {
+                return 0;
+            }
+        };
+
+        const formatRemainingHHMM = (ms) => {
+            if (!ms || ms <= 0) return '';
+            const totalMin = Math.floor(ms / 60000);
+            const hrs = Math.floor(totalMin / 60);
+            const mins = totalMin % 60;
+            return `${hrs}h ${String(mins).padStart(2, '0')}m`;
+        };
+
         const CATEGORIES = ['Todos', 'Membros Inferiores', 'Membros Superiores', 'Braços', 'Cardio', 'Mobilidade'];
         const DIFFICULTIES = ['Todos', 'Iniciante', 'Intermediário', 'Avançado'];
         const NUTRISCAN_FREE_LIMIT = 2;
@@ -1077,8 +1137,17 @@ import { createClient } from '@supabase/supabase-js';
             const [selectedGender, setSelectedGender] = useState(initialProfile?.gender || '');
             const [estado, setEstado] = useState(initialProfile?.estado || '');
             const [whatsapp, setWhatsapp] = useState(initialProfile?.whatsapp || '');
+            const [focusArea, setFocusArea] = useState(() => {
+                try { return localStorage.getItem('user_focus_area') || 'Barriga e Cintura'; } catch { return 'Barriga e Cintura'; }
+            });
+            const [dailyTime, setDailyTime] = useState(() => {
+                try { return localStorage.getItem('user_daily_time') || '10–15 min'; } catch { return '10–15 min'; }
+            });
             const [validationErr, setValidationErr] = useState('');
             const [saving, setSaving] = useState(false);
+
+            const FOCUS_AREAS = ['Barriga e Cintura', 'Glúteos e Pernas', 'Braços Firmes', 'Corpo Todo'];
+            const DAILY_TIMES = ['10–15 min', '20–30 min'];
 
             const ESTADOS_BR = ["Acre", "Alagoas", "Amapá", "Amazonas", "Bahia", "Ceará", "Distrito Federal", "Espírito Santo", "Goiás", "Maranhão", "Mato Grosso", "Mato Grosso do Sul", "Minas Gerais", "Pará", "Paraíba", "Paraná", "Pernambuco", "Piauí", "Rio de Janeiro", "Rio Grande do Norte", "Rio Grande do Sul", "Rondônia", "Roraima", "Santa Catarina", "São Paulo", "Sergipe", "Tocantins"];
             const GOAL_OPTIONS = [
@@ -1117,11 +1186,15 @@ import { createClient } from '@supabase/supabase-js';
                     const finalGender = skipOptional ? (selectedGender || 'female') : (selectedGender || 'female');
                     const finalEstado = skipOptional ? (estado || '') : estado;
                     const finalAge = skipOptional ? (Number(age) || 38) : (Number(age) || 38);
+                    try {
+                        localStorage.setItem('user_focus_area', focusArea);
+                        localStorage.setItem('user_daily_time', dailyTime);
+                    } catch {}
                     await onComplete(name.trim(), goal, finalGender, finalAge, finalEstado, whatsapp);
                     if (!isEditMode) {
                         trackConversionEvent('onboarding_completed', {
                             placement: skipOptional ? 'step2_skipped' : 'step2_full',
-                            metadata: { goal, has_estado: Boolean(finalEstado) }
+                            metadata: { goal, focusArea, dailyTime, has_estado: Boolean(finalEstado) }
                         });
                     }
                 } finally {
@@ -1298,6 +1371,56 @@ import { createClient } from '@supabase/supabase-js';
                                     </div>
                                 </div>
 
+                                {!isEditMode && (
+                                    <div className="input-group" style={{ marginTop: '12px' }}>
+                                        <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>QUAL ÁREA VOCÊ QUER TRANSFORMAR PRIMEIRO?</label>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '7px' }}>
+                                            {FOCUS_AREAS.map(area => (
+                                                <button
+                                                    type="button"
+                                                    key={area}
+                                                    onClick={() => setFocusArea(area)}
+                                                    style={{
+                                                        padding: '9px 8px',
+                                                        borderRadius: '11px',
+                                                        border: focusArea === area ? '2px solid #ff6b4a' : '1px solid rgba(255,255,255,0.1)',
+                                                        background: focusArea === area ? 'rgba(255,107,74,0.18)' : 'rgba(255,255,255,0.03)',
+                                                        color: focusArea === area ? '#fff' : 'rgba(255,255,255,0.72)',
+                                                        fontSize: '12px',
+                                                        fontWeight: '800',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    {area}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
+                                            <span style={{ fontSize: '10.5px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>TEMPO/DIA:</span>
+                                            {DAILY_TIMES.map(t => (
+                                                <button
+                                                    type="button"
+                                                    key={t}
+                                                    onClick={() => setDailyTime(t)}
+                                                    style={{
+                                                        flex: 1,
+                                                        padding: '7px 8px',
+                                                        borderRadius: '10px',
+                                                        border: dailyTime === t ? '2px solid #10b981' : '1px solid rgba(255,255,255,0.1)',
+                                                        background: dailyTime === t ? 'rgba(16,185,129,0.16)' : 'rgba(255,255,255,0.03)',
+                                                        color: dailyTime === t ? '#6ee7b7' : 'rgba(255,255,255,0.72)',
+                                                        fontSize: '11.5px',
+                                                        fontWeight: '800',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    ⏱️ {t}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="input-group" style={{ marginTop: '14px' }}>
                                     <label style={{ fontSize: '11px', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px', display: 'block' }}>SEU ESTADO <span style={{ opacity: 0.65 }}>(OPCIONAL)</span></label>
                                     <select className="ob-input" value={estado} onChange={e => setEstado(e.target.value)} style={{ width: '100%', background: '#1b1622', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '12px', padding: '12px', color: '#fff', fontSize: '15px', colorScheme: 'dark' }}>
@@ -1335,6 +1458,176 @@ import { createClient } from '@supabase/supabase-js';
                                 )}
                             </form>
                         )}
+                    </div>
+                </div>
+            );
+        }
+
+        function WelcomePlanPaywall({ ud, onContinueFree, onTryNutriFree }) {
+            const [buildingPct, setBuildingPct] = useState(18);
+            const [ready, setReady] = useState(false);
+
+            const focusArea = useMemo(() => {
+                try { return localStorage.getItem('user_focus_area') || 'Corpo Todo'; } catch { return 'Corpo Todo'; }
+            }, []);
+            const dailyTime = useMemo(() => {
+                try { return localStorage.getItem('user_daily_time') || '10–15 min'; } catch { return '10–15 min'; }
+            }, []);
+            const firstName = (ud?.userProfile?.name || 'campeã').trim().split(' ')[0];
+            const nutriEst = useMemo(() => estimateDailyNutrition(ud?.userProfile), [ud?.userProfile]);
+            const remainText = useMemo(() => formatRemainingHHMM(getWelcomeOfferRemainingMs(ud)) || '47h 59m', [ud]);
+
+            useEffect(() => {
+                const t1 = setTimeout(() => setBuildingPct(58), 550);
+                const t2 = setTimeout(() => setBuildingPct(92), 1250);
+                const t3 = setTimeout(() => {
+                    setBuildingPct(100);
+                    setReady(true);
+                    trackConversionEvent('day0_paywall_shown', {
+                        placement: 'post_onboarding',
+                        metadata: { goal: ud?.userProfile?.goal || ud?.userProfile?.objetivo_principal || null, focusArea, dailyTime }
+                    });
+                }, 1900);
+                return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+            }, []);
+
+            const markSeen = () => {
+                try { localStorage.setItem('day0_paywall_seen_v1', '1'); } catch {}
+            };
+
+            if (!ready) {
+                return (
+                    <div className="onboarding-overlay" style={{ padding: '24px 16px' }}>
+                        <div className="onboarding-card" style={{ maxWidth: '420px', textAlign: 'center', padding: '32px 24px' }}>
+                            <div style={{ fontSize: '42px', marginBottom: '12px' }}>✨</div>
+                            <h2 style={{ fontSize: '20px', fontWeight: '900', color: '#fff', marginBottom: '8px' }}>
+                                Montando seu plano, {firstName}...
+                            </h2>
+                            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+                                {buildingPct < 55
+                                    ? `Selecionando treinos de ${dailyTime} focados em ${focusArea}...`
+                                    : buildingPct < 90
+                                    ? `Calculando sua meta diária de calorias e proteína (${nutriEst.ageNum} anos)...`
+                                    : 'Liberando seus 2 testes grátis no Nutri-Scan IA...'}
+                            </p>
+                            <div style={{ height: '10px', width: '100%', background: 'rgba(255,255,255,0.08)', borderRadius: '99px', overflow: 'hidden', marginBottom: '10px' }}>
+                                <div style={{ height: '100%', width: `${buildingPct}%`, background: 'linear-gradient(90deg, #ff6b4a, #10b981)', borderRadius: '99px', transition: 'width 0.55s ease' }} />
+                            </div>
+                            <div style={{ fontSize: '11px', fontWeight: '800', color: '#34d399' }}>{buildingPct}% concluído</div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="onboarding-overlay" style={{ overflowY: 'auto', alignItems: 'flex-start', padding: '18px 14px 36px', animation: 'fade-in 0.35s ease-out' }}>
+                    <div className="onboarding-card" style={{ margin: 'auto', maxWidth: '460px', width: '100%', padding: '22px 18px' }}>
+                        <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(16,185,129,0.16)', border: '1px solid rgba(16,185,129,0.35)', color: '#6ee7b7', fontSize: '10.5px', fontWeight: '900', padding: '4px 12px', borderRadius: '99px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+                                ✅ Plano Pronto · ⏳ Condição Boas-Vindas ({remainText})
+                            </span>
+                        </div>
+
+                        <h1 style={{ fontSize: '21px', fontWeight: '900', color: '#fff', textAlign: 'center', lineHeight: 1.22, marginBottom: '6px' }}>
+                            {firstName}, seu plano para <span style={{ color: '#ff6b4a' }}>{focusArea}</span> está pronto!
+                        </h1>
+                        <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', textAlign: 'center', marginBottom: '14px', lineHeight: 1.45 }}>
+                            Montado para sua rotina de <strong>{dailyTime}/dia</strong> em casa com foco em <strong>{nutriEst.goalLabel}</strong>.
+                        </p>
+
+                        {/* DIAGNÓSTICO PERSONALIZADO + META CALÓRICA */}
+                        <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '18px', padding: '14px', marginBottom: '14px' }}>
+                            <div style={{ fontSize: '10px', fontWeight: '900', color: '#34d399', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '8px' }}>
+                                🎯 Sua Meta Diária Estimada ({nutriEst.ageNum} anos)
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                                <div style={{ background: 'rgba(0,0,0,0.28)', borderRadius: '12px', padding: '10px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '18px', fontWeight: '900', color: '#fff' }}>~{nutriEst.kcal} kcal</div>
+                                    <div style={{ fontSize: '10px', color: '#c8bed2', fontWeight: '700' }}>Meta calórica / dia</div>
+                                </div>
+                                <div style={{ background: 'rgba(0,0,0,0.28)', borderRadius: '12px', padding: '10px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '18px', fontWeight: '900', color: '#34d399' }}>{nutriEst.protein}g</div>
+                                    <div style={{ fontSize: '10px', color: '#c8bed2', fontWeight: '700' }}>Proteína p/ firmeza</div>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    markSeen();
+                                    trackConversionEvent('day0_paywall_nutri_click', { placement: 'day0_paywall', product: 'nutri_scan' });
+                                    onTryNutriFree();
+                                }}
+                                style={{ width: '100%', padding: '10px 12px', borderRadius: '12px', background: 'rgba(16,185,129,0.16)', border: '1px solid rgba(16,185,129,0.4)', color: '#6ee7b7', fontSize: '12px', fontWeight: '800', cursor: 'pointer' }}
+                            >
+                                📸 Ver se minha última refeição bate essa meta (2 testes grátis) →
+                            </button>
+                        </div>
+
+                        {/* OFERTA PRINCIPAL 1: ACESSO TOTAL VIP (SEM MENSALIDADE) */}
+                        <div style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.18) 0%, rgba(27,22,34,0.98) 80%)', border: '2px solid rgba(16,185,129,0.45)', borderRadius: '20px', padding: '16px', marginBottom: '10px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                <span style={{ fontSize: '10px', fontWeight: '900', color: '#052e16', background: '#34d399', padding: '3px 9px', borderRadius: '99px', textTransform: 'uppercase' }}>
+                                    💎 MAIS VANTAJOSO · SEM MENSALIDADE
+                                </span>
+                                <span style={{ fontSize: '11px', color: '#c8bed2', textDecoration: 'line-through', fontWeight: '700' }}>R$ 119,40+</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', marginBottom: '6px' }}>
+                                <div style={{ fontSize: '17px', fontWeight: '900', color: '#fff' }}>Acesso Total VIP Vitalício</div>
+                                <div style={{ fontSize: '21px', fontWeight: '900', color: '#34d399', whiteSpace: 'nowrap' }}>R$ 69,90</div>
+                            </div>
+                            <div style={{ fontSize: '11.5px', color: '#e2dae9', lineHeight: 1.5, marginBottom: '12px' }}>
+                                ✓ <strong>Nutri-Scan™ IA Ilimitado</strong> para sempre (sem R$ 9,90/mês)<br />
+                                ✓ <strong>Desafio 30 Dias</strong> + Musculação + Pilates + Sono + Coleções 40+<br />
+                                ✓ Comunidade VIP + todas as atualizações futuras
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    markSeen();
+                                    openHotmartCheckout('https://pay.hotmart.com/E105939718I?checkoutMode=10', { placement: 'day0_paywall_acesso_total', product: 'acesso_total', ud });
+                                }}
+                                style={{ width: '100%', padding: '14px', borderRadius: '14px', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', fontWeight: '900', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.06em', border: 'none', cursor: 'pointer', boxShadow: '0 6px 20px rgba(16,185,129,0.3)' }}
+                            >
+                                💎 Quero Acesso Total Sem Mensalidade — R$ 69,90
+                            </button>
+                        </div>
+
+                        {/* OFERTA SECUNDÁRIA 2: COMBO DE OURO */}
+                        <div style={{ background: 'rgba(255,107,74,0.08)', border: '1px solid rgba(255,107,74,0.35)', borderRadius: '18px', padding: '14px', marginBottom: '12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px', marginBottom: '4px' }}>
+                                <div style={{ fontSize: '14.5px', fontWeight: '900', color: '#fff' }}>🥇 Combo de Ouro (6 Programas)</div>
+                                <div style={{ fontSize: '17px', fontWeight: '900', color: '#ff6b4a', whiteSpace: 'nowrap' }}>R$ 24,90</div>
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#c8bed2', marginBottom: '10px', lineHeight: 1.4 }}>
+                                Desafio 30 Dias + Musculação em Casa + Pilates + Sono Profundo + Coleções 40+ (pagamento único, menos de R$ 0,83/dia).
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    markSeen();
+                                    openHotmartCheckout('https://pay.hotmart.com/O106106388F?checkoutMode=10', { placement: 'day0_paywall_combo_ouro', product: 'combo_ouro', ud });
+                                }}
+                                style={{ width: '100%', padding: '12px', borderRadius: '12px', background: 'linear-gradient(135deg, #ff6b4a, #e85334)', color: '#fff', fontWeight: '900', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.06em', border: 'none', cursor: 'pointer' }}
+                            >
+                                🥇 Quero só o Combo de Ouro — R$ 24,90 Vitalício
+                            </button>
+                        </div>
+
+                        <div style={{ textAlign: 'center', fontSize: '10.5px', color: '#c8bed2', marginBottom: '12px', fontWeight: '600' }}>
+                            ⚡ Liberação imediata · 💳 PIX ou Cartão · 🛡️ 7 dias de garantia Hotmart
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                markSeen();
+                                trackConversionEvent('day0_paywall_skip', { placement: 'day0_paywall' });
+                                onContinueFree();
+                            }}
+                            style={{ width: '100%', padding: '10px', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: '12px', fontWeight: '700', cursor: 'pointer', textDecoration: 'underline' }}
+                        >
+                            Continuar com acesso gratuito limitado →
+                        </button>
                     </div>
                 </div>
             );
@@ -2139,7 +2432,14 @@ import { createClient } from '@supabase/supabase-js';
             const [redeemFeedback, setRedeemFeedback] = React.useState(null); // { type: 'ok'|'err', msg }
             const [viewingPdf, setViewingPdf] = React.useState(null);
             const [pdfLoading, setPdfLoading] = React.useState(false);
+            const [welcomeRemainMs, setWelcomeRemainMs] = React.useState(() => getWelcomeOfferRemainingMs(ud));
             const redeemSectionRef = React.useRef(null);
+
+            React.useEffect(() => {
+                setWelcomeRemainMs(getWelcomeOfferRemainingMs(ud));
+                const id = setInterval(() => setWelcomeRemainMs(getWelcomeOfferRemainingMs(ud)), 60000);
+                return () => clearInterval(id);
+            }, [ud?.session?.user?.created_at, ud?.userProfile?.created_at]);
 
             React.useEffect(() => {
                 if (focusRedeem && redeemSectionRef.current) {
@@ -2215,6 +2515,20 @@ import { createClient } from '@supabase/supabase-js';
                         <span>💳 PIX ou Cartão</span>
                         <span>🛡️ Garantia 7 dias Hotmart</span>
                     </div>
+
+                    {!hasTotalVip && welcomeRemainMs > 0 && (
+                        <div className="mb-5 px-4 py-3 rounded-2xl bg-gradient-to-r from-orange-500/20 to-amber-500/10 border border-orange-500/35 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="text-lg shrink-0">⏳</span>
+                                <div className="text-xs font-bold text-orange-100 leading-snug">
+                                    <strong>Condição de Boas-Vindas ativa:</strong> valores promocionais liberados nas suas primeiras 48h!
+                                </div>
+                            </div>
+                            <span className="px-2.5 py-1 rounded-xl bg-orange-500 text-white font-black text-[11px] shrink-0">
+                                {formatRemainingHHMM(welcomeRemainMs)}
+                            </span>
+                        </div>
+                    )}
 
                     {unlockedGuides.length > 0 && (
                         <div className="mb-6 p-5 bg-emerald-500/10 border border-emerald-500/25 rounded-3xl">
@@ -6080,6 +6394,8 @@ import { createClient } from '@supabase/supabase-js';
             const [activeTab, setActiveTab] = useState(null);
             const [loading, setLoading] = useState(true);
             const [previewProgram, setPreviewProgram] = useState(null);
+            const [activeCollection, setActiveCollection] = useState(null);
+            const [lockedCollectionHit, setLockedCollectionHit] = useState(false);
 
             useEffect(() => {
                 async function fetchLiveData() {
@@ -6213,6 +6529,44 @@ import { createClient } from '@supabase/supabase-js';
                 }
             ];
 
+            const VIP_COLLECTIONS_40PLUS = useMemo(() => {
+                const pick = (cats) => {
+                    const matched = data.filter(e => cats.includes(String(e.category || '').toLowerCase()));
+                    return (matched.length >= 5 ? matched : data).slice(0, 5);
+                };
+                return [
+                    {
+                        id: 'queima_barriga_12',
+                        icon: '🔥',
+                        title: 'Queima Barriga 12m',
+                        fullTitle: 'Queima Barriga 12 min (Sem Impacto)',
+                        sub: 'Abdômen & gasto calórico',
+                        badge: '1º GRÁTIS',
+                        exercises: pick(['abdominais', 'cardio'])
+                    },
+                    {
+                        id: 'gluteos_40',
+                        icon: '🍑',
+                        title: 'Glúteos Firmes 40+',
+                        fullTitle: 'Glúteos & Pernas Firmes 40+',
+                        sub: 'Firmeza sem flacidez',
+                        badge: '1º GRÁTIS',
+                        exercises: pick(['pernas', 'gluteos', 'glúteos'])
+                    },
+                    {
+                        id: 'adeus_tchauzinho',
+                        icon: '💪',
+                        title: 'Adeus Tchauzinho',
+                        fullTitle: 'Adeus "Tchauzinho" (Braços Firmes)',
+                        sub: 'Braços definidos em casa',
+                        badge: '1º GRÁTIS',
+                        exercises: pick(['braços', 'bracos', 'ombros', 'peito'])
+                    }
+                ];
+            }, [data]);
+
+            const isCollectionUnlocked = Boolean(hasAccess || hasDesafio);
+
             const displayedExercises = data.filter(e => e.category === activeTab);
 
             return (
@@ -6226,7 +6580,42 @@ import { createClient } from '@supabase/supabase-js';
 
                         {viewMode === 'categories' ? (
                             <div style={{ animation: 'fade-in 0.3s ease' }}>
-                                <div style={{ padding: '24px 24px 8px', fontSize: '26px', fontWeight: '900', color: 'white', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                {/* COLEÇÕES VIP 40+ COM 1º VÍDEO GRÁTIS + 4 BLOQUEADOS */}
+                                <div className="px-4 pt-2 pb-1 max-w-4xl mx-auto">
+                                    <div className="flex items-center justify-between mb-2 px-1">
+                                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-orange-400">
+                                            ✨ Treinos Prontos 40+ · {isCollectionUnlocked ? 'Liberados ✅' : '1º vídeo grátis'}
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {VIP_COLLECTIONS_40PLUS.map(col => (
+                                            <button
+                                                key={col.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    setLockedCollectionHit(false);
+                                                    setActiveCollection(col);
+                                                    trackConversionEvent('treinos_collection_open', {
+                                                        placement: col.id,
+                                                        metadata: { unlocked: isCollectionUnlocked }
+                                                    });
+                                                }}
+                                                className="text-left p-2.5 rounded-2xl bg-gradient-to-br from-orange-500/15 to-slate-900/95 border border-orange-500/25 hover:border-orange-400/55 transition-all active:scale-[0.97] flex flex-col justify-between"
+                                            >
+                                                <div className="flex items-center justify-between gap-1 mb-1">
+                                                    <span className="text-lg">{col.icon}</span>
+                                                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${isCollectionUnlocked ? 'bg-emerald-500/20 text-emerald-300' : 'bg-orange-500/20 text-orange-300'}`}>
+                                                        {isCollectionUnlocked ? 'VIP ✓' : col.badge}
+                                                    </span>
+                                                </div>
+                                                <div className="text-[11px] font-black text-white leading-tight">{col.title}</div>
+                                                <div className="text-[9.5px] text-slate-400 font-medium mt-0.5 leading-tight truncate">{col.sub}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div style={{ padding: '18px 24px 8px', fontSize: '24px', fontWeight: '900', color: 'white', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '12px' }}>
                                     <Zap size={28} className="text-orange-500" />
                                     <span className="text-white">O que vamos treinar hoje?</span>
                                 </div>
@@ -6415,6 +6804,99 @@ import { createClient } from '@supabase/supabase-js';
                                         Já comprou? Clique aqui para ativar seu código
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL DE COLEÇÃO VIP 40+ (1º VÍDEO GRÁTIS + UPGRADE NOS DEMAIS) */}
+                    {activeCollection && (
+                        <div className="fixed inset-0 z-[100000] bg-black/80 backdrop-blur-md flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && setActiveCollection(null)}>
+                            <div className="bg-slate-900 border border-white/15 rounded-[28px] w-full max-w-md max-h-[88vh] overflow-y-auto p-5 relative shadow-2xl animate-in zoom-in-95 duration-200">
+                                <button
+                                    type="button"
+                                    onClick={() => setActiveCollection(null)}
+                                    aria-label="Fechar"
+                                    className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white text-xl flex items-center justify-center"
+                                >&times;</button>
+
+                                <div className="flex items-center gap-3 mb-4 pr-8">
+                                    <div className="w-12 h-12 rounded-2xl bg-orange-500/20 border border-orange-500/35 flex items-center justify-center text-2xl shrink-0">
+                                        {activeCollection.icon}
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">
+                                            {isCollectionUnlocked ? 'Coleção VIP Liberada ✅' : '🎁 1º Exercício Liberado Grátis'}
+                                        </span>
+                                        <h3 className="text-lg font-black text-white leading-tight">{activeCollection.fullTitle}</h3>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2 mb-4">
+                                    {activeCollection.exercises.map((ex, idx) => {
+                                        const canPlay = isCollectionUnlocked || idx === 0;
+                                        return (
+                                            <button
+                                                key={ex.id || idx}
+                                                type="button"
+                                                onClick={() => {
+                                                    if (canPlay) {
+                                                        trackConversionEvent('treinos_collection_free_play', { placement: activeCollection.id, metadata: { idx } });
+                                                        setActiveCollection(null);
+                                                        setSel(ex);
+                                                    } else {
+                                                        setLockedCollectionHit(true);
+                                                        trackConversionEvent('treinos_collection_locked_click', { placement: activeCollection.id, product: 'combo_ouro', metadata: { idx } });
+                                                    }
+                                                }}
+                                                className={`w-full p-3 rounded-2xl border flex items-center justify-between gap-3 text-left transition-all ${
+                                                    canPlay
+                                                        ? 'bg-emerald-500/10 hover:bg-emerald-500/15 border-emerald-500/30'
+                                                        : 'bg-white/5 hover:bg-white/10 border-white/10 opacity-90'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div className={`w-8 h-8 rounded-xl font-black text-xs flex items-center justify-center shrink-0 ${canPlay ? 'bg-emerald-500/25 text-emerald-300' : 'bg-white/10 text-slate-400'}`}>
+                                                        {canPlay ? idx + 1 : '🔒'}
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <div className="text-xs font-bold text-white truncate">{ex.title}</div>
+                                                        <div className="text-[10px] text-slate-400">3 séries · 12–15 reps</div>
+                                                    </div>
+                                                </div>
+                                                <span className={`text-[10px] font-black shrink-0 ${canPlay ? 'text-emerald-400' : 'text-orange-400'}`}>
+                                                    {canPlay ? '▶ Assistir' : 'VIP 🔒'}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {!isCollectionUnlocked && (
+                                    <div className={`p-4 rounded-2xl border transition-all ${lockedCollectionHit ? 'bg-orange-500/20 border-orange-400' : 'bg-white/5 border-white/10'}`}>
+                                        <div className="text-xs font-black text-orange-300 uppercase mb-1">
+                                            {lockedCollectionHit ? '🔒 Exercício exclusivo para alunas VIP' : '✨ Libere a sequência completa'}
+                                        </div>
+                                        <p className="text-[11.5px] text-slate-200 leading-relaxed mb-3">
+                                            Destrave <strong>todas as coleções 40+</strong>, o <strong>Desafio 30 Dias</strong>, Musculação em Casa, Pilates e Sono Profundo em pagamento único vitalício!
+                                        </p>
+                                        <div className="space-y-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => openHotmartCheckout('https://pay.hotmart.com/O106106388F?checkoutMode=10', { placement: `treinos_col_${activeCollection.id}_combo`, product: 'combo_ouro', ud })}
+                                                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black text-xs uppercase tracking-wider shadow-lg active:scale-95 transition-all"
+                                            >
+                                                🥇 Destravar no Combo de Ouro — R$ 24,90
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => openHotmartCheckout('https://pay.hotmart.com/E105939718I?checkoutMode=10', { placement: `treinos_col_${activeCollection.id}_total_vip`, product: 'acesso_total', ud })}
+                                                className="w-full py-2.5 px-4 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-300 font-black text-[11px] transition-all"
+                                            >
+                                                💎 Ou leve TUDO + Nutri-Scan Vitalício (R$ 69,90) →
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -6664,6 +7146,14 @@ import { createClient } from '@supabase/supabase-js';
             const [nutriUpsellReason, setNutriUpsellReason] = useState('post_workout');
             const [nutriUpsellContext, setNutriUpsellContext] = useState(null);
             const [showWorkoutVictory, setShowWorkoutVictory] = useState(false);
+            const [showDay0Paywall, setShowDay0Paywall] = useState(false);
+            const [welcomeRemainHomeMs, setWelcomeRemainHomeMs] = useState(() => getWelcomeOfferRemainingMs(ud));
+
+            useEffect(() => {
+                setWelcomeRemainHomeMs(getWelcomeOfferRemainingMs(ud));
+                const id = setInterval(() => setWelcomeRemainHomeMs(getWelcomeOfferRemainingMs(ud)), 60000);
+                return () => clearInterval(id);
+            }, [ud.session?.user?.created_at, ud.userProfile?.created_at]);
             const [quickstartDismissed, setQuickstartDismissed] = useState(() => {
                 try { return localStorage.getItem('quickstart_dismissed_v1') === '1'; } catch { return false; }
             });
@@ -7269,9 +7759,33 @@ import { createClient } from '@supabase/supabase-js';
                         onComplete={async (n, g, gen, a, est, wa) => {
                             const res = await ud.saveProfile(n, g, gen, a, est, wa);
                             if (!res?.error) {
-                                setTimeout(() => promptOneSignalPushIfNeeded(), 3500);
+                                let alreadySeen = false;
+                                try { alreadySeen = localStorage.getItem('day0_paywall_seen_v1') === '1'; } catch {}
+                                if (!temAcessoTotalVIP && !alreadySeen) {
+                                    setShowDay0Paywall(true);
+                                } else {
+                                    setTimeout(() => promptOneSignalPushIfNeeded(), 3500);
+                                }
                             }
                             return res;
+                        }}
+                    />
+                );
+            }
+
+            if (showDay0Paywall && !temAcessoTotalVIP) {
+                return (
+                    <WelcomePlanPaywall
+                        ud={ud}
+                        onContinueFree={() => {
+                            setShowDay0Paywall(false);
+                            setTimeout(() => promptOneSignalPushIfNeeded(), 2500);
+                        }}
+                        onTryNutriFree={() => {
+                            setShowDay0Paywall(false);
+                            setArsenalSubTab('nutricao');
+                            setPage('arsenal-vip');
+                            setTimeout(() => promptOneSignalPushIfNeeded(), 6000);
                         }}
                     />
                 );
@@ -7387,10 +7901,11 @@ import { createClient } from '@supabase/supabase-js';
                             }
                         });
 
-                        // Variáveis Dinâmicas de Texto do Objetivo
+                        // Variáveis Dinâmicas de Texto do Objetivo + Meta Calórica Estimada
                         const resolvedUserGoal = ud.metaProfile?.user_goal || ud.metaProfile?.objetivo_principal || ud.userProfile?.goal || ud.userProfile?.objetivo_principal || '';
                         const isGoalMassa = resolvedUserGoal.toLowerCase().includes('massa');
                         const isGoalTonificar = resolvedUserGoal.toLowerCase().includes('tonificar') || resolvedUserGoal.toLowerCase().includes('definir');
+                        const homeNutriEst = estimateDailyNutrition(ud.userProfile);
                         const safeAvatar = isSafeImageUrl(ud.userProfile?.avatar_url) ? ud.userProfile.avatar_url : null;
 
                         return (
@@ -7745,9 +8260,13 @@ import { createClient } from '@supabase/supabase-js';
                                         <h3 className="text-xl sm:text-2xl font-black text-white leading-tight mb-1.5">
                                             Descubra as calorias do seu prato em 3 segundos
                                         </h3>
+                                        <div className="mb-2.5 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-400/25 flex items-center justify-between gap-2 text-[11px]">
+                                            <span className="text-emerald-200 font-bold">🎯 Sua meta diária ({homeNutriEst.goalLabel}):</span>
+                                            <span className="text-white font-black shrink-0">~{homeNutriEst.kcal} kcal · {homeNutriEst.protein}g prot</span>
+                                        </div>
                                         <p className="text-[13px] text-slate-300 leading-relaxed font-medium mb-3">
                                             {freeScansRemainingGlobal > 0
-                                                ? 'Não está com prato agora? Toque em 1 opção abaixo para ver a IA calculando na hora (ou envie sua foto):'
+                                                ? 'Veja agora se sua última refeição bate essa meta — toque em 1 exemplo ou envie sua foto:'
                                                 : 'Você já testou o Nutri-Scan™ IA! Libere análises ilimitadas com 7 dias grátis (depois só R$ 0,33/dia).'}
                                         </p>
 
@@ -7799,6 +8318,17 @@ import { createClient } from '@supabase/supabase-js';
                                 )}
 
                                 {/* 4. OFERTA CONTEXTUAL PERSONALIZADA (OBJETIVO + ACESSO TOTAL VIP EM DESTAQUE) */}
+                                {!temAcessoTotalVIP && welcomeRemainHomeMs > 0 && (
+                                    <div
+                                        onClick={() => setPage('extras')}
+                                        className="mb-3 px-3.5 py-2 rounded-2xl bg-orange-500/15 border border-orange-500/30 flex items-center justify-between gap-2 cursor-pointer"
+                                    >
+                                        <span className="text-[11px] font-bold text-orange-100">⏳ Condição especial de nova aluna ativa</span>
+                                        <span className="px-2 py-0.5 rounded-lg bg-orange-500 text-white font-black text-[10px] shrink-0">
+                                            {formatRemainingHHMM(welcomeRemainHomeMs)}
+                                        </span>
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-1 gap-4 mb-5">
                                     {hasDesafio && !temAcessoPremium ? (
                                         <div
