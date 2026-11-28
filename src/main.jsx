@@ -2133,7 +2133,7 @@ import { createClient } from '@supabase/supabase-js';
         };
 
         function ExtrasHub({ ud, onNav, onAccessModule, freeScansRemaining = 0, onOpenNutriScan, focusRedeem = false, onClearFocusRedeem }) {
-            const [activeTab, setActiveTab] = React.useState('combos');
+            const [showIndividuals, setShowIndividuals] = React.useState(false);
             const [redeemCode, setRedeemCode] = React.useState('');
             const [redeeming, setRedeeming] = React.useState(false);
             const [redeemFeedback, setRedeemFeedback] = React.useState(null); // { type: 'ok'|'err', msg }
@@ -2205,9 +2205,15 @@ import { createClient } from '@supabase/supabase-js';
 
             return (
                 <div id="extras-page" className="extras-hub p-5 pb-32 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-700">
-                    <div className="page-header mb-6">
-                        <h1 className="text-3xl sm:text-4xl font-black italic tracking-tighter mb-2">✨ Planos & Guias Extras</h1>
-                        <p className="text-slate-400 font-medium text-xs sm:text-sm">Escolha o complemento ideal para acelerar seus resultados em casa</p>
+                    <div className="page-header mb-4">
+                        <h1 className="text-2xl sm:text-4xl font-black italic tracking-tighter mb-1.5">✨ Escolha seu Plano VIP</h1>
+                        <p className="text-slate-300 font-medium text-xs sm:text-sm">3 opções simples para acelerar seus resultados em casa — sem pegadinhas.</p>
+                    </div>
+
+                    <div className="mb-5 px-3.5 py-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] font-bold text-emerald-200">
+                        <span>⚡ Acesso imediato</span>
+                        <span>💳 PIX ou Cartão</span>
+                        <span>🛡️ Garantia 7 dias Hotmart</span>
                     </div>
 
                     {unlockedGuides.length > 0 && (
@@ -2229,184 +2235,170 @@ import { createClient } from '@supabase/supabase-js';
                         </div>
                     )}
 
-                    <div className="flex gap-2 mb-7 bg-white/5 p-1 rounded-[20px] border border-white/5">
-                        <button 
-                            type="button"
-                            onClick={() => setActiveTab('combos')}
-                            className={`flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.16em] transition-all ${activeTab === 'combos' ? 'bg-orange-600 text-white shadow-xl shadow-orange-600/20' : 'text-slate-400 hover:text-white'}`}
-                        >
-                            🔥 Mais Vendidos (3)
-                        </button>
-                        <button 
-                            type="button"
-                            onClick={() => setActiveTab('separados')}
-                            className={`flex-1 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-[0.16em] transition-all ${activeTab === 'separados' ? 'bg-orange-600 text-white shadow-xl shadow-orange-600/20' : 'text-slate-400 hover:text-white'}`}
-                        >
-                            Programas Individuais
-                        </button>
+                    {/* OS 3 PLANOS PRINCIPAIS (SEM PARALISIA DE ESCOLHA) */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <ExtraCard 
+                            title="Acesso Total VIP"
+                            badge="💎 MELHOR CUSTO-BENEFÍCIO · SEM MENSALIDADE"
+                            glow={true}
+                            glowColor="green"
+                            desc={
+                                <>
+                                    <div className="mb-2.5 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-200 text-[11px] font-bold leading-snug">
+                                        💡 Em 7 meses de Nutri-Scan mensal (R$ 9,90/mês) você pagaria R$ 69,30 — aqui leva <strong>TUDO + Nutri-Scan PARA SEMPRE</strong> em pagamento único!
+                                    </div>
+                                    <div className="mt-2 space-y-1">
+                                        <div className="font-bold text-emerald-300">✓ Nutri-Scan™ IA Vitalício (sem mensalidade!)</div>
+                                        <div className="font-bold text-emerald-300">✓ Desafio 30D + Musculação + Pilates + Sono</div>
+                                        <div className="font-bold text-emerald-300">✓ Comunidade VIP + Atualizações Futuras</div>
+                                    </div>
+                                </>
+                            }
+                            price="69,90"
+                            oldPrice="119,40 + 19,90/mês"
+                            subPrice="Pagamento único • Zero mensalidade para sempre • PIX ou Cartão"
+                            icon="💎"
+                            ribbon="TUDO LIBERADO"
+                            ctaLabel="Quero Acesso Total Vitalício"
+                            unlocked={hasTotalVip}
+                            pdfs={ALL_GUIDES}
+                            onOpenPdf={openPdfViewer}
+                            onAction={() => hasTotalVip ? onNav('inicio') : openHotmartCheckout('https://pay.hotmart.com/E105939718I?checkoutMode=10', { placement: 'extras_acesso_total', product: 'acesso_total', ud })}
+                        />
+
+                        <ExtraCard 
+                            title="Combo de Ouro"
+                            badge="🔥 MAIS ESCOLHIDO PARA TREINAR"
+                            glow={true}
+                            glowColor="orange"
+                            desc={
+                                <>
+                                    <div className="mb-2 text-[10px] font-black text-amber-300 tracking-wide">★ 4,9 · +6.000 alunas treinando em casa</div>
+                                    {hasDesafio && !hasGold ? (
+                                        <div className="mb-2.5 p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-[11px] font-bold">
+                                            ✨ Você já tem o Desafio 30D! Complete sua coleção com Musculação + Pilates + 4 Guias Bônus:
+                                        </div>
+                                    ) : (
+                                        <span>Todos os programas de treino em pagamento único vitalício (sem mensalidade):</span>
+                                    )}
+                                    <div className="mt-2 space-y-1">
+                                        <div className="font-bold text-amber-300">✓ Desafio 30 Dias Passo a Passo</div>
+                                        <div className="font-bold text-amber-300">✓ Musculação em Casa + Pilates Modelador</div>
+                                        <div className="font-bold text-emerald-300">🎁 Bônus: Sono Profundo + Mini-Bands + Mobilidade</div>
+                                    </div>
+                                </>
+                            }
+                            price="24,90"
+                            oldPrice="119,40"
+                            subPrice="Menos de R$ 0,83/dia no Desafio • Pagamento único vitalício"
+                            icon="🥇"
+                            ctaLabel="Quero o Combo de Ouro"
+                            unlocked={hasGold}
+                            pdfs={ALL_GUIDES}
+                            onOpenPdf={openPdfViewer}
+                            onAction={() => hasGold ? (onAccessModule ? onAccessModule('desafio30') : onNav('arsenal-vip')) : openHotmartCheckout('https://pay.hotmart.com/O106106388F?checkoutMode=10', { placement: 'extras_combo_ouro', product: 'combo_ouro', ud })}
+                        />
+
+                        <ExtraCard 
+                            title="Nutri-Scan™ IA"
+                            badge="📸 7 DIAS GRÁTIS NA HOTMART"
+                            glow={true}
+                            glowColor="green"
+                            desc={
+                                <>
+                                    <div className="mb-2 text-[10px] font-black text-emerald-300 tracking-wide">★ 4,9 · Sem balança, direto pelo celular</div>
+                                    Fotografe seu prato ou digite o que comeu e descubra calorias e proteínas em 3 segundos:
+                                    <div className="mt-2 space-y-1">
+                                        <div className="font-bold text-emerald-300">✓ Análises Ilimitadas por Foto e Texto</div>
+                                        <div className="font-bold text-emerald-300">✓ Meta Diária Personalizada + Calendário</div>
+                                    </div>
+                                </>
+                            }
+                            price="9,90"
+                            isMonthly={true}
+                            subPrice="7 Dias Grátis • Depois só R$ 0,33/dia • Cancele quando quiser"
+                            icon="📸"
+                            ctaLabel="Liberar 7 Dias Grátis"
+                            secondaryCta={!hasScannerIA && freeScansRemaining > 0 && onOpenNutriScan ? `🎁 Testar grátis no app agora (${freeScansRemaining} restante)` : null}
+                            onSecondaryAction={onOpenNutriScan}
+                            unlocked={hasScannerIA}
+                            onAction={() => hasScannerIA ? (onOpenNutriScan ? onOpenNutriScan() : onNav('arsenal-vip')) : openHotmartCheckout('https://pay.hotmart.com/H106107115U?checkoutMode=10', { placement: 'extras_nutri_scan', product: 'nutri_scan', ud })}
+                        />
                     </div>
 
-                    {activeTab === 'combos' ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <ExtraCard 
-                                title="Combo de Ouro"
-                                badge="🔥 MAIS ESCOLHIDO"
-                                glow={true}
-                                glowColor="orange"
-                                desc={
-                                    <>
-                                        <div className="mb-2.5 text-[10px] font-black text-amber-300 tracking-wide">★ 4,9 · +6.000 alunas treinando em casa</div>
-                                        {hasDesafio && !hasGold ? (
-                                            <div className="mb-3 p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-[11px] font-bold">
-                                                ✨ Você já tem o Desafio 30D! Complete sua coleção com Musculação em Casa + Pilates + 4 Guias Bônus:
-                                            </div>
-                                        ) : (
-                                            <span>O pacote completo de treinos e guias em pagamento único (sem mensalidade):</span>
-                                        )}
-                                        <div className="mt-2.5 space-y-1">
-                                            <div className="font-bold text-amber-300">✓ Desafio 30 Dias Passo a Passo</div>
-                                            <div className="font-bold text-amber-300">✓ Guia Musculação em Casa</div>
-                                            <div className="font-bold text-amber-300">✓ Pilates Modelador & Ginástica Pélvica</div>
-                                            <div className="font-bold text-amber-300">✓ Treino Sênior / Mobilidade</div>
-                                            <div className="font-bold text-emerald-300">🎁 Bônus Grátis: Sono Profundo + Mini-Bands + Recuperação Ativa</div>
-                                        </div>
-                                    </>
-                                }
-                                price="24,90"
-                                oldPrice="119,40"
-                                subPrice="Menos de R$ 0,83/dia no Desafio • PIX ou Cartão • 🛡️ Garantia 7 dias Hotmart"
-                                icon="🥇"
-                                ctaLabel="Quero o Combo de Ouro"
-                                unlocked={hasGold}
-                                pdfs={ALL_GUIDES}
-                                onOpenPdf={openPdfViewer}
-                                onAction={() => hasGold ? (onAccessModule ? onAccessModule('desafio30') : onNav('arsenal-vip')) : openHotmartCheckout('https://pay.hotmart.com/O106106388F?checkoutMode=10', { placement: 'extras_combo_ouro', product: 'combo_ouro', ud })}
-                            />
+                    {/* PROGRAMAS INDIVIDUAIS RECOLHIDOS PARA EVITAR PARALISIA DE ESCOLHA */}
+                    <div className="mt-7">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const next = !showIndividuals;
+                                setShowIndividuals(next);
+                                if (next) trackConversionEvent('extras_expand_individuals', { placement: 'extras' });
+                            }}
+                            className="w-full py-3.5 px-5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-xs font-bold flex items-center justify-between gap-2 transition-all"
+                        >
+                            <span>Prefere desbloquear apenas 1 programa individual (R$ 19,90)?</span>
+                            <span className="text-orange-400 font-black uppercase text-[11px] shrink-0">
+                                {showIndividuals ? 'Ocultar ▲' : 'Ver avulsos ▼'}
+                            </span>
+                        </button>
 
-                            <ExtraCard 
-                                title="Nutri-Scan™ IA"
-                                badge="📸 7 DIAS GRÁTIS"
-                                glow={true}
-                                glowColor="green"
-                                desc={
-                                    <>
-                                        <div className="mb-2.5 text-[10px] font-black text-emerald-300 tracking-wide">★ 4,9 · Sem balança, direto pelo celular</div>
-                                        Tire uma foto do seu prato ou digite o que comeu e descubra calorias e proteínas em 3 segundos:
-                                        <div className="mt-2.5 space-y-1">
-                                            <div className="font-bold text-emerald-300">✓ Análises Ilimitadas por Foto e Texto</div>
-                                            <div className="font-bold text-emerald-300">✓ Meta Diária para Emagrecer ou Definir</div>
-                                            <div className="font-bold text-emerald-300">✓ Calendário de Consistência Automático</div>
-                                        </div>
-                                    </>
-                                }
-                                price="9,90"
-                                isMonthly={true}
-                                subPrice="7 Dias Grátis • Depois só R$ 0,33/dia • 🛡️ Cancele quando quiser na Hotmart"
-                                icon="📸"
-                                ctaLabel="Liberar 7 Dias Grátis"
-                                secondaryCta={!hasScannerIA && freeScansRemaining > 0 && onOpenNutriScan ? `🎁 Usar teste grátis no app (${freeScansRemaining} restante)` : null}
-                                onSecondaryAction={onOpenNutriScan}
-                                unlocked={hasScannerIA}
-                                onAction={() => hasScannerIA ? (onOpenNutriScan ? onOpenNutriScan() : onNav('arsenal-vip')) : openHotmartCheckout('https://pay.hotmart.com/H106107115U?checkoutMode=10', { placement: 'extras_nutri_scan', product: 'nutri_scan', ud })}
-                            />
-
-                            <ExtraCard 
-                                title="Acesso Total VIP"
-                                badge="💎 SEM MENSALIDADE"
-                                desc={
-                                    <>
-                                        <div className="mb-2.5 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-200 text-[11px] font-bold leading-snug">
-                                            💡 Em 7 meses de Nutri-Scan mensal (R$ 9,90/mês) você pagaria R$ 69,30 — aqui leva o Nutri-Scan + Combo de Ouro PARA SEMPRE sem mensalidade!
-                                        </div>
-                                        <div className="mt-2 space-y-1">
-                                            <div className="font-bold text-emerald-300">✓ Tudo do Combo de Ouro (6 Programas)</div>
-                                            <div className="font-bold text-emerald-300">✓ Nutri-Scan™ IA Vitalício (sem mensalidade!)</div>
-                                            <div className="font-bold text-emerald-300">✓ Comunidade VIP no Telegram</div>
-                                            <div className="font-bold text-emerald-300">✓ Todas as Atualizações Futuras</div>
-                                        </div>
-                                    </>
-                                }
-                                price="69,90"
-                                oldPrice="119,40 + 19,90/mês"
-                                subPrice="PIX ou Cartão • 🛡️ Garantia 7 dias Hotmart • Zero mensalidade para sempre"
-                                icon="💎"
-                                ribbon="TUDO LIBERADO"
-                                ctaLabel="Quero Acesso Total Vitalício"
-                                unlocked={hasTotalVip}
-                                pdfs={ALL_GUIDES}
-                                onOpenPdf={openPdfViewer}
-                                onAction={() => hasTotalVip ? onNav('inicio') : openHotmartCheckout('https://pay.hotmart.com/E105939718I?checkoutMode=10', { placement: 'extras_acesso_total', product: 'acesso_total', ud })}
-                            />
-                        </div>
-                    ) : (
-                        <div className="flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            {!hasGold && (
-                                <div
-                                    onClick={() => setActiveTab('combos')}
-                                    className="p-4 rounded-2xl bg-orange-500/10 border border-orange-500/30 flex items-center justify-between gap-3 cursor-pointer hover:bg-orange-500/15 transition-all"
-                                >
-                                    <p className="text-xs text-orange-200 font-bold leading-snug">
-                                        💡 <strong>Dica de economia:</strong> No <strong>Combo de Ouro (R$ 24,90)</strong> você leva o Desafio 30D + Musculação em Casa + Pilates + 3 Guias Bônus por apenas R$ 5 a mais!
-                                    </p>
-                                    <span className="text-[10px] font-black text-orange-400 uppercase shrink-0">Ver Combo ➔</span>
+                        {showIndividuals && (
+                            <div className="mt-4 flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                {!hasGold && (
+                                    <div className="p-4 rounded-2xl bg-orange-500/10 border border-orange-500/30">
+                                        <p className="text-xs text-orange-200 font-bold leading-snug">
+                                            💡 <strong>Dica:</strong> Cada guia avulso custa R$ 19,90 — no <strong>Combo de Ouro (R$ 24,90)</strong> acima você leva todos os 6 por apenas R$ 5 a mais!
+                                        </p>
+                                    </div>
+                                )}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                                    <ExtraCard 
+                                        title="Musculação em Casa"
+                                        desc="Guia prático em PDF para tonificar, ganhar força e definir o corpo em casa sem precisar de aparelhos de academia."
+                                        price="19,90"
+                                        icon="💪"
+                                        badge="GUIA EM PDF"
+                                        subPrice="Pagamento único vitalício"
+                                        unlocked={hasMusculacao}
+                                        pdfs={[ALL_GUIDES[0]]}
+                                        onOpenPdf={openPdfViewer}
+                                        onAction={() => hasMusculacao ? openPdfViewer(ALL_GUIDES[0]) : openHotmartCheckout('https://pay.hotmart.com/N105939399C?checkoutMode=10', { placement: 'extras_ind_musculacao', product: 'musculacao', ud })}
+                                    />
+                                    <ExtraCard 
+                                        title="Desafio 30 Dias"
+                                        desc="Seu cronograma diário pronto por 30 dias para eliminar a dúvida do que treinar e acelerar resultados reais."
+                                        price="19,90"
+                                        icon="🔥"
+                                        subPrice="Pagamento único vitalício"
+                                        unlocked={hasDesafio}
+                                        onAction={() => hasDesafio ? (onAccessModule ? onAccessModule('desafio30') : onNav('arsenal-vip')) : openHotmartCheckout('https://pay.hotmart.com/R106106925S?checkoutMode=10', { placement: 'extras_ind_desafio30', product: 'desafio_30', ud })}
+                                    />
+                                    <ExtraCard 
+                                        title="Pilates Modelador"
+                                        desc="Fortaleça abdômen, melhore a postura e alivie dores nas costas com treinos suaves e eficientes em casa."
+                                        price="19,90"
+                                        icon="🧘‍♀️"
+                                        subPrice="Pagamento único vitalício"
+                                        unlocked={hasPilates}
+                                        pdfs={[ALL_GUIDES[1]]}
+                                        onOpenPdf={openPdfViewer}
+                                        onAction={() => hasPilates ? openPdfViewer(ALL_GUIDES[1]) : openHotmartCheckout('https://pay.hotmart.com/E105938855Y?checkoutMode=10', { placement: 'extras_ind_pilates', product: 'pilates', ud })}
+                                    />
+                                    <ExtraCard 
+                                        title="Pacote de Elite (IA + Comunidade)"
+                                        desc="Nutri-Scan™ IA ilimitado + acesso à Comunidade VIP no Telegram com suporte e dicas."
+                                        price="14,90"
+                                        oldPrice="19,90"
+                                        isMonthly={true}
+                                        icon="💬"
+                                        unlocked={hasScannerIA && hasComunidade}
+                                        onAction={() => (hasScannerIA && hasComunidade) ? openCommunityVip() : openHotmartCheckout('https://pay.hotmart.com/I105940414O?checkoutMode=10', { placement: 'extras_ind_pacote_elite', product: 'pacote_elite', ud })}
+                                    />
                                 </div>
-                            )}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                                <ExtraCard 
-                                    title="Musculação em Casa"
-                                    desc="Guia prático em PDF para tonificar, ganhar força e definir o corpo em casa sem precisar de aparelhos de academia."
-                                    price="19,90"
-                                    icon="💪"
-                                    badge="GUIA EM PDF"
-                                    subPrice="Pagamento único vitalício"
-                                    unlocked={hasMusculacao}
-                                    pdfs={[ALL_GUIDES[0]]}
-                                    onOpenPdf={openPdfViewer}
-                                    onAction={() => hasMusculacao ? openPdfViewer(ALL_GUIDES[0]) : openHotmartCheckout('https://pay.hotmart.com/N105939399C?checkoutMode=10', { placement: 'extras_ind_musculacao', product: 'musculacao', ud })}
-                                />
-                                <ExtraCard 
-                                    title="Desafio 30 Dias"
-                                    desc="Seu cronograma diário pronto por 30 dias para eliminar a dúvida do que treinar e acelerar resultados reais."
-                                    price="19,90"
-                                    icon="🔥"
-                                    subPrice="Pagamento único vitalício"
-                                    unlocked={hasDesafio}
-                                    onAction={() => hasDesafio ? (onAccessModule ? onAccessModule('desafio30') : onNav('arsenal-vip')) : openHotmartCheckout('https://pay.hotmart.com/R106106925S?checkoutMode=10', { placement: 'extras_ind_desafio30', product: 'desafio_30', ud })}
-                                />
-                                <ExtraCard 
-                                    title="Nutri-Scan™ IA"
-                                    desc="Fotografe seu prato ou escreva o que comeu e descubra calorias e macronutrientes em segundos."
-                                    price="9,90"
-                                    isMonthly={true}
-                                    subPrice="7 Dias Grátis na Hotmart"
-                                    icon="📸"
-                                    unlocked={hasScannerIA}
-                                    onAction={() => hasScannerIA ? (onOpenNutriScan ? onOpenNutriScan() : onNav('arsenal-vip')) : openHotmartCheckout('https://pay.hotmart.com/H106107115U?checkoutMode=10', { placement: 'extras_ind_nutri_scan', product: 'nutri_scan', ud })}
-                                />
-                                <ExtraCard 
-                                    title="Pilates Modelador"
-                                    desc="Fortaleça abdômen, melhore a postura e alivie dores nas costas com treinos suaves e eficientes em casa."
-                                    price="19,90"
-                                    icon="🧘‍♀️"
-                                    subPrice="Pagamento único vitalício"
-                                    unlocked={hasPilates}
-                                    pdfs={[ALL_GUIDES[1]]}
-                                    onOpenPdf={openPdfViewer}
-                                    onAction={() => hasPilates ? openPdfViewer(ALL_GUIDES[1]) : openHotmartCheckout('https://pay.hotmart.com/E105938855Y?checkoutMode=10', { placement: 'extras_ind_pilates', product: 'pilates', ud })}
-                                />
-                                <ExtraCard 
-                                    title="Pacote de Elite (IA + Comunidade)"
-                                    desc="Nutri-Scan™ IA ilimitado + acesso à Comunidade VIP no Telegram com suporte e dicas."
-                                    price="14,90"
-                                    oldPrice="19,90"
-                                    isMonthly={true}
-                                    icon="💬"
-                                    unlocked={hasScannerIA && hasComunidade}
-                                    onAction={() => (hasScannerIA && hasComunidade) ? openCommunityVip() : openHotmartCheckout('https://pay.hotmart.com/I105940414O?checkoutMode=10', { placement: 'extras_ind_pacote_elite', product: 'pacote_elite', ud })}
-                                />
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
 
                     <div id="redeem-code-section" ref={redeemSectionRef} className="mt-12 p-7 bg-[#211b29] rounded-[28px] border border-dashed border-white/15 text-center">
                         <h3 className="text-white font-black uppercase tracking-[0.2em] text-xs mb-2">Já comprou na Hotmart? Ative seu código aqui</h3>
@@ -6474,6 +6466,8 @@ import { createClient } from '@supabase/supabase-js';
                                     ? `Você acabou de mapear ${mappedCalories} kcal sem balança!`
                                     : isLimitReached
                                     ? 'Gostou de ver as calorias do seu prato em segundos?'
+                                    : reason === 'after_video'
+                                    ? 'Treinando firme! Quer ver as calorias da sua próxima refeição em 3s?'
                                     : 'Treino pago! Agora cuide do que faz 70% do resultado: sua alimentação.'}
                             </h2>
                             
@@ -6481,13 +6475,13 @@ import { createClient } from '@supabase/supabase-js';
                                 <p style={{ marginBottom: '12px' }}>
                                     {isLimitReached
                                         ? 'Com o Nutri-Scan™ IA ilimitado você tira foto ou digita qualquer refeição do seu dia e acompanha sua meta de emagrecimento sem pesar comida.'
-                                        : 'Não adianta treinar firme e ficar no escuro na cozinha. O Nutri-Scan™ IA analisa seu prato pela foto e calcula calorias e proteínas em 3 segundos.'}
+                                        : 'Não adianta treinar firme e ficar no escuro na cozinha. O Nutri-Scan™ IA analisa seu prato pela foto ou texto e calcula calorias e proteínas em 3 segundos.'}
                                 </p>
                                 
                                 <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 14px 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                     <li><span style={{color: '#10b981'}}>✅</span> <strong>Foto ou texto em 3s:</strong> Calorias, proteínas, carboidratos e gorduras na hora.</li>
                                     <li><span style={{color: '#10b981'}}>✅</span> <strong>Sem balança e sem estresse:</strong> Perfeito para a rotina corrida de casa ou trabalho.</li>
-                                    <li><span style={{color: '#10b981'}}>✅</span> <strong>Valor acessível:</strong> Comece com <strong>7 Dias Grátis</strong> e depois apenas <strong>R$ 9,90/mês</strong> (menos que um cafezinho!).</li>
+                                    <li><span style={{color: '#10b981'}}>✅</span> <strong>Valor acessível:</strong> Comece com <strong>7 Dias Grátis</strong> e depois apenas <strong>R$ 9,90/mês</strong> (só R$ 0,33/dia!).</li>
                                 </ul>
 
                                 <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '14px', padding: '10px 12px', fontSize: '12px', color: '#d1fae5', fontWeight: '600' }}>
@@ -6499,6 +6493,8 @@ import { createClient } from '@supabase/supabase-js';
                                 {!isLimitReached && onTryFreeNow && (
                                     <button
                                         onClick={() => {
+                                            if (onTrackEvent) onTrackEvent('yes');
+                                            trackConversionEvent('nutri_modal_try_free_click', { placement: reason, product: 'nutri_scan' });
                                             onClose();
                                             onTryFreeNow();
                                         }}
@@ -6513,7 +6509,7 @@ import { createClient } from '@supabase/supabase-js';
                                     onClick={() => {
                                         if(onTrackEvent) onTrackEvent('yes');
                                         openHotmartCheckout('https://pay.hotmart.com/H106107115U?checkoutMode=10&bid=1784830143838', {
-                                            placement: isLimitReached ? 'modal_post_scan2' : 'modal_post_workout',
+                                            placement: isLimitReached ? 'modal_post_scan2' : (reason === 'after_video' ? 'modal_after_video' : 'modal_post_workout'),
                                             product: 'nutri_scan',
                                             ud
                                         });
@@ -6526,6 +6522,7 @@ import { createClient } from '@supabase/supabase-js';
                                 {onGoToExtras && (
                                     <button
                                         onClick={() => {
+                                            trackConversionEvent('nutri_modal_acesso_total_click', { placement: reason, product: 'acesso_total' });
                                             onClose();
                                             onGoToExtras();
                                         }}
@@ -6678,6 +6675,7 @@ import { createClient } from '@supabase/supabase-js';
                 setNutriUpsellReason(reason);
                 setNutriUpsellContext(context);
                 setShowNutriScanUpsell(true);
+                trackConversionEvent('nutri_upsell_shown', { placement: reason, product: 'nutri_scan' });
             }, [temAcessoNutriScan]);
 
             const promptOneSignalPushIfNeeded = useCallback(() => {
@@ -6740,6 +6738,7 @@ import { createClient } from '@supabase/supabase-js';
                             try { localStorage.setItem('nutri_upsell_last_shown_date', todayKey); } catch {}
                             setNutriUpsellReason('post_workout');
                             setShowNutriScanUpsell(true);
+                            trackConversionEvent('nutri_upsell_shown', { placement: 'post_workout', product: 'nutri_scan' });
                         }
                     }
                 };
@@ -6779,7 +6778,35 @@ import { createClient } from '@supabase/supabase-js';
             const [allExercises, setAllExercises] = useState([]);
             const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
 
-            const handleCloseVideo = useCallback(() => setSel(null), []);
+            const videoOpenedAtRef = useRef(0);
+
+            useEffect(() => {
+                if (sel) {
+                    videoOpenedAtRef.current = Date.now();
+                }
+            }, [sel]);
+
+            const handleCloseVideo = useCallback(() => {
+                const elapsedMs = videoOpenedAtRef.current ? (Date.now() - videoOpenedAtRef.current) : 0;
+                videoOpenedAtRef.current = 0;
+                setSel(null);
+
+                if (!temAcessoNutriScan && elapsedMs >= 5000) {
+                    try {
+                        const lastTs = Number(localStorage.getItem('nutri_video_upsell_last_ts') || '0');
+                        const TWO_DAYS_MS = 48 * 60 * 60 * 1000;
+                        if (Date.now() - lastTs >= TWO_DAYS_MS) {
+                            localStorage.setItem('nutri_video_upsell_last_ts', String(Date.now()));
+                            setTimeout(() => {
+                                setNutriUpsellReason('after_video');
+                                setNutriUpsellContext(null);
+                                setShowNutriScanUpsell(true);
+                                trackConversionEvent('nutri_upsell_shown', { placement: 'after_video', product: 'nutri_scan' });
+                            }, 350);
+                        }
+                    } catch {}
+                }
+            }, [temAcessoNutriScan]);
 
             const navigateTo = useCallback((nextPage, opts = {}) => {
                 if (nextPage === 'extras' && opts?.focusRedeem) {
@@ -8063,6 +8090,48 @@ import { createClient } from '@supabase/supabase-js';
                                         {hasDesafio ? '🔥 Desafio 30 Dias' : '🔒 Desafio 30 Dias'}
                                     </button>
                                 </div>
+                                {!temAcessoNutriScan && treinoSubTab === 'exercicios' && (
+                                    <div className="px-4 pt-1 pb-1 max-w-4xl mx-auto">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                trackConversionEvent('treinos_nutri_strip_click', {
+                                                    placement: 'treinos_top_strip',
+                                                    product: 'nutri_scan',
+                                                    metadata: { freeScansRemaining: freeScansRemainingGlobal }
+                                                });
+                                                if (freeScansRemainingGlobal > 0) {
+                                                    setArsenalSubTab('nutricao');
+                                                    setPage('arsenal-vip');
+                                                } else {
+                                                    openHotmartCheckout('https://pay.hotmart.com/H106107115U?checkoutMode=10', {
+                                                        placement: 'treinos_nutri_strip_exhausted',
+                                                        product: 'nutri_scan',
+                                                        ud
+                                                    });
+                                                }
+                                            }}
+                                            className="w-full px-3.5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500/15 to-slate-900/90 border border-emerald-500/30 hover:border-emerald-400/50 flex items-center justify-between gap-2.5 text-left transition-all active:scale-[0.99]"
+                                        >
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <span className="text-lg shrink-0">📸</span>
+                                                <div className="min-w-0">
+                                                    <div className="text-xs font-black text-white leading-tight truncate">
+                                                        Treinando agora? Calcule seu pós-treino em 3s
+                                                    </div>
+                                                    <div className="text-[10px] text-emerald-300 font-bold truncate">
+                                                        {freeScansRemainingGlobal > 0
+                                                            ? `🎁 ${freeScansRemainingGlobal} ${freeScansRemainingGlobal === 1 ? 'teste grátis' : 'testes grátis'} no Nutri-Scan IA (foto ou 1 toque)`
+                                                            : '✨ 7 dias grátis no Nutri-Scan IA (depois só R$ 0,33/dia)'}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <span className="px-2.5 py-1.5 rounded-xl bg-emerald-500 text-slate-950 font-black text-[10px] uppercase tracking-wider shrink-0">
+                                                {freeScansRemainingGlobal > 0 ? 'Testar →' : '7d Grátis →'}
+                                            </span>
+                                        </button>
+                                    </div>
+                                )}
                                 {treinoSubTab === 'desafio30' ? (
                                     hasDesafio ? (
                                         <Cronograma
